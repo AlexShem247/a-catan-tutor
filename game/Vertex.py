@@ -2,9 +2,9 @@ from enum import IntEnum, Enum
 from typing import List, Optional, TYPE_CHECKING
 
 from game.HexTile import HexTile
-from game.Player import Player
 
 if TYPE_CHECKING:
+    from game.Player import Player
     from game.Edge import Edge
 
 

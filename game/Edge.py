@@ -1,8 +1,10 @@
 from enum import IntEnum
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
-from game.Player import Player
 from game.Vertex import Vertex
+
+if TYPE_CHECKING:
+    from game.Player import Player
 
 
 class EdgeDirection(IntEnum):

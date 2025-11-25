@@ -8,10 +8,15 @@ from game.Vertex import VertexDirection, Building, Vertex
 from view.Color import Color, colorise
 
 NO_EDGE = object()
+DISPLAY_COORDINATES = True
 
 
 def get_player_color(player: Player) -> Color:
-    return [Color.BLUE, Color.RED, Color.GREEN, Color.YELLOW][player.value]
+    return [Color.BLUE, Color.RED, Color.GREEN, Color.YELLOW][player.playerNumber.value]
+
+
+def clear_screen():
+    print("\033[H\033[J", end="")
 
 
 class Renderable(ABC):
@@ -31,10 +36,13 @@ class DisplayHexTile(Renderable):
         self.hex_tile = hex_tile
 
     def render(self) -> str:
-        if self.hex_tile.type == "desert":
-            label = "DESRT"
+        if DISPLAY_COORDINATES:
+            label = f"{self.hex_tile.q: 2},{self.hex_tile.r: 2}"
         else:
-            label = self.hex_tile.type[0].upper() + f"({self.hex_tile.production_number:02})"
+            if self.hex_tile.type == "desert":
+                label = "DESRT"
+            else:
+                label = self.hex_tile.type[0].upper() + f"({self.hex_tile.production_number:02})"
 
         color = {
             "forest": Color.DARK_GREEN,
@@ -48,7 +56,7 @@ class DisplayHexTile(Renderable):
         if color is None:
             return label
 
-        return colorise(label, color, underline=True)
+        return colorise(label, color, underline=self.hex_tile.type != "desert" if DISPLAY_COORDINATES else True)
 
 
 class DisplayVertex(Renderable):
@@ -89,13 +97,13 @@ class DiagonalEdges(Renderable):
     def render(self) -> str:
         left_symbol, right_symbol = ("╱", "╲") if self.flipped else ("╲", "╱")
 
-        def render_edge(edge, symbol, player=None):
-            if edge is NO_EDGE:
+        def render_edge(edge_owner, symbol):
+            if edge_owner is NO_EDGE:
                 return " "
 
-            text = symbol if edge is None else symbol
-            if player:
-                return colorise(text, get_player_color(player))
+            text = symbol if edge_owner is None else symbol
+            if edge_owner is not None:
+                return colorise(text, get_player_color(edge_owner))
             return text
 
         return f"{render_edge(self.left, left_symbol)}   {render_edge(self.right, right_symbol)}"
@@ -119,7 +127,7 @@ def display_board(board: Board) -> None:
             col = 1 + abs(r - 2) + 2 * i
             display_array[row][col] = DisplayHexTile(h)
             display_array[row][col - 1] = DisplayEdge(board.get_edge(h.q, h.r, EdgeDirection.WEST))
-            display_array[row][col + 1] = DisplayEdge(board.get_edge(h.q, h.r, EdgeDirection.WEST))
+            display_array[row][col + 1] = DisplayEdge(board.get_edge(h.q, h.r, EdgeDirection.EAST))
 
             # Places for vertices in display array (dR, dC)
             vertex_pos: (int, int) = [(-2, 0), (-1, 1), (1, 1), (2, 0), (1, -1), (-1, -1)]

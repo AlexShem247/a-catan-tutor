@@ -132,58 +132,21 @@ class Board:
         return self.edge_map.get((q, r, edge_index))
 
     @staticmethod
-    def build_settlement(vertex: "Vertex", player: Player) -> bool:
-        """Tries to build a settlement at vertex and returns success.
-        Cannot build if vertex is owned, has a building, or an adjacent vertex has a settlement or city."""
-
-        # Check if the vertex itself is free
-        if vertex.owner is not None or vertex.building is not None:
-            if vertex.owner is not None:
-                print(f"Failed to build settlement: vertex already owned by {vertex.owner}")
-            else:
-                print(f"Failed to build settlement: vertex already has a {vertex.building}")
-            return False
-
-        # Check all neighbouring vertices
-        for edge in vertex.edges:
-            for neighbour in edge.vertices:
-                if neighbour is not vertex and neighbour.building == Building.SETTLEMENT:
-                    print(f"Failed to build settlement: adjacent vertex {neighbour} already has a settlement")
-                    return False
-
+    def build_settlement(vertex: Vertex, player: Player) -> None:
+        """Directly build a settlement at the vertex, ignoring validation."""
         vertex.owner = player
         vertex.building = Building.SETTLEMENT
-        return True
+        player.add_settlement(vertex)
 
     @staticmethod
-    def build_city(vertex: Vertex, player: Player) -> bool:
-        """Tries to build a city at vertex and returns success."""
-        if vertex.owner == player and vertex.building is Building.SETTLEMENT:
-            vertex.building = Building.CITY
-            return True
-
-        # Debug output
-        if vertex.owner != player:
-            print(f"Failed to build city: vertex is owned by {vertex.owner}, not {player}")
-        elif vertex.building != Building.SETTLEMENT:
-            print(f"Failed to build city: vertex does not have a settlement (has {vertex.building})")
-        return False
+    def build_city(vertex: Vertex, player: Player) -> None:
+        """Directly upgrade a settlement to a city, ignoring validation."""
+        vertex.building = Building.CITY
+        player.add_city(vertex)
 
     @staticmethod
-    def build_road(edge: Edge, player: Player) -> bool:
-        """Tries to build a road at edge and returns success.
-        Can only build if the edge is unowned and connected to a vertex owned by the player.
-        """
-        if edge.owner is not None:
-            print(f"Failed to build road: edge already owned by {edge.owner}")
-            return False
+    def build_road(edge: Edge, player: Player) -> None:
+        """Directly assign ownership of a road, ignoring validation."""
+        edge.owner = player
+        player.add_road(edge)
 
-        # Check if one of the edge's vertices is owned by the player
-        if any(v.owner == player for v in edge.vertices):
-            edge.owner = player
-            return True
-
-        # Debug output if not connected
-        v_info = ", ".join(f"{v.owner}" if v.owner else "EMPTY" for v in edge.vertices)
-        print(f"Failed to build road: no adjacent vertex owned by {player}. Vertices: {v_info}")
-        return False
