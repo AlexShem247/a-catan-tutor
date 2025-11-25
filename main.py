@@ -2,7 +2,7 @@ from game.Board import Board
 from game.Vertex import VertexDirection
 from game.Edge import EdgeDirection
 from game.Player import Player
-
+from view.display import display_board
 
 if __name__ == "__main__":
     board = Board()
@@ -34,4 +34,4 @@ if __name__ == "__main__":
     board.build_road(board.get_edge(1, 2, EdgeDirection.SOUTH_EAST), Player.P2)
     board.build_road(board.get_edge(-1, 2, EdgeDirection.SOUTH_WEST), Player.P3)
 
-    board.display_board()
+    display_board(board)

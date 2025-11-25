@@ -1,7 +1,7 @@
 import random
 from typing import List, Optional, Dict, Tuple
 
-from game.Edge import Edge, EdgeDirection, colorise_edge
+from game.Edge import Edge, EdgeDirection
 from game.HexTile import HexTile, HexType
 from game.Player import Player
 from game.Vertex import Vertex, VertexDirection, Building
@@ -130,75 +130,6 @@ class Board:
     def get_edge(self, q: int, r: int, edge_index: EdgeDirection) -> Optional[Edge]:
         """Return the Edge object for hex (q,r) at edge_index 0-5."""
         return self.edge_map.get((q, r, edge_index))
-
-    def display_board(self) -> None:
-        NO_EDGE = object()
-
-        class DiagonalEdge:
-            left: Player | None | object = NO_EDGE
-            right: Player | None | object = NO_EDGE
-
-            def __init__(self, flipped: bool = False):
-                self.flipped = flipped
-
-            @staticmethod
-            def init_diagonal(row_i: int, col_i: int, side: str, flipped: bool, owner: Player | None):
-                cell = display_array[row_i][col_i]
-                if not isinstance(cell, DiagonalEdge):
-                    cell = DiagonalEdge(flipped=flipped)
-                    display_array[row_i][col_i] = cell
-                setattr(cell, side, owner)
-
-            def __repr__(self):
-                left_symbol, right_symbol = ("╱", "╲") if self.flipped else ("╲", "╱")
-
-                def render(edge, symbol):
-                    if edge is NO_EDGE:
-                        return " "
-                    return symbol if edge is None else colorise_edge(symbol, edge)
-
-                return f"{render(self.left, left_symbol)}   {render(self.right, right_symbol)}"
-
-        display_array: list[list[str | DiagonalEdge]] = [["     " for _ in range(11)] for _ in range(17)]
-
-        for r in range(self.MIN_R, self.MAX_R + 1):
-            row_hexes = sorted([h for h in self.hexes if h.r == r], key=lambda h: h.q)
-
-            for i, h in enumerate(row_hexes):
-                row = 3 * r + 2
-                col = 1 + abs(r - 2) + 2 * i
-                display_array[row][col] = h.display_for_grid()
-                display_array[row][col - 1] = colorise_edge("  |  ",
-                                                            self.get_edge(h.q, h.r, EdgeDirection.WEST).owner)
-                display_array[row][col + 1] = colorise_edge("  |  ",
-                                                            self.get_edge(h.q, h.r, EdgeDirection.WEST).owner)
-
-                # Places for vertices in display array (dR, dC)
-                vertex_pos: (int, int) = [(-2, 0), (-1, 1), (1, 1), (2, 0), (1, -1), (-1, -1)]
-                for vDir, (dR, dC) in enumerate(vertex_pos):
-                    r_idx = row + dR
-                    c_idx = col + dC
-                    # Only set if inside array bounds
-                    if 0 <= r_idx < len(display_array) and 0 <= c_idx < len(display_array[0]):
-                        display_array[r_idx][c_idx] = self.get_vertex(h.q, h.r,
-                                                                      VertexDirection(vDir)).display_for_grid()
-
-                    # Top diagonals
-                    if vDir == VertexDirection.TOP and r <= self.MAX_R // 2:
-                        DiagonalEdge.init_diagonal(r_idx, c_idx + 1, "left", flipped=False,
-                                                   owner=self.get_edge(h.q, h.r, EdgeDirection.NORTH_EAST).owner)
-                        DiagonalEdge.init_diagonal(r_idx, c_idx - 1, "right", flipped=False,
-                                                   owner=self.get_edge(h.q, h.r, EdgeDirection.NORTH_WEST).owner)
-
-                    # Bottom diagonals
-                    if vDir == VertexDirection.BOTTOM and r >= self.MAX_R // 2:
-                        DiagonalEdge.init_diagonal(r_idx, c_idx + 1, "left", flipped=True,
-                                                   owner=self.get_edge(h.q, h.r, EdgeDirection.SOUTH_EAST).owner)
-                        DiagonalEdge.init_diagonal(r_idx, c_idx - 1, "right", flipped=True,
-                                                   owner=self.get_edge(h.q, h.r, EdgeDirection.SOUTH_WEST).owner)
-
-        for row in display_array:
-            print(" ".join(str(cell) for cell in row))
 
     @staticmethod
     def build_settlement(vertex: "Vertex", player: Player) -> bool:

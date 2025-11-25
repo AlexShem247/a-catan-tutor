@@ -1,7 +1,6 @@
 from enum import IntEnum, Enum
 from typing import List, Optional, TYPE_CHECKING
 
-from game.Color import colorise
 from game.HexTile import HexTile
 from game.Player import Player
 
@@ -34,9 +33,3 @@ class Vertex:
         if not self.owner:
             return "EMPTY"
         return f"{self.owner.name}({self.building.name if self.building else '?'})"
-
-    def display_for_grid(self) -> str:
-        if not self.owner:
-            return "EMPTY"
-        return colorise(f"{self.owner.name[:2].rjust(2)}({self.building.name[0] if self.building else '?'})",
-                        self.owner.get_color(), bold=self.building == Building.CITY)

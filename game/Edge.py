@@ -1,7 +1,6 @@
 from enum import IntEnum
 from typing import List, Optional
 
-from game.Color import colorise
 from game.Player import Player
 from game.Vertex import Vertex
 
@@ -24,9 +23,3 @@ class Edge:
         if not self.owner:
             return "PATH"
         return f"ROAD({self.owner.name})"
-
-
-def colorise_edge(text: str, player: Optional[Player]):
-    if player:
-        return colorise(text, player.get_color())
-    return text
