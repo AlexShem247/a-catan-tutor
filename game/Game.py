@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from game.Board import Board
 from game.Edge import Edge
 from game.Player import Player
@@ -16,7 +16,21 @@ class Game:
     def run_initial_placement(self):
         """Run the two-settlement-two-road initial placement sequence."""
         for player in self.initial_order:
-            self.handle_initial_turn(player)
+            # 1. Place settlement
+            if player.is_human:
+                vertex = self.get_settlement_choice(player)
+            else:
+                vertex = self.get_settlement_choice_ai(player)
+
+            self.board.build_settlement(vertex, player)
+
+            # 2. Place road
+            if player.is_human:
+                edge = self.get_road_choice(player, vertex)
+            else:
+                edge = self.get_road_choice_ai(vertex)
+
+            self.board.build_road(edge, player)
 
         self.game_over = True
 
@@ -25,11 +39,11 @@ class Game:
         vertex = self.get_settlement_choice(player)
         self.board.build_settlement(vertex, player)
 
-        edge = self.get_road_choice(player)
+        edge = self.get_road_choice(player, vertex)
         self.board.build_road(edge, player)
 
     @staticmethod
-    def try_build_settlement(player: Player, vertex: Vertex) -> (bool, str):
+    def try_build_settlement(player: Player, vertex: Vertex, build: bool = True) -> (bool, str):
         """
         Attempt to build a settlement for the player.
         Returns (success, message).
@@ -47,7 +61,8 @@ class Game:
                 if neighbour is not vertex and neighbour.building == Building.SETTLEMENT:
                     return False, f"Adjacent vertex already has a settlement"
 
-        Board.build_settlement(vertex, player)
+        if build:
+            Board.build_settlement(vertex, player)
         return True, f"Settlement built at {vertex}"
 
     @staticmethod
@@ -67,26 +82,43 @@ class Game:
         return True, f"City built at {vertex}"
 
     @staticmethod
-    def try_build_road(player: Player, edge: Edge) -> (bool, str):
+    def try_build_road(
+            player: Player,
+            edge: Edge,
+            vertex: Optional[Vertex] = None,
+            build: bool = True
+    ) -> (bool, str):
         """
         Attempt to build a road for the player.
         Rules enforced:
         - Edge must be unoccupied.
-        - Must be adjacent to a vertex owned by the player or connected to one of the player's existing roads.
+        - If 'vertex' is provided, road must be adjacent to that vertex.
+        - Otherwise, road must be adjacent to a vertex owned by the player or
+          connected to one of the player's existing roads.
         """
         if edge.owner is not None:
             return False, f"Edge already owned by {edge.owner.name}"
 
-        # Check if edge is adjacent to a vertex owned by the player
-        if any(v.owner == player for v in edge.vertices):
-            Board.build_road(edge, player)
+        # If a vertex is provided, only allow edges connected to that vertex
+        if vertex:
+            if edge not in vertex.edges:
+                return False, f"Edge must connect to the specified vertex at {vertex}"
+            if build:
+                Board.build_road(edge, player)
             return True, f"Road built at {edge}"
 
-        # Check if edge is connected to an existing player road
+        # Standard rules: adjacent to a player-owned vertex
+        if any(v.owner == player for v in edge.vertices):
+            if build:
+                Board.build_road(edge, player)
+            return True, f"Road built at {edge}"
+
+        # Or connected to existing player road
         for v in edge.vertices:
             for connected_edge in v.edges:
                 if connected_edge is not edge and connected_edge.owner == player:
-                    Board.build_road(edge, player)
+                    if build:
+                        Board.build_road(edge, player)
                     return True, f"Road built at {edge}"
 
         # Fail if not connected
@@ -99,6 +131,14 @@ class Game:
         """Return the Vertex where this player places a settlement."""
         raise NotImplementedError("Choose a vertex for the settlement.")
 
-    def get_road_choice(self, player: Player):
+    def get_road_choice(self, player: Player, vertex: Vertex):
         """Return the Edge where this player places a road."""
+        raise NotImplementedError("Choose an edge for the road.")
+
+    def get_settlement_choice_ai(self, player: Player):
+        """Return the Vertex where this AI player places a settlement."""
+        raise NotImplementedError("Choose a vertex for the settlement.")
+
+    def get_road_choice_ai(self, vertex: Vertex):
+        """Return the Edge where this AI player places a road."""
         raise NotImplementedError("Choose an edge for the road.")

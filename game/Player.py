@@ -14,7 +14,8 @@ class PlayerNumber(Enum):
 
 
 class Player:
-    def __init__(self, playerNumber: PlayerNumber, name: Optional[str] = None):
+    def __init__(self, is_human: bool, playerNumber: PlayerNumber, name: Optional[str] = None):
+        self.is_human = is_human
         self.name = playerNumber.name if name is None else name
         self.playerNumber = playerNumber
 
@@ -56,5 +57,4 @@ class Player:
     def add_road(self, edge) -> None:
         """Add a road along the given edge."""
         self.roads.append(edge)
-
 

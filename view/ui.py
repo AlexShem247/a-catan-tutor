@@ -39,7 +39,8 @@ def choose_vertex(board: Board, player: Player,
             error_msg = "Invalid input. Format: x y DIRECTION (e.g. 0 2 TOP_RIGHT)"
 
 
-def choose_edge(board: Board, player: Player, try_build_road: Callable[[Player, Edge], Tuple[bool, str]]) -> Edge:
+def choose_edge(board: Board, player: Player, vertex: Vertex,
+                try_build_road: Callable[[Player, Edge, Vertex], Tuple[bool, str]]) -> Edge:
     """Prompt the user to enter an edge for a road, validating via game rules."""
     error_msg = None
     while True:
@@ -60,7 +61,7 @@ def choose_edge(board: Board, player: Player, try_build_road: Callable[[Player, 
             edge = board.get_edge(x, y, direction)
 
             # Validate placement via Game
-            success, msg = try_build_road(player, edge)
+            success, msg = try_build_road(player, edge, vertex)
             if success:
                 return edge
             else:

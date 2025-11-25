@@ -149,4 +149,3 @@ class Board:
         """Directly assign ownership of a road, ignoring validation."""
         edge.owner = player
         player.add_road(edge)
-
