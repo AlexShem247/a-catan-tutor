@@ -1,17 +1,33 @@
 from random import randint
-from typing import List, Optional
+from typing import List, Optional, Dict
 from game.Board import Board
 from game.Edge import Edge
 from game.Player import Player
-from game.Vertex import Building, Vertex
-from view.display import clear_screen, display_board
+from game.Resources import Resource
+from game.Vertex import Building, Vertex, Buildable
 
 
 class Game:
+    # Resource cost for each building type
+    BUILDING_COST: Dict[Buildable, Dict[Resource, int]] = {
+        Buildable.ROAD: {Resource.WOOD: 1, Resource.BRICK: 1},
+        Buildable.SETTLEMENT: {Resource.WOOD: 1, Resource.BRICK: 1, Resource.SHEEP: 1, Resource.WHEAT: 1},
+        Buildable.CITY: {Resource.ORE: 3, Resource.WHEAT: 2}
+    }
+
     def __init__(self, players: List[Player], board: Board):
         self.players = players
         self.board = board
         self.game_over = False
+
+    def can_afford(self, player: Player, building_type: Buildable) -> bool:
+        """Check if the player has enough resources to build the given type."""
+        cost = self.BUILDING_COST[building_type]
+
+        for resource, amount_required in cost.items():
+            if player.resources.get(resource, 0) < amount_required:
+                return False
+        return True
 
     def run_initial_placement(self):
         """Run the two-settlement-two-road initial placement sequence."""
@@ -35,7 +51,6 @@ class Game:
     def start_game(self):
         """Starts the game"""
         self.run_initial_placement()
-        clear_screen()
         while not self.game_over:
             for player in self.players:
                 if player.is_human:
@@ -45,9 +60,6 @@ class Game:
 
                 if self.game_over:
                     break
-
-        print("Board final values:")
-        display_board(self.board)
 
     def handle_initial_turn(self, player: Player):
         """Perform one settlement + one road placement for a player."""
@@ -71,8 +83,45 @@ class Game:
 
         return d1, d2, total
 
+    def get_buildable_options(self, player: Player) -> dict:
+        """
+        Returns a dictionary of possible actions the player can do this turn
+        based on their resources and available board locations.
+
+        If no locations are available or resources are insufficient, the list is empty.
+        """
+        options = {
+            Buildable.ROAD: [],
+            Buildable.SETTLEMENT: [],
+            Buildable.CITY: []
+        }
+
+        # Roads
+        if self.can_afford(player, Buildable.ROAD):
+            for edge in self.board.edges:
+                success, _ = self.try_build_road(player, edge, build=False)
+                if success:
+                    options[Buildable.ROAD].append(edge)
+
+        # Settlements
+        if self.can_afford(player, Buildable.SETTLEMENT):
+            for vertex in self.board.vertices:
+                success, _ = self.try_build_settlement(player, vertex, build=False)
+                if success:
+                    options[Buildable.SETTLEMENT].append(vertex)
+
+        # Cities
+        if self.can_afford(player, Buildable.CITY):
+            for vertex in player.settlements:
+                success, _ = self.try_build_city(player, vertex)
+                if success:
+                    options[Buildable.CITY].append(vertex)
+
+        return options
+
     @staticmethod
-    def try_build_settlement(player: Player, vertex: Vertex, build: bool = True) -> (bool, str):
+    def try_build_settlement(player: Player, vertex: Vertex, build: bool = True,
+                             use_resources : bool = True) -> (bool, str):
         """
         Attempt to build a settlement for the player.
         Returns (success, message).
@@ -92,10 +141,13 @@ class Game:
 
         if build:
             Board.build_settlement(vertex, player)
+            if use_resources:
+                for resource, cost in Game.BUILDING_COST[Buildable.SETTLEMENT].items():
+                    player.remove_resource(resource, cost)
         return True, f"Settlement built at {vertex}"
 
     @staticmethod
-    def try_build_city(player: Player, vertex: Vertex) -> (bool, str):
+    def try_build_city(player: Player, vertex: Vertex, use_resources: bool = False) -> (bool, str):
         """
         Attempt to upgrade a settlement to a city.
         Rules enforced:
@@ -108,6 +160,9 @@ class Game:
             return False, f"Vertex does not have a settlement to upgrade"
 
         Board.build_city(vertex, player)
+        if use_resources:
+            for resource, cost in Game.BUILDING_COST[Buildable.CITY].items():
+                player.remove_resource(resource, cost)
         return True, f"City built at {vertex}"
 
     @staticmethod
@@ -115,7 +170,8 @@ class Game:
             player: Player,
             edge: Edge,
             vertex: Optional[Vertex] = None,
-            build: bool = True
+            build: bool = True,
+            use_resources: bool = False,
     ) -> (bool, str):
         """
         Attempt to build a road for the player.
@@ -134,12 +190,18 @@ class Game:
                 return False, f"Edge must connect to the specified vertex at {vertex}"
             if build:
                 Board.build_road(edge, player)
+                if use_resources:
+                    for resource, cost in Game.BUILDING_COST[Buildable.ROAD].items():
+                        player.remove_resource(resource, cost)
             return True, f"Road built at {edge}"
 
         # Standard rules: adjacent to a player-owned vertex
         if any(v.owner == player for v in edge.vertices):
             if build:
                 Board.build_road(edge, player)
+                if use_resources:
+                    for resource, cost in Game.BUILDING_COST[Buildable.ROAD].items():
+                        player.remove_resource(resource, cost)
             return True, f"Road built at {edge}"
 
         # Or connected to existing player road
@@ -147,7 +209,9 @@ class Game:
             for connected_edge in v.edges:
                 if connected_edge is not edge and connected_edge.owner == player:
                     if build:
-                        Board.build_road(edge, player)
+                        if use_resources:
+                            for resource, cost in Game.BUILDING_COST[Buildable.ROAD].items():
+                                player.remove_resource(resource, cost)
                     return True, f"Road built at {edge}"
 
         # Fail if not connected

@@ -2,8 +2,9 @@ from typing import Callable, Tuple
 
 from game.Board import Board
 from game.Edge import EdgeDirection, Edge
+from game.Game import Game
 from game.Player import Player
-from game.Vertex import VertexDirection, Vertex
+from game.Vertex import VertexDirection, Vertex, Buildable
 from view.display import display_board, clear_screen
 
 
@@ -77,20 +78,22 @@ def choose_edge(board: Board, player: Player, vertex: Vertex,
             error_msg = "Invalid input. Format: x y DIRECTION (e.g. 0 2 EAST)"
 
 
-def make_round_move(board: Board, player: Player, roll_dice):
-    """User rolls dice and decides on move"""
-    d1, d2, total = roll_dice()
-
+def make_round_move(player: Player, game: Game):
+    """Handle a full turn for a human player, including dice roll, resource display, and building actions."""
+    d1, d2, total = game.roll_dice()
     error_msg = None
+
     while True:
         clear_screen()
-        display_board(board)
+        display_board(game.board)
         print(f"\n--- {player.name}'s turn ---\n")
         print(f"Dice rolled: {d1} + {d2} = {total}\n")
+
         if error_msg:
             print(error_msg)
+            error_msg = None
 
-        # Show player resources
+        # Show resources
         print("Your resources:")
         resources = list(player.resources.items())
         for i in range(0, len(resources), 2):
@@ -101,12 +104,68 @@ def make_round_move(board: Board, player: Player, roll_dice):
             else:
                 print(f"{first[0].name:>5}: {first[1]}")
 
+        # Show dynamic options
+        options = {"1": "End turn"}
+        buildable = game.get_buildable_options(player)
+        option_number = 2
+
+        for action_type in Buildable:
+            if buildable[action_type]:
+                options[str(option_number)] = f"Build {action_type.name.capitalize()}"
+                option_number += 1
+
+        # Print options
         print("\nOptions:")
-        print("  1. End turn")
+        for key, val in options.items():
+            print(f"  {key}. {val}")
 
         choice = input("Enter option: ").strip()
-        break
-        # if choice == "1":
-        #     break
-        # else:
-        #     error_msg = "Invalid option. Try again."
+
+        if choice == "1":
+            # End turn
+            break
+
+        elif choice in options:
+            # Determine which build action
+            action_str = options[choice].split()[1].upper()
+            action_type = Buildable[action_str]
+
+            # Get available locations
+            available = buildable[action_type]
+            if not available:
+                error_msg = f"No valid {action_type.name.lower()} locations available."
+                continue
+
+            # Show locations and let player choose
+            print(f"\nAvailable {action_type.name.lower()} locations:")
+            for idx, loc in enumerate(available, 1):
+                q, r, direction = loc.pos
+                print(f"  {idx}. ({q}, {r}, {direction.name.title().replace('_', ' ')})")
+
+            loc_choice = input(f"Enter number to build {action_type.name.lower()} or 0 to cancel: ").strip()
+            try:
+                idx = int(loc_choice)
+                if idx == 0:
+                    continue  # cancel build
+                selected = available[idx - 1]
+            except (ValueError, IndexError):
+                error_msg = "Invalid selection."
+                continue
+
+            # Apply build
+            if action_type == Buildable.ROAD:
+                success, msg = game.try_build_road(player, selected, vertex=None, use_resources=True)
+            elif action_type == Buildable.SETTLEMENT:
+                success, msg = game.try_build_settlement(player, selected, use_resources=True)
+            elif action_type == Buildable.CITY:
+                success, msg = game.try_build_city(player, selected, use_resources=True)
+            else:
+                success, msg = False, "Unknown build type"
+
+            print(msg)
+            input("Press enter to continue...")
+
+        else:
+            error_msg = "Invalid option. Try again."
+
+

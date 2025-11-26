@@ -81,7 +81,7 @@ class Board:
                 key: Tuple[Tuple[int, int], ...] = tuple(
                     sorted([(hex_tile.q + dq, hex_tile.r + dr) for dq, dr in corner]))
                 if key not in vertex_map:
-                    vertex = Vertex()
+                    vertex = Vertex((hex_tile.q, hex_tile.r, VertexDirection(idx)))
                     vertex_map[key] = vertex
                     self.vertices.append(vertex)
                 vertex = vertex_map[key]
@@ -103,7 +103,7 @@ class Board:
                 v2 = verts[(i + 1) % n]  # Next vertex clockwise
                 key: Tuple[int, int] = (min(id(v1), id(v2)), max(id(v1), id(v2)))
                 if key not in edge_map:
-                    edge = Edge(v1, v2)
+                    edge = Edge(v1, v2, (hex_tile.q, hex_tile.r, EdgeDirection(i)))
                     edge_map[key] = edge
                     self.edges.append(edge)
                 edge = edge_map[key]

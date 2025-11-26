@@ -1,5 +1,5 @@
 from enum import IntEnum, Enum
-from typing import List, Optional, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING, Tuple
 
 from game.HexTile import HexTile
 
@@ -8,9 +8,15 @@ if TYPE_CHECKING:
     from game.Edge import Edge
 
 
+class Buildable(Enum):
+    ROAD = "road"
+    SETTLEMENT = "settlement"
+    CITY = "city"
+
+
 class Building(Enum):
-    SETTLEMENT = 0
-    CITY = 1
+    SETTLEMENT = Buildable.SETTLEMENT
+    CITY = Buildable.CITY
 
     def get_resource_yield(self) -> int:
         """Return how many resources this building produces per turn."""
@@ -30,11 +36,12 @@ class VertexDirection(IntEnum):
 
 
 class Vertex:
-    def __init__(self):
+    def __init__(self, pos: Tuple[int, int, VertexDirection]):
         self.hexes: List[HexTile] = []
         self.edges: List[Edge] = []
         self.owner: Optional[Player] = None
         self.building: Optional[Building] = None
+        self.pos = pos
 
     def __repr__(self) -> str:
         if not self.owner:
