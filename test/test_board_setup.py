@@ -13,10 +13,10 @@ class TestBoardSetup(unittest.TestCase):
         board = Board()
 
         # Create Players
-        p1 = Player(PlayerNumber.P1)
-        p2 = Player(PlayerNumber.P2)
-        p3 = Player(PlayerNumber.P3)
-        p4 = Player(PlayerNumber.P4)
+        p1 = Player(False, PlayerNumber.P1)
+        p2 = Player(False, PlayerNumber.P2)
+        p3 = Player(False, PlayerNumber.P3)
+        p4 = Player(False, PlayerNumber.P4)
 
         # Settlements
         board.build_settlement(board.get_vertex(0, 2, VertexDirection.TOP_RIGHT), p1)

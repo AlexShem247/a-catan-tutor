@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Dict
 
 from game.Board import Board
 from game.Edge import EdgeDirection, Edge
@@ -8,7 +9,6 @@ from game.Vertex import VertexDirection, Building, Vertex
 from view.Color import Color, colorise
 
 NO_EDGE = object()
-DISPLAY_COORDINATES = True
 
 
 def get_player_color(player: Player) -> Color:
@@ -32,31 +32,44 @@ class Empty(Renderable):
 
 
 class DisplayHexTile(Renderable):
+    COLOR_MAP = {
+        "forest": Color.DARK_GREEN,
+        "hills": Color.RED_ORANGE,
+        "pasture": Color.LIME_GREEN,
+        "fields": Color.GOLD,
+        "mountains": Color.GREY,
+        "desert": Color.BEIGE,
+    }
+
+    HEX_LABEL = {
+        "forest": "FOR",
+        "hills": "HIL",
+        "pasture": "PAS",
+        "fields": "FLD",
+        "mountains": "MTN",
+    }
+
     def __init__(self, hex_tile: HexTile):
         self.hex_tile = hex_tile
 
     def render(self) -> str:
-        if DISPLAY_COORDINATES:
-            label = f"{self.hex_tile.q: 2},{self.hex_tile.r: 2}"
-        else:
-            if self.hex_tile.type == "desert":
-                label = "DESRT"
-            else:
-                label = self.hex_tile.type[0].upper() + f"({self.hex_tile.production_number:02})"
+        length = 4 - len(str(self.hex_tile.production_number))
+        label = "DESRT" if self.hex_tile.type == "desert" \
+            else f"{self.HEX_LABEL[self.hex_tile.type][:length]}-{self.hex_tile.production_number}"
+        color = self.COLOR_MAP.get(self.hex_tile.type)
+        return colorise(label, color, underline=True) if color else label
 
-        color = {
-            "forest": Color.DARK_GREEN,
-            "hills": Color.RED_ORANGE,
-            "pasture": Color.LIME_GREEN,
-            "fields": Color.GOLD,
-            "mountains": Color.GREY,
-            "desert": Color.BEIGE,
-        }.get(self.hex_tile.type)
 
-        if color is None:
-            return label
+class DisplayCoordinate(Renderable):
+    COLOR_MAP = DisplayHexTile.COLOR_MAP  # reuse same mapping
 
-        return colorise(label, color, underline=self.hex_tile.type != "desert" if DISPLAY_COORDINATES else True)
+    def __init__(self, hex_tile: HexTile):
+        self.hex_tile = hex_tile
+
+    def render(self) -> str:
+        label = f"{self.hex_tile.q:2},{self.hex_tile.r:2}"
+        color = self.COLOR_MAP.get(self.hex_tile.type)
+        return colorise(label, color) if color else label
 
 
 class DisplayVertex(Renderable):
@@ -125,7 +138,8 @@ def display_board(board: Board) -> None:
         for i, h in enumerate(row_hexes):
             row = 3 * r + 2
             col = 1 + abs(r - 2) + 2 * i
-            display_array[row][col] = DisplayHexTile(h)
+            display_array[row + int(r > board.MAX_R // 2)][col] = DisplayHexTile(h)
+            display_array[row - 1 + int(r > board.MAX_R // 2)][col] = DisplayCoordinate(h)
             display_array[row][col - 1] = DisplayEdge(board.get_edge(h.q, h.r, EdgeDirection.WEST))
             display_array[row][col + 1] = DisplayEdge(board.get_edge(h.q, h.r, EdgeDirection.EAST))
 

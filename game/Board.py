@@ -1,4 +1,5 @@
 import random
+from collections import defaultdict
 from typing import List, Optional, Dict, Tuple
 
 from game.Edge import Edge, EdgeDirection
@@ -29,6 +30,7 @@ class Board:
         self.vertices: List[Vertex] = []
         self.edges: List[Edge] = []
         self.hex_map: Dict[Tuple[int, int], HexTile] = {}
+        self.production_to_hex: Dict[int, List[HexTile]] = defaultdict(list)
         self.vertex_map: Dict[Tuple[int, int, VertexDirection], Vertex] = {}
         self.edge_map: Dict[Tuple[int, int, EdgeDirection], Edge] = {}
 
@@ -58,6 +60,8 @@ class Board:
             hex_tile = HexTile(q, r, hex_type, production_number)
             self.hexes.append(hex_tile)
             self.hex_map[(q, r)] = hex_tile
+            if hex_type != "desert":
+                self.production_to_hex[production_number].append(hex_tile)
 
     def create_vertices(self) -> None:
         vertex_map: Dict[Tuple[Tuple[int, int], ...], Vertex] = {}

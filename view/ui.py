@@ -22,7 +22,10 @@ def choose_vertex(board: Board, player: Player,
             coords = input("Enter vertex coordinates (x y) and direction (TOP, TOP_RIGHT, TOP_LEFT, etc.): ")
             x_str, y_str, dir_str = coords.strip().split()
             x, y = int(x_str), int(y_str)
-            direction = VertexDirection[dir_str.upper()]
+            if dir_str.isdigit():
+                direction = VertexDirection(int(dir_str))
+            else:
+                direction = VertexDirection[dir_str.upper()]
             if (x, y) not in board.HEX_COORDS:
                 error_msg = f"Invalid Coordinate ({x}, {y})"
                 continue
@@ -57,7 +60,10 @@ def choose_edge(board: Board, player: Player, vertex: Vertex,
             if (x, y) not in board.HEX_COORDS:
                 error_msg = f"Invalid Coordinate ({x}, {y})"
                 continue
-            direction = EdgeDirection[dir_str.upper()]
+            if dir_str.isdigit():
+                direction = EdgeDirection(int(dir_str))
+            else:
+                direction = EdgeDirection[dir_str.upper()]
             edge = board.get_edge(x, y, direction)
 
             # Validate placement via Game
@@ -69,3 +75,38 @@ def choose_edge(board: Board, player: Player, vertex: Vertex,
 
         except (ValueError, KeyError):
             error_msg = "Invalid input. Format: x y DIRECTION (e.g. 0 2 EAST)"
+
+
+def make_round_move(board: Board, player: Player, roll_dice):
+    """User rolls dice and decides on move"""
+    d1, d2, total = roll_dice()
+
+    error_msg = None
+    while True:
+        clear_screen()
+        display_board(board)
+        print(f"\n--- {player.name}'s turn ---\n")
+        print(f"Dice rolled: {d1} + {d2} = {total}\n")
+        if error_msg:
+            print(error_msg)
+
+        # Show player resources
+        print("Your resources:")
+        resources = list(player.resources.items())
+        for i in range(0, len(resources), 2):
+            first = resources[i]
+            second = resources[i + 1] if i + 1 < len(resources) else None
+            if second:
+                print(f"{first[0].name:>5}: {first[1]:<3}\t{second[0].name:>5}: {second[1]}")
+            else:
+                print(f"{first[0].name:>5}: {first[1]}")
+
+        print("\nOptions:")
+        print("  1. End turn")
+
+        choice = input("Enter option: ").strip()
+        break
+        # if choice == "1":
+        #     break
+        # else:
+        #     error_msg = "Invalid option. Try again."

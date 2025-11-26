@@ -12,6 +12,13 @@ class Building(Enum):
     SETTLEMENT = 0
     CITY = 1
 
+    def get_resource_yield(self) -> int:
+        """Return how many resources this building produces per turn."""
+        if self == Building.CITY:
+            return 2
+
+        return 1
+
 
 class VertexDirection(IntEnum):
     TOP = 0

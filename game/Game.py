@@ -1,21 +1,21 @@
+from random import randint
 from typing import List, Optional
 from game.Board import Board
 from game.Edge import Edge
 from game.Player import Player
 from game.Vertex import Building, Vertex
+from view.display import clear_screen, display_board
 
 
 class Game:
     def __init__(self, players: List[Player], board: Board):
         self.players = players
         self.board = board
-        self.initial_order = self.players[:] + self.players[::-1]  # [1, 2, 3, 4, 4, 3, 2, 1] ordering
-        self.placement_index = 0
         self.game_over = False
 
     def run_initial_placement(self):
         """Run the two-settlement-two-road initial placement sequence."""
-        for player in self.initial_order:
+        for player in self.players[:] + self.players[::-1]:
             # 1. Place settlement
             if player.is_human:
                 vertex = self.get_settlement_choice(player)
@@ -32,7 +32,22 @@ class Game:
 
             self.board.build_road(edge, player)
 
-        self.game_over = True
+    def start_game(self):
+        """Starts the game"""
+        self.run_initial_placement()
+        clear_screen()
+        while not self.game_over:
+            for player in self.players:
+                if player.is_human:
+                    self.play_round(player)
+                else:
+                    self.play_round_ai(player)
+
+                if self.game_over:
+                    break
+
+        print("Board final values:")
+        display_board(self.board)
 
     def handle_initial_turn(self, player: Player):
         """Perform one settlement + one road placement for a player."""
@@ -41,6 +56,20 @@ class Game:
 
         edge = self.get_road_choice(player, vertex)
         self.board.build_road(edge, player)
+
+    def roll_dice(self):
+        d1, d2 = randint(1, 6), randint(1, 6)
+        total = d1 + d2
+
+        # Give resources to players
+        tiles = self.board.production_to_hex[total]
+        for tile in tiles:
+            for vertex in tile.vertices:
+                if vertex.owner is not None:
+                    # There is a building on this tile
+                    vertex.owner.add_resource(tile.resource, vertex.building.get_resource_yield())
+
+        return d1, d2, total
 
     @staticmethod
     def try_build_settlement(player: Player, vertex: Vertex, build: bool = True) -> (bool, str):
@@ -142,3 +171,11 @@ class Game:
     def get_road_choice_ai(self, vertex: Vertex):
         """Return the Edge where this AI player places a road."""
         raise NotImplementedError("Choose an edge for the road.")
+
+    def play_round(self, player: Player):
+        """Execute a single turn for a player."""
+        raise NotImplementedError("Player makes turn.")
+
+    def play_round_ai(self, player: Player):
+        """Execute a single turn for an AI."""
+        raise NotImplementedError("Player makes turn.")

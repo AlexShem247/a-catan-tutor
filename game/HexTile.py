@@ -1,9 +1,9 @@
-from typing import List, Optional, TYPE_CHECKING, Literal
+from typing import List, Optional, TYPE_CHECKING
+
+from game.Resources import HexType, HEX_TO_RESOURCE, Resource
 
 if TYPE_CHECKING:
     from game.Vertex import Vertex
-
-HexType = Literal["forest", "hills", "pasture", "fields", "mountains", "desert"]
 
 
 class HexTile:
@@ -14,6 +14,7 @@ class HexTile:
         self.production_number: Optional[int] = production_number
         self.vertices: List[Vertex] = []
         self.neighbors: List[HexTile] = []
+        self.resource: Optional[Resource] = HEX_TO_RESOURCE.get(hex_type)
 
     def __repr__(self) -> str:
         if self.type == "desert":
