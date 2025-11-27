@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import Dict
 
 from game.Board import Board
 from game.Edge import EdgeDirection, Edge

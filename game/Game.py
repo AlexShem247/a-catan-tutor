@@ -1,4 +1,4 @@
-from random import randint
+from random import randint, choice
 from typing import List, Optional, Dict
 from game.Board import Board
 from game.Edge import Edge
@@ -80,6 +80,8 @@ class Game:
                 if vertex.owner is not None:
                     # There is a building on this tile
                     vertex.owner.add_resource(tile.resource, vertex.building.get_resource_yield())
+                    # Temp: Give a random additional resources
+                    vertex.owner.add_resource(choice([r for r in Resource if r != tile.resource]), 1)
 
         return d1, d2, total
 
@@ -97,23 +99,24 @@ class Game:
         }
 
         # Roads
-        if self.can_afford(player, Buildable.ROAD):
+        if self.can_afford(player, Buildable.ROAD) and len(player.roads) < Buildable.ROAD.max_on_board:
             for edge in self.board.edges:
                 success, _ = self.try_build_road(player, edge, build=False)
                 if success:
                     options[Buildable.ROAD].append(edge)
 
         # Settlements
-        if self.can_afford(player, Buildable.SETTLEMENT):
+        if self.can_afford(player, Buildable.SETTLEMENT) and \
+                len(player.settlements) < Buildable.SETTLEMENT.max_on_board:
             for vertex in self.board.vertices:
-                success, _ = self.try_build_settlement(player, vertex, build=False)
+                success, _ = self.try_build_settlement(player, vertex, build=False, road_restriction=True)
                 if success:
                     options[Buildable.SETTLEMENT].append(vertex)
 
         # Cities
-        if self.can_afford(player, Buildable.CITY):
+        if self.can_afford(player, Buildable.CITY) and len(player.cities) < Buildable.CITY.max_on_board:
             for vertex in player.settlements:
-                success, _ = self.try_build_city(player, vertex)
+                success, _ = self.try_build_city(player, vertex, build=False)
                 if success:
                     options[Buildable.CITY].append(vertex)
 
@@ -121,7 +124,7 @@ class Game:
 
     @staticmethod
     def try_build_settlement(player: Player, vertex: Vertex, build: bool = True,
-                             use_resources : bool = True) -> (bool, str):
+                             use_resources: bool = True, road_restriction: bool = False) -> (bool, str):
         """
         Attempt to build a settlement for the player.
         Returns (success, message).
@@ -136,8 +139,13 @@ class Game:
 
         for edge in vertex.edges:
             for neighbour in edge.vertices:
-                if neighbour is not vertex and neighbour.building == Building.SETTLEMENT:
-                    return False, f"Adjacent vertex already has a settlement"
+                if neighbour is not vertex and neighbour.building is not None:
+                    return False, f"Adjacent vertex already has a building"
+
+        if road_restriction:
+            connected_to_road = any(edge.owner == player for edge in vertex.edges)
+            if not connected_to_road:
+                return False, "Settlement must be connected to one of your roads"
 
         if build:
             Board.build_settlement(vertex, player)
@@ -147,7 +155,7 @@ class Game:
         return True, f"Settlement built at {vertex}"
 
     @staticmethod
-    def try_build_city(player: Player, vertex: Vertex, use_resources: bool = False) -> (bool, str):
+    def try_build_city(player: Player, vertex: Vertex, build: bool = False, use_resources: bool = False) -> (bool, str):
         """
         Attempt to upgrade a settlement to a city.
         Rules enforced:
@@ -159,10 +167,11 @@ class Game:
         if vertex.building != Building.SETTLEMENT:
             return False, f"Vertex does not have a settlement to upgrade"
 
-        Board.build_city(vertex, player)
-        if use_resources:
-            for resource, cost in Game.BUILDING_COST[Buildable.CITY].items():
-                player.remove_resource(resource, cost)
+        if build:
+            Board.build_city(vertex, player)
+            if use_resources:
+                for resource, cost in Game.BUILDING_COST[Buildable.CITY].items():
+                    player.remove_resource(resource, cost)
         return True, f"City built at {vertex}"
 
     @staticmethod
@@ -181,44 +190,43 @@ class Game:
         - Otherwise, road must be adjacent to a vertex owned by the player or
           connected to one of the player's existing roads.
         """
+
+        def _finalise_road_build() -> tuple[bool, str]:
+            if build:
+                Board.build_road(edge, player)
+                if use_resources:
+                    for resource, cost in Game.BUILDING_COST[Buildable.ROAD].items():
+                        player.remove_resource(resource, cost)
+            return True, f"Road built at {edge}"
+
+        # Rule: Edge must be free
         if edge.owner is not None:
             return False, f"Edge already owned by {edge.owner.name}"
 
-        # If a vertex is provided, only allow edges connected to that vertex
-        if vertex:
+        # Special Param: Required to place road next to a specified vertex
+        if vertex is not None:
             if edge not in vertex.edges:
                 return False, f"Edge must connect to the specified vertex at {vertex}"
-            if build:
-                Board.build_road(edge, player)
-                if use_resources:
-                    for resource, cost in Game.BUILDING_COST[Buildable.ROAD].items():
-                        player.remove_resource(resource, cost)
-            return True, f"Road built at {edge}"
+            return _finalise_road_build()
 
-        # Standard rules: adjacent to a player-owned vertex
+        # Rule: Adjacent to player's settlement
         if any(v.owner == player for v in edge.vertices):
-            if build:
-                Board.build_road(edge, player)
-                if use_resources:
-                    for resource, cost in Game.BUILDING_COST[Buildable.ROAD].items():
-                        player.remove_resource(resource, cost)
-            return True, f"Road built at {edge}"
+            return _finalise_road_build()
 
-        # Or connected to existing player road
+        # Rule: Adjacent to player's road
         for v in edge.vertices:
             for connected_edge in v.edges:
                 if connected_edge is not edge and connected_edge.owner == player:
-                    if build:
-                        if use_resources:
-                            for resource, cost in Game.BUILDING_COST[Buildable.ROAD].items():
-                                player.remove_resource(resource, cost)
-                    return True, f"Road built at {edge}"
+                    return _finalise_road_build()
 
-        # Fail if not connected
+        # Otherwise fail
         v_info = ", ".join(v.owner.name if v.owner else "EMPTY" for v in edge.vertices)
-        return False, f"Cannot build road: no adjacent settlement or connecting road. Vertices: {v_info}"
+        return False, (
+            "Cannot build road: no adjacent settlement or connecting road. "
+            f"Vertices: {v_info}"
+        )
 
-    # --- Hooks you fill in with UI ---
+    # Hooks you fill in with UI
 
     def get_settlement_choice(self, player: Player):
         """Return the Vertex where this player places a settlement."""

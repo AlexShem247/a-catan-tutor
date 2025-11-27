@@ -139,8 +139,7 @@ def make_round_move(player: Player, game: Game):
             # Show locations and let player choose
             print(f"\nAvailable {action_type.name.lower()} locations:")
             for idx, loc in enumerate(available, 1):
-                q, r, direction = loc.pos
-                print(f"  {idx}. ({q}, {r}, {direction.name.title().replace('_', ' ')})")
+                print(f"  {idx}. ({loc.get_pos()})")
 
             loc_choice = input(f"Enter number to build {action_type.name.lower()} or 0 to cancel: ").strip()
             try:
@@ -154,11 +153,11 @@ def make_round_move(player: Player, game: Game):
 
             # Apply build
             if action_type == Buildable.ROAD:
-                success, msg = game.try_build_road(player, selected, vertex=None, use_resources=True)
+                success, msg = game.try_build_road(player, selected, vertex=None, build=True, use_resources=True)
             elif action_type == Buildable.SETTLEMENT:
-                success, msg = game.try_build_settlement(player, selected, use_resources=True)
+                success, msg = game.try_build_settlement(player, selected, build=True, use_resources=True)
             elif action_type == Buildable.CITY:
-                success, msg = game.try_build_city(player, selected, use_resources=True)
+                success, msg = game.try_build_city(player, selected, build=True, use_resources=True)
             else:
                 success, msg = False, "Unknown build type"
 
@@ -167,5 +166,3 @@ def make_round_move(player: Player, game: Game):
 
         else:
             error_msg = "Invalid option. Try again."
-
-

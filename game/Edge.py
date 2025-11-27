@@ -22,7 +22,11 @@ class Edge:
         self.owner: Optional[Player] = None
         self.pos = pos
 
+    def get_pos(self) -> str:
+        q, r, direction = self.pos
+        return f"{q}, {r}, {direction.name.title().replace('_', ' ')}"
+
     def __repr__(self) -> str:
         if not self.owner:
-            return "PATH"
-        return f"ROAD({self.owner.name})"
+            return f"PATH({self.get_pos()})"
+        return f"{self.owner.name}-ROAD({self.get_pos()})"

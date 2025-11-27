@@ -9,9 +9,13 @@ if TYPE_CHECKING:
 
 
 class Buildable(Enum):
-    ROAD = "road"
-    SETTLEMENT = "settlement"
-    CITY = "city"
+    ROAD = ("road", 15)
+    SETTLEMENT = ("settlement", 5)
+    CITY = ("city", 4)
+
+    def __init__(self, label: str, max_on_board: int):
+        self.label = label
+        self.max_on_board = max_on_board
 
 
 class Building(Enum):
@@ -43,7 +47,11 @@ class Vertex:
         self.building: Optional[Building] = None
         self.pos = pos
 
+    def get_pos(self) -> str:
+        q, r, direction = self.pos
+        return f"{q}, {r}, {direction.name.title().replace('_', ' ')}"
+
     def __repr__(self) -> str:
         if not self.owner:
-            return "EMPTY"
-        return f"{self.owner.name}({self.building.name if self.building else '?'})"
+            return f"EMPTY({self.get_pos()})"
+        return f"{self.owner.name}-{self.building.name}({self.get_pos()})"
