@@ -123,18 +123,6 @@ class Board:
                 if neighbor:
                     hex_tile.neighbors.append(neighbor)
 
-    def get_hex_tile(self, q: int, r: int) -> Optional[Vertex]:
-        """Return the HexTile object for hex (q,r)."""
-        return self.hex_map.get((q, r))
-
-    def get_vertex(self, q: int, r: int, corner_index: VertexDirection) -> Optional[Vertex]:
-        """Return the Vertex object for hex (q,r) at corner_index 0-5."""
-        return self.vertex_map.get((q, r, corner_index))
-
-    def get_edge(self, q: int, r: int, edge_index: EdgeDirection) -> Optional[Edge]:
-        """Return the Edge object for hex (q,r) at edge_index 0-5."""
-        return self.edge_map.get((q, r, edge_index))
-
     @staticmethod
     def build_settlement(vertex: Vertex, player: Player) -> None:
         """Directly build a settlement at the vertex, ignoring validation."""

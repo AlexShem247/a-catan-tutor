@@ -1,5 +1,3 @@
-from typing import Callable, Tuple
-
 from game.Board import Board
 from game.Edge import EdgeDirection, Edge
 from game.Game import Game
@@ -8,14 +6,13 @@ from game.Vertex import VertexDirection, Vertex, Buildable
 from view.display import display_board, clear_screen
 
 
-def choose_vertex(board: Board, player: Player,
-                  try_build_settlement: Callable[[Player, Vertex], Tuple[bool, str]]) -> Vertex:
+def initial_settlement_placement(player: Player, game: Game) -> Vertex:
     """Prompt the user to enter a vertex for a settlement."""
     error_msg = None
     while True:
         try:
             clear_screen()
-            display_board(board)
+            display_board(game)
             print(f"\n--- {player.name}'s placement turn ---\n")
             if error_msg:
                 print(error_msg)
@@ -27,13 +24,13 @@ def choose_vertex(board: Board, player: Player,
                 direction = VertexDirection(int(dir_str))
             else:
                 direction = VertexDirection[dir_str.upper()]
-            if (x, y) not in board.HEX_COORDS:
+            if (x, y) not in Board.HEX_COORDS:
                 error_msg = f"Invalid Coordinate ({x}, {y})"
                 continue
-            vertex = board.get_vertex(x, y, direction)
+            vertex = game.get_vertex(x, y, direction)
 
             # Validate placement via Game
-            success, msg = try_build_settlement(player, vertex)
+            success, msg = game.try_build_settlement(player, vertex, use_resources=False, road_restriction=False)
             if success:
                 return vertex
             else:
@@ -43,14 +40,14 @@ def choose_vertex(board: Board, player: Player,
             error_msg = "Invalid input. Format: x y DIRECTION (e.g. 0 2 TOP_RIGHT)"
 
 
-def choose_edge(board: Board, player: Player, vertex: Vertex,
-                try_build_road: Callable[[Player, Edge, Vertex], Tuple[bool, str]]) -> Edge:
+def initial_road_placement(settlement: Vertex, game: Game) -> Edge:
     """Prompt the user to enter an edge for a road, validating via game rules."""
+    player = settlement.owner
     error_msg = None
     while True:
         try:
             clear_screen()
-            display_board(board)
+            display_board(game)
             print(f"\n--- {player.name}'s road placement turn ---\n")
             if error_msg:
                 print(error_msg)
@@ -58,17 +55,17 @@ def choose_edge(board: Board, player: Player, vertex: Vertex,
             coords = input("Enter edge coordinates (x y) and direction (NORTH_WEST, EAST, etc.): ")
             x_str, y_str, dir_str = coords.strip().split()
             x, y = int(x_str), int(y_str)
-            if (x, y) not in board.HEX_COORDS:
+            if (x, y) not in Board.HEX_COORDS:
                 error_msg = f"Invalid Coordinate ({x}, {y})"
                 continue
             if dir_str.isdigit():
                 direction = EdgeDirection(int(dir_str))
             else:
                 direction = EdgeDirection[dir_str.upper()]
-            edge = board.get_edge(x, y, direction)
+            edge = game.get_edge(x, y, direction)
 
             # Validate placement via Game
-            success, msg = try_build_road(player, edge, vertex)
+            success, msg = game.try_build_road(player, edge, on_vertex=settlement, use_resources=False)
             if success:
                 return edge
             else:
@@ -85,7 +82,7 @@ def make_round_move(player: Player, game: Game):
 
     while True:
         clear_screen()
-        display_board(game.board)
+        display_board(game)
         print(f"\n--- {player.name}'s turn ---\n")
         print(f"Dice rolled: {d1} + {d2} = {total}\n")
 
@@ -153,11 +150,11 @@ def make_round_move(player: Player, game: Game):
 
             # Apply build
             if action_type == Buildable.ROAD:
-                success, msg = game.try_build_road(player, selected, vertex=None, build=True, use_resources=True)
+                success, msg = game.try_build_road(player, selected)
             elif action_type == Buildable.SETTLEMENT:
-                success, msg = game.try_build_settlement(player, selected, build=True, use_resources=True)
+                success, msg = game.try_build_settlement(player, selected)
             elif action_type == Buildable.CITY:
-                success, msg = game.try_build_city(player, selected, build=True, use_resources=True)
+                success, msg = game.try_build_city(player, selected)
             else:
                 success, msg = False, "Unknown build type"
 

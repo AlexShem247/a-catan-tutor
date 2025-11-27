@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 
 from game.Board import Board
 from game.Edge import EdgeDirection, Edge
+from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
 from game.Vertex import VertexDirection, Building, Vertex
@@ -121,7 +122,7 @@ class DiagonalEdges(Renderable):
         return f"{render_edge(self.left, left_symbol)}   {render_edge(self.right, right_symbol)}"
 
 
-def display_board(board: Board) -> None:
+def display_board(game: Game) -> None:
     display_array: list[list[Renderable]] = [[Empty() for _ in range(11)] for _ in range(17)]
 
     def init_diagonal(row_i: int, col_i: int, side: str, flipped: bool, owner: Player | None):
@@ -131,16 +132,14 @@ def display_board(board: Board) -> None:
             display_array[row_i][col_i] = cell
         setattr(cell, side, owner)
 
-    for r in range(board.MIN_R, board.MAX_R + 1):
-        row_hexes = sorted([h for h in board.hexes if h.r == r], key=lambda h: h.q)
-
-        for i, h in enumerate(row_hexes):
+    for r in range(Board.MIN_R, Board.MAX_R + 1):
+        for i, h in enumerate(game.get_row_hexes(r)):
             row = 3 * r + 2
             col = 1 + abs(r - 2) + 2 * i
-            display_array[row + int(r > board.MAX_R // 2)][col] = DisplayHexTile(h)
-            display_array[row - 1 + int(r > board.MAX_R // 2)][col] = DisplayCoordinate(h)
-            display_array[row][col - 1] = DisplayEdge(board.get_edge(h.q, h.r, EdgeDirection.WEST))
-            display_array[row][col + 1] = DisplayEdge(board.get_edge(h.q, h.r, EdgeDirection.EAST))
+            display_array[row + int(r > Board.MAX_R // 2)][col] = DisplayHexTile(h)
+            display_array[row - 1 + int(r > Board.MAX_R // 2)][col] = DisplayCoordinate(h)
+            display_array[row][col - 1] = DisplayEdge(game.get_edge(h.q, h.r, EdgeDirection.WEST))
+            display_array[row][col + 1] = DisplayEdge(game.get_edge(h.q, h.r, EdgeDirection.EAST))
 
             # Places for vertices in display array (dR, dC)
             vertex_pos: (int, int) = [(-2, 0), (-1, 1), (1, 1), (2, 0), (1, -1), (-1, -1)]
@@ -149,21 +148,21 @@ def display_board(board: Board) -> None:
                 c_idx = col + dC
                 # Only set if inside array bounds
                 if 0 <= r_idx < len(display_array) and 0 <= c_idx < len(display_array[0]):
-                    display_array[r_idx][c_idx] = DisplayVertex(board.get_vertex(h.q, h.r, VertexDirection(vDir)))
+                    display_array[r_idx][c_idx] = DisplayVertex(game.get_vertex(h.q, h.r, VertexDirection(vDir)))
 
                 # Top diagonals
-                if vDir == VertexDirection.TOP and r <= board.MAX_R // 2:
+                if vDir == VertexDirection.TOP and r <= Board.MAX_R // 2:
                     init_diagonal(r_idx, c_idx + 1, "left", flipped=False,
-                                  owner=board.get_edge(h.q, h.r, EdgeDirection.NORTH_EAST).owner)
+                                  owner=game.get_edge(h.q, h.r, EdgeDirection.NORTH_EAST).owner)
                     init_diagonal(r_idx, c_idx - 1, "right", flipped=False,
-                                  owner=board.get_edge(h.q, h.r, EdgeDirection.NORTH_WEST).owner)
+                                  owner=game.get_edge(h.q, h.r, EdgeDirection.NORTH_WEST).owner)
 
                 # Bottom diagonals
-                if vDir == VertexDirection.BOTTOM and r >= board.MAX_R // 2:
+                if vDir == VertexDirection.BOTTOM and r >= Board.MAX_R // 2:
                     init_diagonal(r_idx, c_idx + 1, "left", flipped=True,
-                                  owner=board.get_edge(h.q, h.r, EdgeDirection.SOUTH_EAST).owner)
+                                  owner=game.get_edge(h.q, h.r, EdgeDirection.SOUTH_EAST).owner)
                     init_diagonal(r_idx, c_idx - 1, "right", flipped=True,
-                                  owner=board.get_edge(h.q, h.r, EdgeDirection.SOUTH_WEST).owner)
+                                  owner=game.get_edge(h.q, h.r, EdgeDirection.SOUTH_WEST).owner)
 
     for row in display_array:
         print(" ".join(cell.render() for cell in row))

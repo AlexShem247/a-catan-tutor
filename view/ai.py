@@ -7,25 +7,19 @@ from game.Vertex import VertexDirection, Vertex, Buildable
 from view.display import clear_screen, display_board
 
 
-def random_settlement(board: Board, player: Player, try_build_settlement):
+def random_initial_settlement_placement(player: Player, game: Game):
     """Choose a valid random vertex for settlement."""
-    available_vertices = []
-    for x, y in board.HEX_COORDS:
-        for direction in VertexDirection:
-            vertex = board.get_vertex(x, y, direction)
-            success, _ = try_build_settlement(player, vertex, build=False)
-            if success:
-                available_vertices.append(vertex)
+    available_vertices = game.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
 
     return random.choice(available_vertices) if available_vertices else None
 
 
-def random_road(settlement: Vertex, try_build_road):
+def random_initial_road_placement(settlement: Vertex, game: Game):
     """
     Choose a valid edge connected to the given settlement.
     Picks a random edge adjacent to the settlement where a road can be built.
     """
-    available_edges = [e for e in settlement.edges if try_build_road(settlement.owner, e, build=False)[0]]
+    available_edges = game.get_buildable_edges_for_vertex(settlement)
 
     if not available_edges:
         return None
@@ -58,20 +52,17 @@ def make_round_move_ai(player: Player, game: Game):
     # AI makes its choice
     chosen_action = random.choice(weighted_actions)
 
-    chosen_location = None
-    msg = ""
-
     if chosen_action != "NOTHING":
         locations = buildable[chosen_action]
         chosen_location = random.choice(locations)
 
         # Perform the build
         if chosen_action == Buildable.ROAD:
-            success, msg = game.try_build_road(player, chosen_location, build=True, use_resources=True)
+            success, msg = game.try_build_road(player, chosen_location)
         elif chosen_action == Buildable.SETTLEMENT:
-            success, msg = game.try_build_settlement(player, chosen_location, build=True, use_resources=True)
+            success, msg = game.try_build_settlement(player, chosen_location)
         elif chosen_action == Buildable.CITY:
-            success, msg = game.try_build_city(player, chosen_location, build=True, use_resources=True)
+            success, msg = game.try_build_city(player, chosen_location)
         else:
             msg = "AI attempted unknown action"
     else:
@@ -79,7 +70,7 @@ def make_round_move_ai(player: Player, game: Game):
 
     # Display results
     clear_screen()
-    display_board(game.board)
+    display_board(game)
 
     print(f"\n--- {player.name}'s turn (AI) ---\n")
     print(f"{player.name} rolled {d1} + {d2} = {total}\n")
