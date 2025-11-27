@@ -1,6 +1,7 @@
 import unittest
 
 from game.Board import Board
+from game.Game import Game
 from game.Vertex import VertexDirection
 from game.Edge import EdgeDirection
 from game.Player import Player, PlayerNumber
@@ -10,44 +11,47 @@ from view.display import display_board
 class TestBoardSetup(unittest.TestCase):
 
     def test_example_board_setup(self):
-        board = Board()
-
         # Create Players
         p1 = Player(False, PlayerNumber.P1)
         p2 = Player(False, PlayerNumber.P2)
         p3 = Player(False, PlayerNumber.P3)
         p4 = Player(False, PlayerNumber.P4)
 
+        game = Game([p1, p2, p3, p4], Board())
+
         # Settlements
-        board.build_settlement(board.get_vertex(0, 2, VertexDirection.TOP_RIGHT), p1)
-        board.build_settlement(board.get_vertex(0, 2, VertexDirection.TOP_LEFT), p2)
-        board.build_settlement(board.get_vertex(1, 1, VertexDirection.TOP_LEFT), p3)
-        board.build_settlement(board.get_vertex(-1, 3, VertexDirection.TOP_RIGHT), p4)
-        board.build_settlement(board.get_vertex(0, 1, VertexDirection.TOP_LEFT), p1)
-        board.build_settlement(board.get_vertex(1, 2, VertexDirection.BOTTOM), p2)
-        board.build_settlement(board.get_vertex(-1, 2, VertexDirection.BOTTOM_LEFT), p3)
-        board.build_settlement(board.get_vertex(0, 0, VertexDirection.TOP), p1)
-        board.build_settlement(board.get_vertex(2, 0, VertexDirection.TOP), p2)
-        board.build_settlement(board.get_vertex(1, 2, VertexDirection.TOP_RIGHT), p1)
+        game.try_build_settlement(p1, game.get_vertex(0, 2, VertexDirection.TOP_RIGHT), road_restriction=False)
+        game.try_build_settlement(p2, game.get_vertex(0, 2, VertexDirection.TOP_LEFT), road_restriction=False)
+        game.try_build_settlement(p3, game.get_vertex(1, 1, VertexDirection.TOP_LEFT), road_restriction=False)
+        game.try_build_settlement(p4, game.get_vertex(-1, 3, VertexDirection.TOP_RIGHT), road_restriction=False)
+        game.try_build_settlement(p1, game.get_vertex(0, 1, VertexDirection.TOP_LEFT), road_restriction=False)
+        game.try_build_settlement(p2, game.get_vertex(1, 2, VertexDirection.BOTTOM), road_restriction=False)
+        game.try_build_settlement(p3, game.get_vertex(-1, 2, VertexDirection.BOTTOM_LEFT), road_restriction=False)
+        game.try_build_settlement(p1, game.get_vertex(0, 0, VertexDirection.TOP), road_restriction=False)
+        game.try_build_settlement(p2, game.get_vertex(2, 0, VertexDirection.TOP), road_restriction=False)
+        game.try_build_settlement(p1, game.get_vertex(1, 2, VertexDirection.TOP_RIGHT), road_restriction=False)
 
         # Cities
-        board.build_city(board.get_vertex(0, 2, VertexDirection.TOP_RIGHT), p1)
-        board.build_city(board.get_vertex(1, 1, VertexDirection.TOP_LEFT), p3)
+        game.try_build_city(p1, game.get_vertex(0, 2, VertexDirection.TOP_RIGHT))
+        game.try_build_city(p3, game.get_vertex(1, 1, VertexDirection.TOP_LEFT))
 
         # Roads
-        board.build_road(board.get_edge(0, 0, EdgeDirection.NORTH_WEST), p1)
-        board.build_road(board.get_edge(0, 0, EdgeDirection.NORTH_EAST), p1)
-        board.build_road(board.get_edge(2, 0, EdgeDirection.NORTH_EAST), p2)
-        board.build_road(board.get_edge(0, 2, EdgeDirection.EAST), p1)
-        board.build_road(board.get_edge(0, 2, EdgeDirection.WEST), p2)
-        board.build_road(board.get_edge(1, 1, EdgeDirection.NORTH_WEST), p3)
-        board.build_road(board.get_edge(-1, 3, EdgeDirection.NORTH_EAST), p4)
-        board.build_road(board.get_edge(0, 1, EdgeDirection.WEST), p1)
-        board.build_road(board.get_edge(1, 2, EdgeDirection.SOUTH_EAST), p2)
-        board.build_road(board.get_edge(-1, 2, EdgeDirection.SOUTH_WEST), p3)
-        board.build_road(board.get_edge(1, 2, EdgeDirection.EAST), p1)
+        game.try_build_road(p1, game.get_edge(0, 0, EdgeDirection.NORTH_WEST))
+        game.try_build_road(p1, game.get_edge(0, 0, EdgeDirection.NORTH_EAST))
+        game.try_build_road(p2, game.get_edge(2, 0, EdgeDirection.NORTH_EAST))
+        game.try_build_road(p1, game.get_edge(0, 2, EdgeDirection.EAST))
+        game.try_build_road(p2, game.get_edge(0, 2, EdgeDirection.WEST))
+        game.try_build_road(p3, game.get_edge(1, 1, EdgeDirection.NORTH_WEST))
+        game.try_build_road(p4, game.get_edge(-1, 3, EdgeDirection.NORTH_EAST))
+        game.try_build_road(p1, game.get_edge(0, 1, EdgeDirection.WEST))
+        game.try_build_road(p2, game.get_edge(1, 2, EdgeDirection.SOUTH_EAST))
+        game.try_build_road(p3, game.get_edge(-1, 2, EdgeDirection.SOUTH_WEST))
+        game.try_build_road(p1, game.get_edge(1, 2, EdgeDirection.EAST))
 
-        # # Simple sanity checks
+        print("\n")
+        display_board(game)
+
+        # Sanity checks
         self.assertEqual(len(p1.settlements), 3)
         self.assertEqual(len(p2.settlements), 3)
         self.assertEqual(len(p3.settlements), 1)
@@ -60,10 +64,6 @@ class TestBoardSetup(unittest.TestCase):
         self.assertEqual(len(p2.roads), 3)
         self.assertEqual(len(p3.roads), 2)
         self.assertEqual(len(p4.roads), 1)
-
-        # Check board gets displayed
-        print("\n")
-        display_board(board)
 
 
 if __name__ == "__main__":
