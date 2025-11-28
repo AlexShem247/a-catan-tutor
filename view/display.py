@@ -166,3 +166,28 @@ def display_board(game: Game) -> None:
 
     for row in display_array:
         print(" ".join(cell.render() for cell in row))
+
+
+def get_player_lead_status(player: Player) -> str:
+    """Return lead status."""
+    player_vp = player.calc_victory_points()
+    best_opponent_vp = player.best_opponents_victory_point
+
+    if player_vp > best_opponent_vp:
+        return "♕"
+    elif player_vp == best_opponent_vp and player_vp > 2:
+        return 'Tied-♕'
+    else:
+        return ""
+
+
+def display_results(game: Game):
+    clear_screen()
+    print("Board final values:\n")
+    display_board(game)
+    sorted_players = sorted(game.players, key=lambda p: p.calc_victory_points(), reverse=True)
+
+    print(f"\nThe winner is: {sorted_players[0].name}!\n")
+    print("Scores:")
+    for i, player in enumerate(sorted_players, start=1):
+        print(f"{i}. {player.name}: {player.calc_victory_points()} points")

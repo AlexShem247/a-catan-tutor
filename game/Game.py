@@ -19,6 +19,8 @@ class Game:
         Buildable.CITY: {Resource.ORE: 3, Resource.WHEAT: 2}
     }
 
+    VICTORY_POINTS_TO_WIN = 10
+
     def __init__(self, players: List[Player], board: Board):
         self.players = players
         self._board = board
@@ -75,8 +77,8 @@ class Game:
 
     # Build actions
 
-    @staticmethod
     def try_build_settlement(
+            self,
             player: Player,
             vertex: Vertex,
             build: bool = True,
@@ -102,11 +104,12 @@ class Game:
             if use_resources:
                 for res, amt in Game.BUILDING_COST[Buildable.SETTLEMENT].items():
                     player.remove_resource(res, amt)
+            self.update_best_opponent_victory_points()
 
         return True, f"Settlement built at {vertex}"
 
-    @staticmethod
     def try_build_city(
+            self,
             player: Player,
             vertex: Vertex,
             build: bool = True,
@@ -124,10 +127,12 @@ class Game:
                 for res, amt in Game.BUILDING_COST[Buildable.CITY].items():
                     player.remove_resource(res, amt)
 
+            self.update_best_opponent_victory_points()
+
         return True, f"City built at {vertex}"
 
-    @staticmethod
     def try_build_road(
+            self,
             player: Player,
             edge: Edge,
             on_vertex: Optional[Vertex] = None,
@@ -142,6 +147,13 @@ class Game:
                 if use_resources:
                     for res, amt in Game.BUILDING_COST[Buildable.ROAD].items():
                         player.remove_resource(res, amt)
+
+                # Recalculate longest road length
+                player.longest_road_length = Board.calculate_longest_road_length(player.roads)
+
+                # Update the longest road ownership for ALL players
+                self._update_longest_road_ownership()
+
             return True, f"Road built at {edge}"
 
         if edge.owner is not None:
@@ -165,6 +177,58 @@ class Game:
 
         v_info = ", ".join(v.owner.name if v.owner else "EMPTY" for v in edge.vertices)
         return False, f"Cannot build road: no adjacent settlement or connecting road. Vertices: {v_info}"
+
+    def _update_longest_road_ownership(self) -> None:
+        """Update the longest road ownership across all players."""
+        # Recalculate for all players (in case roads were broken by settlements)
+        for p in self.players:
+            p.longest_road_length = Board.calculate_longest_road_length(p.roads)
+
+        # Find the player(s) with the longest road
+        max_length = max(p.longest_road_length for p in self.players)
+
+        # Longest road must be at least 5 to qualify
+        if max_length < 5:
+            # No one qualifies for longest road
+            for p in self.players:
+                p.has_longest_road = False
+            return
+
+        # Check if there's a tie
+        players_with_max = [p for p in self.players if p.longest_road_length == max_length]
+
+        if len(players_with_max) == 1:
+            # Clear longest road from all players first
+            for p in self.players:
+                p.has_longest_road = False
+            # Award to the single player with the longest road
+            players_with_max[0].has_longest_road = True
+        else:
+            # Tie case: keep with current holder if they're tied, otherwise no one gets it
+            current_holder = next((p for p in self.players if p.has_longest_road), None)
+            if current_holder and current_holder.longest_road_length == max_length:
+                # Current holder keeps it
+                pass
+            else:
+                # No current holder or they don't have max length - no one gets it
+                for p in self.players:
+                    p.has_longest_road = False
+
+        self.update_best_opponent_victory_points()
+
+    def update_best_opponent_victory_points(self) -> None:
+        """Update best_opponents_victory_point for all players."""
+        # Calculate victory points for all players
+        player_vp = {player: player.calc_victory_points() for player in self.players}
+
+        # For each player, find the highest VP among their opponents
+        for player in self.players:
+            opponent_vps = [vp for p, vp in player_vp.items() if p != player]
+            player.best_opponents_victory_point = max(opponent_vps) if opponent_vps else 0
+
+            if player_vp[player] >= Game.VICTORY_POINTS_TO_WIN:
+                # player has won
+                self.game_over = True
 
     def get_row_hexes(self, r: int) -> List[HexTile]:
         """Return a list of hex tiles in row r, sorted by their q coordinate."""

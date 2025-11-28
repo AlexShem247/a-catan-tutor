@@ -4,7 +4,7 @@ from game.Board import Board
 from game.Game import Game
 from game.Player import Player
 from game.Vertex import VertexDirection, Vertex, Buildable
-from view.display import clear_screen, display_board
+from view.display import clear_screen, display_board, get_player_lead_status
 
 
 def random_initial_settlement_placement(player: Player, game: Game):
@@ -73,7 +73,11 @@ def make_round_move_ai(player: Player, game: Game):
     display_board(game)
 
     print(f"\n--- {player.name}'s turn (AI) ---\n")
-    print(f"{player.name} rolled {d1} + {d2} = {total}\n")
+    print(f"{player.name} rolled {d1} + {d2} = {total}")
+
+    # Show stats
+    print(f"Longest Road: \t{player.longest_road_length} {'♕' if player.has_longest_road else ''}")
+    print(f"Victory Points: {player.calc_victory_points()} {get_player_lead_status(player)}\n")
 
     if chosen_action == "NOTHING":
         print(msg)

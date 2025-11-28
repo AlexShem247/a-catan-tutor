@@ -30,9 +30,23 @@ class Player:
         self.roads: List[Edge] = []
 
         # Game metrics
-        self.victory_points: int = 0
         self.longest_road_length: int = 0
         self.has_longest_road: bool = False
+        self.best_opponents_victory_point: int = 0
+
+    def calc_victory_points(self) -> int:
+        """Calculate total victory points for a player."""
+        points = 0
+
+        # Buildings
+        points += len(self.settlements) * 1  # 1 point per settlement
+        points += len(self.cities) * 2  # 2 points per city
+
+        # Special achievements
+        if self.has_longest_road:
+            points += 2
+
+        return points
 
     def __repr__(self):
         return self.name
@@ -57,4 +71,3 @@ class Player:
     def add_road(self, edge) -> None:
         """Add a road along the given edge."""
         self.roads.append(edge)
-

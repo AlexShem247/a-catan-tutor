@@ -4,7 +4,7 @@ from game.Edge import Edge
 from game.Game import Game
 from game.Player import Player
 from game.Vertex import Vertex, Buildable
-from view.display import display_board
+from view.display import display_results
 
 
 class GameController:
@@ -70,12 +70,10 @@ class GameController:
                     if self.play_round_ai_hook:
                         self.play_round_ai_hook(player, self.game)
 
-                # TODO: Implement game-over check logic
                 if self.game.game_over:
                     break
 
-        print("Board final values:")
-        display_board(self.game)
+        display_results(self.game)
 
     def perform_build_action(
         self, player: Player, build_type: Buildable, target

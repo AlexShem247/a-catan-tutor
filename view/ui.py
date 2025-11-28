@@ -3,7 +3,7 @@ from game.Edge import EdgeDirection, Edge
 from game.Game import Game
 from game.Player import Player
 from game.Vertex import VertexDirection, Vertex, Buildable
-from view.display import display_board, clear_screen
+from view.display import display_board, clear_screen, get_player_lead_status
 
 
 def initial_settlement_placement(player: Player, game: Game) -> Vertex:
@@ -84,14 +84,18 @@ def make_round_move(player: Player, game: Game):
         clear_screen()
         display_board(game)
         print(f"\n--- {player.name}'s turn ---\n")
-        print(f"Dice rolled: {d1} + {d2} = {total}\n")
+        print(f"Dice rolled: {d1} + {d2} = {total}")
 
         if error_msg:
             print(error_msg)
             error_msg = None
 
+        # Show stats
+        print(f"Longest Road: \t{player.longest_road_length} {'♕' if player.has_longest_road else ''}")
+        print(f"Victory Points: {player.calc_victory_points()} {get_player_lead_status(player)}")
+
         # Show resources
-        print("Your resources:")
+        print("\nYour resources:")
         resources = list(player.resources.items())
         for i in range(0, len(resources), 2):
             first = resources[i]
@@ -116,9 +120,12 @@ def make_round_move(player: Player, game: Game):
         for key, val in options.items():
             print(f"  {key}. {val}")
 
+        if player.calc_victory_points() >= Game.VICTORY_POINTS_TO_WIN:
+            break
+
         choice = input("Enter option: ").strip()
 
-        if choice == "1":
+        if choice == "1" or choice == "":
             # End turn
             break
 
