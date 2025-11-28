@@ -5,12 +5,17 @@ from typing import List, Optional, Dict, Tuple
 from game.Edge import Edge, EdgeDirection
 from game.HexTile import HexTile, HexType
 from game.Player import Player
-from game.Vertex import Vertex, VertexDirection, Building
+from game.Vertex import Vertex, VertexDirection, Building, Port
 
 HEX_TYPES: list[HexType] = ["forest", "hills", "pasture", "fields", "mountains", "desert"]
 
 PRODUCTION_NUMBERS = [2, 3, 3, 4, 4, 5, 5, 6, 6,
                       8, 8, 9, 9, 10, 10, 11, 11, 12]
+
+PORT_TYPES = [
+    Port.THREE_TO_ONE, Port.THREE_TO_ONE, Port.THREE_TO_ONE, Port.THREE_TO_ONE,
+    Port.BRICK, Port.WOOD, Port.SHEEP, Port.WHEAT, Port.ORE
+]
 
 
 class Board:
@@ -95,6 +100,7 @@ class Board:
 
     def create_edges(self) -> None:
         edge_map: Dict[Tuple[int, int], Edge] = {}
+
         for hex_tile in self.hexes:
             verts = hex_tile.vertices
             n = len(verts)
@@ -102,18 +108,60 @@ class Board:
                 v1 = verts[i]
                 v2 = verts[(i + 1) % n]  # Next vertex clockwise
                 key: Tuple[int, int] = (min(id(v1), id(v2)), max(id(v1), id(v2)))
+
                 if key not in edge_map:
                     edge = Edge(v1, v2, (hex_tile.q, hex_tile.r, EdgeDirection(i)))
                     edge_map[key] = edge
                     self.edges.append(edge)
                 edge = edge_map[key]
+
+                # Add connections
                 if edge not in v1.edges:
                     v1.edges.append(edge)
                 if edge not in v2.edges:
                     v2.edges.append(edge)
 
-                # store mapping by hex + direction
+                # Store mapping by hex + direction
                 self.edge_map[(hex_tile.q, hex_tile.r, EdgeDirection(i))] = edge
+
+        # Assign ports
+        water_edges = [
+            self.edge_map[(0, 0, EdgeDirection.WEST)], self.edge_map[(0, 0, EdgeDirection.NORTH_WEST)],
+            self.edge_map[(0, 0, EdgeDirection.NORTH_EAST)], self.edge_map[(1, 0, EdgeDirection.NORTH_WEST)],
+            self.edge_map[(1, 0, EdgeDirection.NORTH_EAST)], self.edge_map[(2, 0, EdgeDirection.NORTH_WEST)],
+
+            self.edge_map[(2, 0, EdgeDirection.NORTH_EAST)], self.edge_map[(2, 0, EdgeDirection.EAST)],
+            self.edge_map[(2, 1, EdgeDirection.NORTH_EAST)], self.edge_map[(2, 1, EdgeDirection.EAST)],
+            self.edge_map[(2, 2, EdgeDirection.NORTH_EAST)], self.edge_map[(2, 2, EdgeDirection.EAST)],
+
+            self.edge_map[(2, 2, EdgeDirection.SOUTH_EAST)], self.edge_map[(1, 3, EdgeDirection.EAST)],
+            self.edge_map[(1, 3, EdgeDirection.SOUTH_EAST)], self.edge_map[(0, 4, EdgeDirection.EAST)],
+            self.edge_map[(0, 4, EdgeDirection.SOUTH_EAST)], self.edge_map[(0, 4, EdgeDirection.SOUTH_WEST)],
+
+            self.edge_map[(-1, 4, EdgeDirection.SOUTH_EAST)], self.edge_map[(-1, 4, EdgeDirection.SOUTH_WEST)],
+            self.edge_map[(-2, 4, EdgeDirection.SOUTH_EAST)], self.edge_map[(-2, 4, EdgeDirection.SOUTH_WEST)],
+            self.edge_map[(-2, 4, EdgeDirection.WEST)], self.edge_map[(-2, 3, EdgeDirection.SOUTH_WEST)],
+
+            self.edge_map[(-2, 3, EdgeDirection.WEST)], self.edge_map[(-2, 2, EdgeDirection.SOUTH_WEST)],
+            self.edge_map[(-2, 2, EdgeDirection.WEST)], self.edge_map[(-2, 2, EdgeDirection.NORTH_WEST)],
+            self.edge_map[(-1, 1, EdgeDirection.WEST)], self.edge_map[(-1, 1, EdgeDirection.NORTH_WEST)],
+        ]
+        ports = PORT_TYPES[:]
+        random.shuffle(ports)
+        i = 0
+
+        for port in ports:
+            # Pick the next edge
+            edge = water_edges[i]
+            for vertex in edge.vertices:
+                vertex.port = port
+
+            # Move to next port
+            i += random.choice([3, 4])
+
+            # Wrap around if needed
+            if i >= len(water_edges):
+                i %= len(water_edges)
 
     def assign_neighbors(self) -> None:
         directions: List[Tuple[int, int]] = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]
@@ -170,7 +218,7 @@ class Board:
     @staticmethod
     def _dfs_longest_path(current_road: Edge, current_vertex: Vertex,
                           road_graph: dict, visited_roads: set) -> int:
-        """DFS to find longest path from current position."""
+        """DFS to find the longest path from current position."""
         visited_roads.add(current_road)
         max_length = 1  # Current road counts as 1
 
@@ -185,15 +233,15 @@ class Board:
             # Explore all unvisited roads connected to the other vertex
             for next_road in road_graph[other_vertex]:
                 if next_road not in visited_roads:
-                    # Check if this road is blocked by opponent's settlement/city
-                    if not Board._is_road_blocked(other_vertex, next_road, current_road.owner):
+                    # Check if this road is blocked by opponent's building
+                    if not Board._is_road_blocked(other_vertex, current_road.owner):
                         length = 1 + Board._dfs_longest_path(next_road, other_vertex, road_graph, visited_roads.copy())
                         max_length = max(max_length, length)
 
         return max_length
 
     @staticmethod
-    def _is_road_blocked(vertex: Vertex, next_road: Edge, player: Player) -> bool:
+    def _is_road_blocked(vertex: Vertex, player: Player) -> bool:
         """Check if a road connection is blocked by opponent's building."""
         # If vertex has a building owned by another player, it blocks the path
         return vertex.owner is not None and vertex.owner != player

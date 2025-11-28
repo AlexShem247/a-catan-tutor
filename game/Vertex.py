@@ -39,6 +39,15 @@ class VertexDirection(IntEnum):
     TOP_LEFT = 5
 
 
+class Port(Enum):
+    WOOD = 0
+    BRICK = 1
+    SHEEP = 2
+    WHEAT = 3
+    ORE = 4
+    THREE_TO_ONE = 5
+
+
 class Vertex:
     def __init__(self, pos: Tuple[int, int, VertexDirection]):
         self.hexes: List[HexTile] = []
@@ -46,6 +55,7 @@ class Vertex:
         self.owner: Optional[Player] = None
         self.building: Optional[Building] = None
         self.pos = pos
+        self.port: Optional[Port] = None
 
     def get_pos(self) -> str:
         q, r, direction = self.pos

@@ -42,7 +42,10 @@ def colorise(text: str, color: Color, bold: bool = False, underline: bool = Fals
     if color is Color.RESET:
         return text
 
-    r, g, b = color.value
+    if hasattr(color, "value"):
+        r, g, b = color.value
+    else:
+        r, g, b = color
 
     # Build ANSI prefix
     prefix_codes = []
@@ -55,3 +58,8 @@ def colorise(text: str, color: Color, bold: bool = False, underline: bool = Fals
     ansi_prefix = f"\033[{';'.join(prefix_codes)}m"
 
     return f"{ansi_prefix}{text}\033[0m"
+
+
+def brighten(color: Color, value: int = 50):
+    r, g, b = color.value
+    return min(r + value, 255), min(g + value, 255), min(b + value, 255)

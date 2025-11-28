@@ -3,7 +3,7 @@ from typing import Callable
 from game.Edge import Edge
 from game.Game import Game
 from game.Player import Player
-from game.Vertex import Vertex, Buildable
+from game.Vertex import Vertex
 from view.display import display_results
 
 
@@ -74,27 +74,3 @@ class GameController:
                     break
 
         display_results(self.game)
-
-    def perform_build_action(
-        self, player: Player, build_type: Buildable, target
-    ) -> tuple[bool, str]:
-        """
-        Perform a build action via the Game model.
-        'target' is either a Vertex (settlement/city) or Edge (road).
-        """
-        if build_type == Buildable.ROAD:
-            return self.game.try_build_road(player, target, build=True, use_resources=True)
-        elif build_type == Buildable.SETTLEMENT:
-            return self.game.try_build_settlement(player, target, build=True, use_resources=True, road_restriction=True)
-        elif build_type == Buildable.CITY:
-            return self.game.try_build_city(player, target, build=True, use_resources=True)
-        else:
-            return False, "Unknown build type"
-
-    def roll_dice_for_turn(self) -> tuple[int, int, int]:
-        """Roll dice and distribute resources for the current turn."""
-        return self.game.roll_dice()
-
-    def get_available_build_options(self, player: Player) -> dict:
-        """Return all buildable options for this player."""
-        return self.game.get_buildable_options(player)

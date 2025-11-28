@@ -5,8 +5,8 @@ from game.Edge import EdgeDirection, Edge
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
-from game.Vertex import VertexDirection, Building, Vertex
-from view.Color import Color, colorise
+from game.Vertex import VertexDirection, Building, Vertex, Port
+from view.Color import Color, colorise, brighten
 
 NO_EDGE = object()
 
@@ -61,7 +61,7 @@ class DisplayHexTile(Renderable):
 
 
 class DisplayCoordinate(Renderable):
-    COLOR_MAP = DisplayHexTile.COLOR_MAP  # reuse same mapping
+    COLOR_MAP = DisplayHexTile.COLOR_MAP
 
     def __init__(self, hex_tile: HexTile):
         self.hex_tile = hex_tile
@@ -73,11 +73,23 @@ class DisplayCoordinate(Renderable):
 
 
 class DisplayVertex(Renderable):
+    COLOR_MAP = {
+        Port.WOOD: brighten(Color.DARK_GREEN),
+        Port.BRICK: brighten(Color.RED_ORANGE),
+        Port.SHEEP: brighten(Color.LIME_GREEN),
+        Port.WHEAT: brighten(Color.GOLD),
+        Port.ORE: Color.GREY,
+    }
+
     def __init__(self, vertex: Vertex):
         self.vertex = vertex
 
     def render(self) -> str:
         if not self.vertex.owner:
+            if self.vertex.port is not None:
+                if self.vertex.port == Port.THREE_TO_ONE:
+                    return "3?:1?"
+                return colorise(f"2{self.vertex.port.name[0]}:1?", self.COLOR_MAP[self.vertex.port])
             return "EMPTY"
 
         owner_abbr = self.vertex.owner.name[:2].rjust(2)
