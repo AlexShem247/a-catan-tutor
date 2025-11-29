@@ -79,6 +79,7 @@ class DisplayVertex(Renderable):
         Port.SHEEP: brighten(Color.LIME_GREEN),
         Port.WHEAT: brighten(Color.GOLD),
         Port.ORE: Color.GREY,
+        Port.THREE_TO_ONE: Color.BROWN,
     }
 
     def __init__(self, vertex: Vertex):
@@ -88,7 +89,7 @@ class DisplayVertex(Renderable):
         if not self.vertex.owner:
             if self.vertex.port is not None:
                 if self.vertex.port == Port.THREE_TO_ONE:
-                    return "3?:1?"
+                    return colorise("3?:1?", self.COLOR_MAP[Port.THREE_TO_ONE])
                 return colorise(f"2{self.vertex.port.name[0]}:1?", self.COLOR_MAP[self.vertex.port])
             return "EMPTY"
 

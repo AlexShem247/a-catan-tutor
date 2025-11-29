@@ -8,16 +8,17 @@ def rgb_to_ansi(r: int, g: int, b: int) -> str:
 
 class Color(Enum):
     GREY = (140, 140, 140)
-    GOLD = (221, 170, 24)
-    LIME_GREEN = (133, 171, 16)
-    DARK_GREEN = (20, 109, 20)
-    RED_ORANGE = (178, 34, 34)
-    BEIGE = (203, 166, 119)
+    GOLD = (220, 170, 25)
+    LIME_GREEN = (130, 170, 15)
+    DARK_GREEN = (20, 110, 20)
+    RED_ORANGE = (180, 35, 35)
+    BEIGE = (200, 170, 120)
+    BROWN = (140, 70, 25)
 
     BLUE = (0, 0, 255)
     RED = (255, 0, 0)
     GREEN = (0, 230, 0)
-    YELLOW = (240, 227, 0)
+    YELLOW = (240, 225, 0)
 
     RESET = "reset"
 

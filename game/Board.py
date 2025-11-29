@@ -125,27 +125,7 @@ class Board:
                 self.edge_map[(hex_tile.q, hex_tile.r, EdgeDirection(i))] = edge
 
         # Assign ports
-        water_edges = [
-            self.edge_map[(0, 0, EdgeDirection.WEST)], self.edge_map[(0, 0, EdgeDirection.NORTH_WEST)],
-            self.edge_map[(0, 0, EdgeDirection.NORTH_EAST)], self.edge_map[(1, 0, EdgeDirection.NORTH_WEST)],
-            self.edge_map[(1, 0, EdgeDirection.NORTH_EAST)], self.edge_map[(2, 0, EdgeDirection.NORTH_WEST)],
-
-            self.edge_map[(2, 0, EdgeDirection.NORTH_EAST)], self.edge_map[(2, 0, EdgeDirection.EAST)],
-            self.edge_map[(2, 1, EdgeDirection.NORTH_EAST)], self.edge_map[(2, 1, EdgeDirection.EAST)],
-            self.edge_map[(2, 2, EdgeDirection.NORTH_EAST)], self.edge_map[(2, 2, EdgeDirection.EAST)],
-
-            self.edge_map[(2, 2, EdgeDirection.SOUTH_EAST)], self.edge_map[(1, 3, EdgeDirection.EAST)],
-            self.edge_map[(1, 3, EdgeDirection.SOUTH_EAST)], self.edge_map[(0, 4, EdgeDirection.EAST)],
-            self.edge_map[(0, 4, EdgeDirection.SOUTH_EAST)], self.edge_map[(0, 4, EdgeDirection.SOUTH_WEST)],
-
-            self.edge_map[(-1, 4, EdgeDirection.SOUTH_EAST)], self.edge_map[(-1, 4, EdgeDirection.SOUTH_WEST)],
-            self.edge_map[(-2, 4, EdgeDirection.SOUTH_EAST)], self.edge_map[(-2, 4, EdgeDirection.SOUTH_WEST)],
-            self.edge_map[(-2, 4, EdgeDirection.WEST)], self.edge_map[(-2, 3, EdgeDirection.SOUTH_WEST)],
-
-            self.edge_map[(-2, 3, EdgeDirection.WEST)], self.edge_map[(-2, 2, EdgeDirection.SOUTH_WEST)],
-            self.edge_map[(-2, 2, EdgeDirection.WEST)], self.edge_map[(-2, 2, EdgeDirection.NORTH_WEST)],
-            self.edge_map[(-1, 1, EdgeDirection.WEST)], self.edge_map[(-1, 1, EdgeDirection.NORTH_WEST)],
-        ]
+        water_edges = self._get_water_edges()
         ports = PORT_TYPES[:]
         random.shuffle(ports)
         i = 0
@@ -245,3 +225,31 @@ class Board:
         """Check if a road connection is blocked by opponent's building."""
         # If vertex has a building owned by another player, it blocks the path
         return vertex.owner is not None and vertex.owner != player
+
+    def _get_water_edges(self) -> List[Edge]:
+        """Returns the edges that are on the edge of the map"""
+        WIDTH = 6  # Edges in a hexagon
+        directions = [
+            t
+            for i in range(2, WIDTH + 2)
+            for t in [
+                ((i - 2) % WIDTH, (i - 1) % WIDTH),
+                ((i - 2) % WIDTH, (i - 1) % WIDTH, i % WIDTH)
+            ]
+        ]
+
+        # Get all hexes grouped by row
+        rows: Dict[int, List[Tuple[int, int]]] = defaultdict(list)
+        for x, y in self.hex_map.keys():
+            rows[int(y)].append((int(x), int(y)))
+        hexes = [sorted(rows[y], key=lambda t: t[0]) for y in sorted(rows)]
+        water_hexes = [row[-1] for row in hexes[1:-1]] + hexes[-1][::-1] + \
+                      [row[0] for row in hexes[1:-1]][::-1] + hexes[0]
+
+        # Get water edges
+        water_edges = []
+        for pos, edge_directions in zip(water_hexes, directions):
+            q, r = pos
+            for d in edge_directions:
+                water_edges.append(self.edge_map[(q, r, EdgeDirection(d))])
+        return water_edges
