@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
+from typing import Dict
 
 from game.Board import Board
 from game.Edge import EdgeDirection, Edge
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
+from game.Resources import Resource
 from game.Vertex import VertexDirection, Building, Vertex, Port
 from view.Color import Color, colorise, brighten
 
@@ -204,3 +206,21 @@ def display_results(game: Game):
     print("Scores:")
     for i, player in enumerate(sorted_players, start=1):
         print(f"{i}. {player.name}: {player.calc_victory_points()} points")
+
+
+def display_resources(resources: Dict[Resource, int], player: Player | None = None):
+    resources_list = list(resources.items())
+    for i in range(0, len(resources_list), 2):
+        first = resources_list[i]
+        second = resources_list[i + 1] if i + 1 < len(resources_list) else None
+
+        def format_res(res_tuple: tuple[Resource, int]):
+            res, amt = res_tuple
+            if player:
+                amt = f"{amt}/{player.resources.get(res, 0)}"
+            return f"{res.name:>5}: {amt}"
+
+        if second:
+            print(f"{format_res(first)}\t{format_res(second)}")
+        else:
+            print(f"{format_res(first)}")

@@ -2,8 +2,9 @@ from game.Board import Board
 from game.Edge import EdgeDirection, Edge
 from game.Game import Game
 from game.Player import Player
+from game.Resources import Resource
 from game.Vertex import VertexDirection, Vertex, Buildable
-from view.display import display_board, clear_screen, get_player_lead_status
+from view.display import display_board, clear_screen, get_player_lead_status, display_resources
 
 
 def initial_settlement_placement(player: Player, game: Game) -> Vertex:
@@ -92,23 +93,16 @@ def make_round_move(player: Player, game: Game):
 
         # Show stats
         print(f"Longest Road: \t{player.longest_road_length} {'♕' if player.has_longest_road else ''}")
-        print(f"Victory Points: {player.calc_victory_points()} {get_player_lead_status(player)}")
+        print(f"Victory Points: {player.calc_victory_points()} {get_player_lead_status(player)}\n")
 
         # Show resources
-        print("\nYour resources:")
-        resources = list(player.resources.items())
-        for i in range(0, len(resources), 2):
-            first = resources[i]
-            second = resources[i + 1] if i + 1 < len(resources) else None
-            if second:
-                print(f"{first[0].name:>5}: {first[1]:<3}\t{second[0].name:>5}: {second[1]}")
-            else:
-                print(f"{first[0].name:>5}: {first[1]}")
+        print("Your resources:")
+        display_resources(player.resources)
 
         # Show dynamic options
-        options = {"1": "End turn"}
+        options = {"1": "End turn", "2": "Open Trade Menu"}
         buildable = game.get_buildable_options(player)
-        option_number = 2
+        option_number = 3
 
         for action_type in Buildable:
             if buildable[action_type]:
@@ -128,6 +122,9 @@ def make_round_move(player: Player, game: Game):
         if choice == "1" or choice == "":
             # End turn
             break
+
+        if choice == "2":
+            trading_menu(player, game)
 
         elif choice in options:
             # Determine which build action
@@ -170,3 +167,90 @@ def make_round_move(player: Player, game: Game):
 
         else:
             error_msg = "Invalid option. Try again."
+
+
+def trading_menu(player: Player, game: Game):
+    """Display trading menu, allow bank or player trades, auto-return after trade or cancel."""
+    selling = {res: 0 for res in Resource}
+    buying = {res: 0 for res in Resource}
+
+    while True:
+        clear_screen()
+        display_board(game)
+        print(f"\n--- {player.name}'s Trading Menu ---\n")
+
+        # Print current trading hand
+        print("You give:")
+        display_resources(selling, player)
+
+        print("\nYou receive:")
+        display_resources(buying)
+
+        trade_incomplete = all(v == 0 for v in selling.values()) or all(v == 0 for v in buying.values())
+        valid_bank_trade = (not trade_incomplete and
+                            game.try_trade_with_bank(player, selling, buying, use_resources=False))
+        valid_player_trade = not trade_incomplete
+
+        print("\nOptions:")
+        print("  1. [RESOURCE] [AMOUNT] - Modify Selling Resource")
+        print("  2. [RESOURCE] [AMOUNT] - Modify Buying Resource")
+        print(f"  3. Trade with Bank - {'TRADE VALID' if valid_bank_trade else 'TRADE INCOMPLETE'}")
+        print(f"  4. Trade with Player - {'TRADE VALID' if valid_player_trade else 'TRADE INCOMPLETE'}")
+        print("  5. Terminate Trade")
+
+        user_input = input("Enter option: ").strip().split()
+
+        if not user_input:
+            print("Invalid input. Press enter to continue...")
+            input()
+            continue
+
+        option = user_input[0]
+
+        # Trade builder options
+        if option in {"1", "2"}:
+            if len(user_input) != 3:
+                print("Invalid input. Usage: <option> <RESOURCE> <AMOUNT>")
+                input("Press enter to continue...")
+                continue
+
+            res_str = user_input[1].upper()
+            amt_str = user_input[2]
+
+            try:
+                res = Resource[res_str]
+                amt = max(0, min(int(amt_str), player.resources.get(res)))
+            except (KeyError, ValueError):
+                print("Invalid resource or amount. Press enter to continue...")
+                input()
+                continue
+
+            if option == "1":
+                selling[res] = amt
+            else:
+                buying[res] = amt
+
+        elif option == "3":
+            # Trade with bank using the current selling and buying dicts
+            success = game.try_trade_with_bank(player, selling, buying)
+            if success:
+                print("Bank trade completed!")
+                # Reset trade
+                selling = {res: 0 for res in Resource}
+                buying = {res: 0 for res in Resource}
+            else:
+                print("Bank trade failed. Check rules or resources.")
+            input("Press enter to continue...")
+
+        elif option == "4":
+            # Trade with player (you can implement similarly)
+            # Here, just a placeholder
+            print("Player trade not implemented yet.")
+            input("Press enter to continue...")
+
+        elif option == "5":
+            return  # terminate trade
+
+        else:
+            print("Invalid option. Press enter to continue...")
+            input()

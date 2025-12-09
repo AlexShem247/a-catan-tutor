@@ -7,7 +7,7 @@ from game.Vertex import Vertex
 from view.display import display_results
 
 
-class GameController:
+class GameFlow:
     """
     Controls the flow of a Catan game using a pure Game model.
     Handles turns, building actions, and dice rolls via hooks.

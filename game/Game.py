@@ -6,7 +6,7 @@ from game.Edge import Edge, EdgeDirection
 from game.HexTile import HexTile
 from game.Player import Player
 from game.Resources import Resource
-from game.Vertex import Building, Vertex, Buildable, VertexDirection
+from game.Vertex import Building, Vertex, Buildable, VertexDirection, Port
 
 
 class Game:
@@ -20,6 +20,7 @@ class Game:
     }
 
     VICTORY_POINTS_TO_WIN = 10
+    BANK_TRADE_RATE = 4
 
     def __init__(self, players: List[Player], board: Board):
         self.players = players
@@ -75,7 +76,51 @@ class Game:
 
         return options
 
-    # Build actions
+    def try_trade_with_bank(
+            self, player: Player, selling: Dict[Resource, int],
+            buying: Dict[Resource, int], use_resources: bool = True
+    ) -> bool:
+        """Attempt a bank trade using correct port discounts (2:1, 3:1, 4:1)."""
+
+        # Filter zeros
+        selling_nonzero = {r: amt for r, amt in selling.items() if amt > 0}
+        buying_nonzero = {r: amt for r, amt in buying.items() if amt > 0}
+
+        # Must sell and buy exactly ONE resource type
+        if len(selling_nonzero) != 1 or len(buying_nonzero) != 1:
+            return False
+
+        selling_resource, selling_amount = next(iter(selling_nonzero.items()))
+        buying_resource, buying_amount = next(iter(buying_nonzero.items()))
+
+        # Determine player's trade rate based on ports
+        trade_rate = self.BANK_TRADE_RATE
+
+        player_ports = player.get_ports()
+
+        # 2:1 Specific resource port
+        if selling_resource.name in Port.__members__:
+            specific_port = Port[selling_resource.name]
+            if specific_port in player_ports:
+                trade_rate = 2
+
+        # 3:1 General port
+        if trade_rate == self.BANK_TRADE_RATE and Port.THREE_TO_ONE in player_ports:
+            trade_rate = 3
+
+        # Multiply by buying amount
+        total_cost = trade_rate * buying_amount
+
+        # Validate the selling amount
+        if player.resources.get(selling_resource, 0) < total_cost:
+            return False
+
+        # Execute trade
+        if use_resources:
+            player.remove_resource(selling_resource, total_cost)
+            player.add_resource(buying_resource, buying_amount)
+
+        return True
 
     def try_build_settlement(
             self,

@@ -1,9 +1,9 @@
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 from game.Edge import Edge
 from game.Resources import Resource
-from game.Vertex import Vertex
+from game.Vertex import Vertex, Port
 
 
 class PlayerNumber(Enum):
@@ -71,3 +71,7 @@ class Player:
     def add_road(self, edge) -> None:
         """Add a road along the given edge."""
         self.roads.append(edge)
+
+    def get_ports(self) -> List[Port]:
+        """Returns the list of ports owned by the player"""
+        return [v.port for v in self.settlements + self.cities if v.port is not None]
