@@ -1,9 +1,9 @@
 import random
 
-from game.Board import Board
 from game.Game import Game
 from game.Player import Player
-from game.Vertex import VertexDirection, Vertex, Buildable
+from game.Resources import Resource
+from game.Vertex import Vertex, Buildable
 from view.display import clear_screen, display_board, get_player_lead_status
 
 
@@ -27,12 +27,11 @@ def random_initial_road_placement(settlement: Vertex, game: Game):
     return random.choice(available_edges)
 
 
-def make_round_move_ai(player: Player, game: Game):
-    """Simple AI turn: AI makes decisions first, then board is displayed."""
-    d1, d2, total = game.roll_dice()
-    buildable = game.get_buildable_options(player)
-
-    # Weighting: encourages cities > settlements > roads > nothing
+def ai_choose_build_action():
+    """
+    Choose a desired build action for the AI based on weighted preferences,
+    ignoring whether the AI can currently afford it.
+    """
     action_weights = {
         Buildable.CITY: 10,
         Buildable.SETTLEMENT: 8,
@@ -40,48 +39,116 @@ def make_round_move_ai(player: Player, game: Game):
         "NOTHING": 4,
     }
 
-    # Build weighted action set
     weighted_actions = []
-    for action_type in Buildable:
-        if buildable[action_type]:
-            weighted_actions.extend([action_type] * action_weights[action_type])
+
+    # Include all possible actions (even if not buildable yet)
+    for action in Buildable:
+        weighted_actions.extend([action] * action_weights[action])
 
     # Always allow doing nothing
     weighted_actions.extend(["NOTHING"] * action_weights["NOTHING"])
 
-    # AI makes its choice
-    chosen_action = random.choice(weighted_actions)
+    return random.choice(weighted_actions)
 
-    if chosen_action != "NOTHING":
-        locations = buildable[chosen_action]
-        chosen_location = random.choice(locations)
 
-        # Perform the build
-        if chosen_action == Buildable.ROAD:
-            success, msg = game.try_build_road(player, chosen_location)
-        elif chosen_action == Buildable.SETTLEMENT:
-            success, msg = game.try_build_settlement(player, chosen_location)
-        elif chosen_action == Buildable.CITY:
-            success, msg = game.try_build_city(player, chosen_location)
-        else:
-            msg = "AI attempted unknown action"
+def ai_attempt_bank_trade(player: Player, game: Game, desired_build: Buildable):
+    """Try one bank trade to help the AI reach the resources needed for a desired build."""
+
+    cost = game.BUILDING_COST[desired_build]
+
+    # Determine missing resources
+    missing = {
+        r: needed - player.resources.get(r, 0)
+        for r, needed in cost.items()
+        if player.resources.get(r, 0) < needed
+    }
+    if not missing:
+        return None  # Nothing missing
+
+    # Determine spare tradable resources that are NOT needed for this build
+    spare = {
+        r: player.resources.get(r, 0)
+        for r in Resource
+        if r not in cost and player.resources.get(r, 0) >= game.get_trade_rate(player, r)
+    }
+    if not spare:
+        return None  # Nothing safe to trade away
+
+    # Pick a missing resource to buy
+    buying_resource = random.choice(list(missing.keys()))
+
+    # Pick a spare resource to sell
+    selling_resource = random.choice(list(spare.keys()))
+    rate = game.get_trade_rate(player, selling_resource)
+
+    selling = {res: 0 for res in Resource}
+    buying = {res: 0 for res in Resource}
+
+    selling[selling_resource] = rate
+    buying[buying_resource] = 1
+
+    # Attempt trade
+    success = game.try_trade_with_bank(player, selling, buying)
+    if not success:
+        return None
+
+    return (
+        f"{player.name} trades {rate} {selling_resource.name} "
+        f"for 1 {buying_resource.name} to work towards a {desired_build.name.lower()}."
+    )
+
+
+def ai_attempt_build(player: Player, game: Game, action: Buildable):
+    """Attempt a build action and return the resulting message."""
+
+    buildable = game.get_buildable_options(player)
+    if action not in buildable or not buildable[action]:
+        return f"{player.name} chooses to do nothing."
+
+    locations = buildable[action]
+    chosen_location = random.choice(locations)
+
+    if action == Buildable.ROAD:
+        success, msg = game.try_build_road(player, chosen_location)
+    elif action == Buildable.SETTLEMENT:
+        success, msg = game.try_build_settlement(player, chosen_location)
+    elif action == Buildable.CITY:
+        success, msg = game.try_build_city(player, chosen_location)
     else:
-        msg = f"{player.name} chooses to do nothing."
+        msg = "AI attempted unknown action"
 
-    # Display results
+    return msg
+
+
+def make_round_move_ai(player: Player, game: Game):
+    """AI turn: decides what to build, trades if helpful, then attempts the build."""
+
+    d1, d2, total = game.roll_dice()
+
+    # 1. AI chooses what it wants to build
+    chosen_action = ai_choose_build_action()
+
+    # 2. Try a bank trade if needed
+    trade_msg = None
+    if chosen_action != "NOTHING":
+        trade_msg = ai_attempt_bank_trade(player, game, chosen_action)
+
+    # 3. Attempt the build
+    build_msg = ai_attempt_build(player, game, chosen_action)
+
+    # 4. Display results
     clear_screen()
     display_board(game)
 
     print(f"\n--- {player.name}'s turn (AI) ---\n")
     print(f"{player.name} rolled {d1} + {d2} = {total}")
 
-    # Show stats
     print(f"Longest Road: \t{player.longest_road_length} {'♕' if player.has_longest_road else ''}")
     print(f"Victory Points: {player.calc_victory_points()} {get_player_lead_status(player)}\n")
 
-    if chosen_action == "NOTHING":
-        print(msg)
-    else:
-        print(msg)
+    if trade_msg:
+        print(trade_msg)
+
+    print(build_msg)
 
     input("\nPress enter to continue...")

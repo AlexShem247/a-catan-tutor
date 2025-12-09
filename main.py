@@ -14,13 +14,13 @@ if __name__ == "__main__":
                Player(False, PlayerNumber.P3), Player(False, PlayerNumber.P4)]
     game = Game(players, board)
 
-    # Give player extra resources
-    for res in Resource:
-        players[0].add_resource(res, random.randint(1, 5))
+    # # Give player extra resources
+    # for res in Resource:
+    #     players[0].add_resource(res, random.randint(1, 5))
 
     controller = GameFlow(
         game,
-        get_settlement_choice=initial_settlement_placement,
+        get_settlement_choice=random_initial_settlement_placement,
         get_road_choice=random_initial_road_placement,
         get_settlement_choice_ai=random_initial_settlement_placement,
         get_road_choice_ai=random_initial_road_placement,

@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
 
 from game.Edge import Edge
 from game.Resources import Resource

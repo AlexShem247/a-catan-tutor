@@ -1,4 +1,4 @@
-from random import randint, choice
+from random import randint
 from typing import List, Optional, Dict
 
 from game.Board import Board
@@ -47,9 +47,6 @@ class Game:
                 if vertex.owner is not None:
                     # Give main resource
                     vertex.owner.add_resource(tile.resource, vertex.building.get_resource_yield())
-                    # Give one bonus resource, random but not the tile's type
-                    bonus_resource = choice([r for r in Resource if r != tile.resource])
-                    vertex.owner.add_resource(bonus_resource, 1)
         return d1, d2, total
 
     # Determine available build locations
@@ -76,6 +73,24 @@ class Game:
 
         return options
 
+    def get_trade_rate(self, player: Player, resource: Resource) -> int:
+        """Return the best trade rate for 'player' when selling 'resource'."""
+        player_ports = player.get_ports()
+
+        # Try specific 2:1 port first
+        try:
+            specific_port = Port[resource.name]
+        except KeyError:
+            specific_port = None
+
+        if specific_port is not None and specific_port in player_ports:
+            return 2
+
+        if Port.THREE_TO_ONE in player_ports:
+            return 3
+
+        return self.BANK_TRADE_RATE
+
     def try_trade_with_bank(
             self, player: Player, selling: Dict[Resource, int],
             buying: Dict[Resource, int], use_resources: bool = True
@@ -93,23 +108,12 @@ class Game:
         selling_resource, selling_amount = next(iter(selling_nonzero.items()))
         buying_resource, buying_amount = next(iter(buying_nonzero.items()))
 
-        # Determine player's trade rate based on ports
-        trade_rate = self.BANK_TRADE_RATE
+        if selling_resource == buying_resource:
+            # Technically allowed but does not logically make sense
+            return False
 
-        player_ports = player.get_ports()
-
-        # 2:1 Specific resource port
-        if selling_resource.name in Port.__members__:
-            specific_port = Port[selling_resource.name]
-            if specific_port in player_ports:
-                trade_rate = 2
-
-        # 3:1 General port
-        if trade_rate == self.BANK_TRADE_RATE and Port.THREE_TO_ONE in player_ports:
-            trade_rate = 3
-
-        # Multiply by buying amount
-        total_cost = trade_rate * buying_amount
+        # Calculate cost
+        total_cost = self.get_trade_rate(player, selling_resource) * buying_amount
 
         # Validate the selling amount
         if player.resources.get(selling_resource, 0) < total_cost:
