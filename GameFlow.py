@@ -1,8 +1,9 @@
-from typing import Callable
+from typing import Callable, List, Dict
 
 from game.Edge import Edge
 from game.Game import Game
 from game.Player import Player
+from game.Resources import Resource
 from game.Vertex import Vertex
 from view.display import display_results
 
@@ -20,10 +21,13 @@ class GameFlow:
         get_road_choice: Callable[[Vertex, Game], Edge] = None,
         get_settlement_choice_ai: Callable[[Player, Game], Vertex] = None,
         get_road_choice_ai: Callable[[Vertex, Game], Edge] = None,
-        play_round_hook: Callable[[Player, Game], None] = None,
-        play_round_ai_hook: Callable[[Player, Game], None] = None
+        play_round_hook: Callable[[Player, "GameFlow"], None] = None,
+        play_round_ai_hook: Callable[[Player, Game], None] = None,
+        trade_manager_hook: Callable[[Player, Dict[Resource, int], Dict[Resource, int], Player], bool] = None,
+        trade_manager_ai_hook: Callable[[Player, Dict[Resource, int], Dict[Resource, int], Player, int], bool] = None
     ):
         self.game = game
+        self.round_num = 1
 
         self.get_settlement_choice = get_settlement_choice
         self.get_road_choice = get_road_choice
@@ -32,6 +36,9 @@ class GameFlow:
         self.get_settlement_choice_ai = get_settlement_choice_ai
         self.get_road_choice_ai = get_road_choice_ai
         self.play_round_ai_hook = play_round_ai_hook
+
+        self.trade_manager_hook = trade_manager_hook
+        self.trade_manager_ai_hook = trade_manager_ai_hook
 
     # Initial placement phase
 
@@ -65,7 +72,7 @@ class GameFlow:
             for player in self.game.players:
                 if player.is_human:
                     if self.play_round_hook:
-                        self.play_round_hook(player, self.game)
+                        self.play_round_hook(player, self)
                 else:
                     if self.play_round_ai_hook:
                         self.play_round_ai_hook(player, self.game)
@@ -73,4 +80,16 @@ class GameFlow:
                 if self.game.game_over:
                     break
 
+            self.round_num += 1
+
         display_results(self.game)
+
+    def trade_with_players(self, selling_player, selling, buying) -> List[Player]:
+        """Sees which players are willing to trade"""
+        return [
+            p for p in self.game.players
+            if p != selling_player and (
+                self.trade_manager_hook(p, selling, buying, selling_player) if p.is_human
+                else self.trade_manager_ai_hook(p, selling, buying, selling_player, self.round_num)
+            )
+        ]

@@ -1,4 +1,6 @@
 import random
+from math import ceil
+from typing import Dict
 
 from game.Game import Game
 from game.Player import Player
@@ -152,3 +154,29 @@ def make_round_move_ai(player: Player, game: Game):
     print(build_msg)
 
     input("\nPress enter to continue...")
+
+
+def trade_manager_ai(player: Player, selling: Dict[Resource, int], buying: Dict[Resource, int],
+                     selling_player: Player, round_num: int) -> bool:
+    """
+    Basic AI logic for accepting or rejecting a trade.
+    - Player must have the required resources (buying)
+    - AI becomes pickier as rounds progress
+    """
+    total_rounds = 20  # Estimated total rounds in the game
+    max_ratio = 4      # Maximum resources AI will ask for 1 resource late game
+
+    # 1. Check if AI has the resources it is being asked to give
+    for resource, amount in buying.items():
+        if player.resources.get(resource, 0) < amount:
+            return False  # Cannot trade what you don't have
+
+    # 2. Calculate AI's required ratio for this round
+    required_ratio = ceil(1 + (round_num - 1) / total_rounds * (max_ratio - 1))
+
+    # 3. Calculate totals
+    total_selling = sum(selling.values())  # What the AI would get
+    total_buying = sum(buying.values())    # What AI would give
+
+    # 4. Accept trade if total offered meets or exceeds AI's required ratio
+    return total_selling >= required_ratio * total_buying

@@ -4,7 +4,7 @@ from typing import List, Optional, Dict
 from game.Board import Board
 from game.Edge import Edge, EdgeDirection
 from game.HexTile import HexTile
-from game.Player import Player
+from game.Player import Player, PlayerNumber
 from game.Resources import Resource
 from game.Vertex import Building, Vertex, Buildable, VertexDirection, Port
 
@@ -20,21 +20,17 @@ class Game:
     }
 
     VICTORY_POINTS_TO_WIN = 10
-    BANK_TRADE_RATE = 4
 
-    def __init__(self, players: List[Player], board: Board):
-        self.players = players
-        self._board = board
+    def __init__(self, human_player_one: bool = True):
+        self.players: List[Player] = [Player(human_player_one if p == PlayerNumber.P1
+                                             else False, p) for p in PlayerNumber]
+        self._board = Board()
         self.game_over = False
-
-    # Resource checks
 
     def can_afford(self, player: Player, building_type: Buildable) -> bool:
         """Check if the player has enough resources to build the given type."""
         cost = self.BUILDING_COST[building_type]
         return all(player.resources.get(res, 0) >= amt for res, amt in cost.items())
-
-    # Dice and resource production
 
     def roll_dice(self) -> tuple[int, int, int]:
         """Roll two dice and distribute resources to players."""
@@ -48,8 +44,6 @@ class Game:
                     # Give main resource
                     vertex.owner.add_resource(tile.resource, vertex.building.get_resource_yield())
         return d1, d2, total
-
-    # Determine available build locations
 
     def get_buildable_options(self, player: Player) -> dict:
         """
@@ -73,7 +67,8 @@ class Game:
 
         return options
 
-    def get_trade_rate(self, player: Player, resource: Resource) -> int:
+    @staticmethod
+    def get_trade_rate(player: Player, resource: Resource) -> int:
         """Return the best trade rate for 'player' when selling 'resource'."""
         player_ports = player.get_ports()
 
@@ -89,7 +84,7 @@ class Game:
         if Port.THREE_TO_ONE in player_ports:
             return 3
 
-        return self.BANK_TRADE_RATE
+        return 4
 
     def try_trade_with_bank(
             self, player: Player, selling: Dict[Resource, int],
@@ -107,10 +102,6 @@ class Game:
 
         selling_resource, selling_amount = next(iter(selling_nonzero.items()))
         buying_resource, buying_amount = next(iter(buying_nonzero.items()))
-
-        if selling_resource == buying_resource:
-            # Technically allowed but does not logically make sense
-            return False
 
         # Calculate cost
         total_cost = self.get_trade_rate(player, selling_resource) * buying_amount
@@ -323,3 +314,25 @@ class Game:
     def get_buildable_edges_for_vertex(self, vertex: Vertex) -> List[Edge]:
         """Return edges adjacent to a vertex where the player can build a road."""
         return [e for e in vertex.edges if self.try_build_road(vertex.owner, e, build=False)[0]]
+
+    @staticmethod
+    def trade_between_players(player: Player, selling: Dict[Resource, int],
+                              buying_player: Player, buying: Dict[Resource, int]):
+        """Execute a trade of resources between two players."""
+
+        # Remove resources from the selling player
+        for resource, amount in selling.items():
+            player.resources[resource] -= amount
+
+        # Add those resources to the buying player
+        for resource, amount in selling.items():
+            buying_player.resources[resource] += amount
+
+        # Remove resources from the buying player
+        for resource, amount in buying.items():
+            buying_player.resources[resource] -= amount
+
+        # Add those resources to the selling player
+        for resource, amount in buying.items():
+            player.resources[resource] += amount
+

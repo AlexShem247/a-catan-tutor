@@ -1,3 +1,6 @@
+from typing import Dict, List, Optional
+
+from GameFlow import GameFlow
 from game.Board import Board
 from game.Edge import EdgeDirection, Edge
 from game.Game import Game
@@ -76,8 +79,9 @@ def initial_road_placement(settlement: Vertex, game: Game) -> Edge:
             error_msg = "Invalid input. Format: x y DIRECTION (e.g. 0 2 EAST)"
 
 
-def make_round_move(player: Player, game: Game):
+def make_round_move(player: Player, game_flow: GameFlow):
     """Handle a full turn for a human player, including dice roll, resource display, and building actions."""
+    game = game_flow.game
     d1, d2, total = game.roll_dice()
     error_msg = None
 
@@ -124,7 +128,7 @@ def make_round_move(player: Player, game: Game):
             break
 
         if choice == "2":
-            trading_menu(player, game)
+            trading_menu(player, game_flow)
 
         elif choice in options:
             # Determine which build action
@@ -169,10 +173,47 @@ def make_round_move(player: Player, game: Game):
             error_msg = "Invalid option. Try again."
 
 
-def trading_menu(player: Player, game: Game):
+def select_player_to_trade(game: Game, player: Player, willing_players: List[Player]) -> Optional[Player]:
+    """
+    Let the human player select a willing player to trade with.
+    Returns the selected player or None if trade is canceled.
+    """
+    clear_screen()
+    display_board(game)
+    print(f"\n--- {player.name}'s Trading Menu ---\n")
+
+    if not willing_players:
+        print("No players are willing to trade with you right now.")
+        input("\nPress enter to continue...")
+        return None
+
+    # List willing players
+    print("Players willing to trade:")
+    cancel_action = len(willing_players) + 1
+    for i, p in enumerate(willing_players, start=1):
+        print(f"{i}. {p.name}")
+    print(f"{cancel_action}. Cancel trade")
+
+    # Ask user to choose
+    while True:
+        choice = input("\nSelect a player to trade with: ")
+        if choice.isdigit():
+            choice = int(choice)
+            if 1 <= choice <= cancel_action:
+                break
+        print("Invalid choice, please enter a number from the list.")
+
+    if choice == cancel_action:
+        return None
+
+    return willing_players[choice - 1]
+
+
+def trading_menu(player: Player, game_flow: GameFlow):
     """Display trading menu, allow bank or player trades, auto-return after trade or cancel."""
-    selling = {res: 0 for res in Resource}
-    buying = {res: 0 for res in Resource}
+    selling: Dict[Resource, int] = {res: 0 for res in Resource}
+    buying: Dict[Resource, int] = {res: 0 for res in Resource}
+    game = game_flow.game
 
     while True:
         clear_screen()
@@ -219,15 +260,17 @@ def trading_menu(player: Player, game: Game):
 
             try:
                 res = Resource[res_str]
-                amt = max(0, min(int(amt_str), player.resources.get(res)))
+                amt = max(0, int(amt_str))
             except (KeyError, ValueError):
                 print("Invalid resource or amount. Press enter to continue...")
                 input()
                 continue
 
             if option == "1":
-                selling[res] = amt
+                selling[res] = min(amt, player.resources.get(res))
+                buying[res] = 0
             else:
+                selling[res] = 0
                 buying[res] = amt
 
         elif option == "3":
@@ -243,10 +286,19 @@ def trading_menu(player: Player, game: Game):
             input("Press enter to continue...")
 
         elif option == "4":
-            # Trade with player (you can implement similarly)
-            # Here, just a placeholder
-            print("Player trade not implemented yet.")
-            input("Press enter to continue...")
+            # Trade with players
+            willing_players = game_flow.trade_with_players(player, selling, buying)
+            buying_player = select_player_to_trade(game, player, willing_players)
+
+            if buying_player:
+                game.trade_between_players(player, selling, buying_player, buying)
+                print(f"\nTrade completed with {buying_player.name}.")
+
+                # Reset trade
+                selling = {res: 0 for res in Resource}
+                buying = {res: 0 for res in Resource}
+
+                input("\nPress enter to continue...")
 
         elif option == "5":
             return  # terminate trade
@@ -254,3 +306,9 @@ def trading_menu(player: Player, game: Game):
         else:
             print("Invalid option. Press enter to continue...")
             input()
+
+
+def trade_manager(player: Player, selling: Dict[Resource, int],
+                  buying: Dict[Resource, int], selling_player: Player) -> bool:
+    """Display AI trade and give options to accept or reject"""
+    return False
