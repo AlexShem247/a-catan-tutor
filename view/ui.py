@@ -308,7 +308,33 @@ def trading_menu(player: Player, game_flow: GameFlow):
             input()
 
 
-def trade_manager(player: Player, selling: Dict[Resource, int],
+def trade_manager(game: Game, player: Player, selling: Dict[Resource, int],
                   buying: Dict[Resource, int], selling_player: Player) -> bool:
-    """Display AI trade and give options to accept or reject"""
-    return False
+    """Display AI trade and give options to accept or reject, only if player can afford it."""
+
+    # Display trade offer
+    clear_screen()
+    display_board(game)
+    print(f"\n--- Trade Offer from {selling_player.name} ---\n")
+    print(f"{selling_player.name} offers:")
+    display_resources(selling)
+    print("\nIn exchange for:")
+    display_resources(buying, player.resources)
+    print("\nDo you accept this trade? (y/n)")
+
+    # Check if human player has required resources
+    for res, amt in buying.items():
+        if player.resources.get(res, 0) < amt:
+            print("\nYou do not have the required resources for this trade.")
+            input("Press enter to continue...")
+            return False
+
+    # Get human input
+    while True:
+        choice = input("Enter choice: ").strip().lower()
+        if choice in {"y", "yes"}:
+            return True
+        elif choice in {"n", "no", ""}:
+            return False
+        else:
+            print("Invalid input. Enter 'y' or 'n'.")

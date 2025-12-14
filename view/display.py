@@ -208,7 +208,7 @@ def display_results(game: Game):
         print(f"{i}. {player.name}: {player.calc_victory_points()} points")
 
 
-def display_resources(resources: Dict[Resource, int], player: Player | None = None):
+def display_resources(resources: Dict[Resource, int], player_resources: Dict[Resource, int] | None = None):
     resources_list = list(resources.items())
     for i in range(0, len(resources_list), 2):
         first = resources_list[i]
@@ -216,8 +216,8 @@ def display_resources(resources: Dict[Resource, int], player: Player | None = No
 
         def format_res(res_tuple: tuple[Resource, int]):
             res, amt = res_tuple
-            if player:
-                amt = f"{amt}/{player.resources.get(res, 0)}"
+            if player_resources:
+                amt = f"{amt}/{player_resources.get(res, 0)}"
             return f"{res.name:>5}: {amt}"
 
         if second:

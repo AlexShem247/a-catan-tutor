@@ -23,7 +23,7 @@ class GameFlow:
         get_road_choice_ai: Callable[[Vertex, Game], Edge] = None,
         play_round_hook: Callable[[Player, "GameFlow"], None] = None,
         play_round_ai_hook: Callable[[Player, "GameFlow"], None] = None,
-        trade_manager_hook: Callable[[Player, Dict[Resource, int], Dict[Resource, int], Player], bool] = None,
+        trade_manager_hook: Callable[[Game, Player, Dict[Resource, int], Dict[Resource, int], Player], bool] = None,
         trade_manager_ai_hook: Callable[[Player, Dict[Resource, int], Dict[Resource, int], Player, int], bool] = None
     ):
         self.game = game
@@ -89,7 +89,7 @@ class GameFlow:
         return [
             p for p in self.game.players
             if p != selling_player and (
-                self.trade_manager_hook(p, selling, buying, selling_player) if p.is_human
+                self.trade_manager_hook(self.game, p, selling, buying, selling_player) if p.is_human
                 else self.trade_manager_ai_hook(p, selling, buying, selling_player, self.round_num)
             )
         ]
