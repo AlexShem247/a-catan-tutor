@@ -1,12 +1,16 @@
 import random
 from math import ceil
-from typing import Dict
+from typing import Dict, Optional, List
 
+from GameFlow import GameFlow
 from game.Game import Game
 from game.Player import Player
 from game.Resources import Resource
 from game.Vertex import Vertex, Buildable
-from view.display import clear_screen, display_board, get_player_lead_status
+from view.display import clear_screen, display_board, get_player_lead_status, resource_dict_to_str
+
+TOTAL_ROUNDS = 20  # Estimated total rounds in the game
+MAX_RATIO = 4      # Maximum resources AI will ask for 1 resource late game
 
 
 def random_initial_settlement_placement(player: Player, game: Game):
@@ -27,6 +31,11 @@ def random_initial_road_placement(settlement: Vertex, game: Game):
         return None
 
     return random.choice(available_edges)
+
+
+def get_required_trade_ratio(round_num: int):
+    """Return the AI's required trade ratio for the current round."""
+    return ceil(1 + (round_num - 1) / TOTAL_ROUNDS * (MAX_RATIO - 1))
 
 
 def ai_choose_build_action():
@@ -53,9 +62,39 @@ def ai_choose_build_action():
     return random.choice(weighted_actions)
 
 
-def ai_attempt_bank_trade(player: Player, game: Game, desired_build: Buildable):
-    """Try one bank trade to help the AI reach the resources needed for a desired build."""
+def pick_random_resources(resources: Dict[Resource, int], num_resources: int) -> Optional[Dict[Resource, int]]:
+    """Randomly pick num_resources resource units from the given resource dict."""
+    total = sum(resources.values())
+    if total < num_resources:
+        return None
 
+    pool = [
+        resource
+        for resource, count in resources.items()
+        for _ in range(count)
+    ]
+
+    chosen = random.sample(pool, num_resources)
+
+    result: Dict[Resource, int] = {}
+    for resource in chosen:
+        result[resource] = result.get(resource, 0) + 1
+
+    return result
+
+
+def pick_trade_partner(available_players: List[Player]) -> Player:
+    """Randomly pick a trade partner with a slight bias toward the human player."""
+    weights = [
+        1.2 if player.is_human else 1.0
+        for player in available_players
+    ]
+    return random.choices(available_players, weights=weights, k=1)[0]
+
+
+def ai_attempt_trade(player: Player, game_flow: GameFlow, desired_build: Buildable, round_num: int):
+    """Try one bank trade to help the AI reach the resources needed for a desired build."""
+    game = game_flow.game
     cost = game.BUILDING_COST[desired_build]
 
     # Determine missing resources
@@ -81,22 +120,43 @@ def ai_attempt_bank_trade(player: Player, game: Game, desired_build: Buildable):
 
     # Pick a spare resource to sell
     selling_resource = random.choice(list(spare.keys()))
-    rate = game.get_trade_rate(player, selling_resource)
+    bank_rate = game.get_trade_rate(player, selling_resource)
 
-    selling = {res: 0 for res in Resource}
+    ai_buying_rate = get_required_trade_ratio(round_num)
     buying = {res: 0 for res in Resource}
-
-    selling[selling_resource] = rate
     buying[buying_resource] = 1
 
-    # Attempt trade
+    # Case 1: Prefer player trade
+    if ai_buying_rate < bank_rate:
+        selling = pick_random_resources(spare, ai_buying_rate)
+        if selling is None:
+            # Not enough resources to offer a player trade
+            return None
+
+        available_players = game_flow.trade_with_players(player, selling, buying)
+        if available_players:
+            buying_player = pick_trade_partner(available_players)
+
+            # Actually perform trade
+            game.trade_between_players(player, selling, buying_player, buying)
+            return (
+                f"{player.name} trades {resource_dict_to_str(selling)} with "
+                f"{buying_player.name} for {resource_dict_to_str(buying)} "
+                f"to work towards a {desired_build.name.lower()}."
+            )
+        # If no player accepts, fall through to bank trade
+
+    # Case 2: Bank trade
+    selling = {res: 0 for res in Resource}
+    selling[selling_resource] = bank_rate
+
     success = game.try_trade_with_bank(player, selling, buying)
     if not success:
         return None
 
     return (
-        f"{player.name} trades {rate} {selling_resource.name} "
-        f"for 1 {buying_resource.name} to work towards a {desired_build.name.lower()}."
+        f"{player.name} trades {resource_dict_to_str(selling)} with the bank "
+        f"for {resource_dict_to_str(buying)} to work towards a {desired_build.name.lower()}."
     )
 
 
@@ -122,9 +182,9 @@ def ai_attempt_build(player: Player, game: Game, action: Buildable):
     return msg
 
 
-def make_round_move_ai(player: Player, game: Game):
+def make_round_move_ai(player: Player, game_flow: GameFlow):
     """AI turn: decides what to build, trades if helpful, then attempts the build."""
-
+    game = game_flow.game
     d1, d2, total = game.roll_dice()
 
     # 1. AI chooses what it wants to build
@@ -133,7 +193,7 @@ def make_round_move_ai(player: Player, game: Game):
     # 2. Try a bank trade if needed
     trade_msg = None
     if chosen_action != "NOTHING":
-        trade_msg = ai_attempt_bank_trade(player, game, chosen_action)
+        trade_msg = ai_attempt_trade(player, game_flow, chosen_action, game_flow.round_num)
 
     # 3. Attempt the build
     build_msg = ai_attempt_build(player, game, chosen_action)
@@ -163,16 +223,13 @@ def trade_manager_ai(player: Player, selling: Dict[Resource, int], buying: Dict[
     - Player must have the required resources (buying)
     - AI becomes pickier as rounds progress
     """
-    total_rounds = 20  # Estimated total rounds in the game
-    max_ratio = 4      # Maximum resources AI will ask for 1 resource late game
-
     # 1. Check if AI has the resources it is being asked to give
     for resource, amount in buying.items():
         if player.resources.get(resource, 0) < amount:
             return False  # Cannot trade what you don't have
 
     # 2. Calculate AI's required ratio for this round
-    required_ratio = ceil(1 + (round_num - 1) / total_rounds * (max_ratio - 1))
+    required_ratio = get_required_trade_ratio(round_num)
 
     # 3. Calculate totals
     total_selling = sum(selling.values())  # What the AI would get

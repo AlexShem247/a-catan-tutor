@@ -224,3 +224,21 @@ def display_resources(resources: Dict[Resource, int], player: Player | None = No
             print(f"{format_res(first)}\t{format_res(second)}")
         else:
             print(f"{format_res(first)}")
+
+
+def resource_dict_to_str(resources: Dict[Resource, int]) -> str:
+    """Convert a resource-count dict into a human-readable string."""
+    parts = [
+        f"{count} {resource.name.upper()}"
+        for resource, count in resources.items()
+        if count > 0
+    ]
+
+    if not parts:
+        return "nothing"
+    if len(parts) == 1:
+        return parts[0]
+    if len(parts) == 2:
+        return " and ".join(parts)
+
+    return ", ".join(parts[:-1]) + " and " + parts[-1]
