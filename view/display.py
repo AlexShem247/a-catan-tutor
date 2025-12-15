@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import List
 
 from game.Board import Board
 from game.Edge import EdgeDirection, Edge
@@ -10,6 +11,7 @@ from game.Vertex import VertexDirection, Building, Vertex, Port
 from view.Color import Color, colorise, brighten
 
 NO_EDGE = object()
+ROBBER_SYM = colorise("R", Color.WHITE, bold=True)
 
 
 def get_player_color(player: Player) -> Color:
@@ -21,6 +23,8 @@ def clear_screen():
 
 
 class Renderable(ABC):
+    robber = False
+
     @abstractmethod
     def render(self) -> str:
         """Return a string representation suitable for display."""
@@ -29,6 +33,8 @@ class Renderable(ABC):
 
 class Empty(Renderable):
     def render(self) -> str:
+        if self.robber:
+            return "  " + ROBBER_SYM + "  "
         return "     "
 
 
@@ -133,11 +139,12 @@ class DiagonalEdges(Renderable):
                 return colorise(text, get_player_color(edge_owner))
             return text
 
-        return f"{render_edge(self.left, left_symbol)}   {render_edge(self.right, right_symbol)}"
+        robber_str = ROBBER_SYM if self.robber else " "
+        return f"{render_edge(self.left, left_symbol)} {robber_str} {render_edge(self.right, right_symbol)}"
 
 
 def display_board(game: Game) -> None:
-    display_array: list[list[Renderable]] = [[Empty() for _ in range(11)] for _ in range(17)]
+    display_array: List[List[Renderable]] = [[Empty() for _ in range(11)] for _ in range(17)]
 
     def init_diagonal(row_i: int, col_i: int, side: str, flipped: bool, owner: Player | None):
         cell = display_array[row_i][col_i]
@@ -177,6 +184,16 @@ def display_board(game: Game) -> None:
                                   owner=game.get_edge(h.q, h.r, EdgeDirection.SOUTH_EAST).owner)
                     init_diagonal(r_idx, c_idx - 1, "right", flipped=True,
                                   owner=game.get_edge(h.q, h.r, EdgeDirection.SOUTH_WEST).owner)
+
+    # Add robber symbol
+    for r in range(Board.MIN_R, Board.MAX_R + 1):
+        for i, h in enumerate(game.get_row_hexes(r)):
+            row = 3 * r + 2
+            col = 1 + abs(r - 2) + 2 * i
+            if isinstance(display_array[row + 1][col], (Empty, DiagonalEdges)):
+                display_array[row + 1][col].robber = game.get_hex_tile(h.q, h.r).robber
+            elif isinstance(display_array[row - 1][col], DiagonalEdges):
+                display_array[row - 1][col].robber = game.get_hex_tile(h.q, h.r).robber
 
     for row in display_array:
         print(" ".join(cell.render() for cell in row))
@@ -244,11 +261,11 @@ def resource_dict_to_str(resources: ResourceCount) -> str:
 
 
 def display_trade_offer(
-    game: Game,
-    selling_player: Player,
-    selling: ResourceCount,
-    buying: ResourceCount,
-    player: Player
+        game: Game,
+        selling_player: Player,
+        selling: ResourceCount,
+        buying: ResourceCount,
+        player: Player
 ):
     clear_screen()
     display_board(game)

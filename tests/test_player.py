@@ -96,6 +96,33 @@ class PlayerTests(unittest.TestCase):
         self.assertIn(Port.WOOD, ports)
         self.assertNotIn(None, ports)
 
+    def test_calculate_discard_count(self):
+        # Less than 7 resources
+        for res in Resource:
+            self.player.resources[res] = 1
+        assert self.player.calculate_discard_count() == 0
+
+        # Exactly 7 resources
+        self.player.resources[Resource.WOOD] += 2
+        assert self.player.calculate_discard_count() == 3
+
+        # Even total > 7
+        self.player.resources = {res: 0 for res in Resource}
+        self.player.resources[Resource.WOOD] = 4
+        self.player.resources[Resource.BRICK] = 6
+        assert self.player.calculate_discard_count() == 5
+
+        # Odd total > 7
+        self.player.resources = {res: 0 for res in Resource}
+        self.player.resources[Resource.WOOD] = 3
+        self.player.resources[Resource.BRICK] = 3
+        self.player.resources[Resource.SHEEP] = 3
+        assert self.player.calculate_discard_count() == 4
+
+        # Zero resources
+        self.player.resources = {res: 0 for res in Resource}
+        assert self.player.calculate_discard_count() == 0
+
 
 if __name__ == "__main__":
     unittest.main()

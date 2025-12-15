@@ -138,6 +138,12 @@ class TestBoard(unittest.TestCase):
                 for v in edge.vertices:
                     self.assertIn(edge, v.edges)
 
+    def test_robber_tile(self):
+        # Check that there is only one robber tile initialised to the desert tile
+        robber_tiles = [hex_tile for hex_tile in self.board.hexes if hex_tile.robber]
+        self.assertEqual(len(robber_tiles), 1)
+        self.assertEqual(robber_tiles[0].type, "desert")
+
 
 if __name__ == "__main__":
     unittest.main()

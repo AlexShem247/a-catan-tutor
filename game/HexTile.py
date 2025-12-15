@@ -15,6 +15,7 @@ class HexTile:
         self.vertices: List[Vertex] = []
         self.neighbors: List[HexTile] = []
         self.resource: Optional[Resource] = HEX_TO_RESOURCE.get(hex_type)
+        self.robber = False
 
     def __repr__(self) -> str:
         if self.type == "desert":

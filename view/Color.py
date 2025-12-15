@@ -14,6 +14,7 @@ class Color(Enum):
     RED_ORANGE = (180, 35, 35)
     BEIGE = (200, 170, 120)
     BROWN = (140, 70, 25)
+    WHITE = (225, 225, 225)
 
     BLUE = (0, 0, 255)
     RED = (255, 0, 0)

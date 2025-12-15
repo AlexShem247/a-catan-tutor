@@ -1,9 +1,10 @@
 from typing import List, Optional, Tuple
 
-from GameFlow import GameFlow
+from GameController import GameController
 from game.Board import Board
 from game.Edge import EdgeDirection, Edge
 from game.Game import Game
+from game.HexTile import HexTile
 from game.Player import Player
 from game.Resources import Resource, ResourceCount
 from game.Vertex import VertexDirection, Vertex, Buildable
@@ -11,13 +12,13 @@ from view.display import display_board, clear_screen, get_player_lead_status, di
     format_counter_offer
 
 
-def initial_settlement_placement(player: Player, game: Game) -> Vertex:
+def initial_settlement_placement(player: Player, controller: GameController) -> Vertex:
     """Prompt the user to enter a vertex for a settlement."""
     error_msg = None
     while True:
         try:
             clear_screen()
-            display_board(game)
+            display_board(controller.get_game_state())
             print(f"\n--- {player.name}'s placement turn ---\n")
             if error_msg:
                 print(error_msg)
@@ -32,10 +33,10 @@ def initial_settlement_placement(player: Player, game: Game) -> Vertex:
             if (x, y) not in Board.HEX_COORDS:
                 error_msg = f"Invalid Coordinate ({x}, {y})"
                 continue
-            vertex = game.get_vertex(x, y, direction)
+            vertex = controller.get_vertex(x, y, direction)
 
             # Validate placement via Game
-            success, msg = game.try_build_settlement(player, vertex, use_resources=False, road_restriction=False)
+            success, msg = controller.try_build_settlement(player, vertex, use_resources=False, road_restriction=False)
             if success:
                 return vertex
             else:
@@ -45,14 +46,14 @@ def initial_settlement_placement(player: Player, game: Game) -> Vertex:
             error_msg = "Invalid input. Format: x y DIRECTION (e.g. 0 2 TOP_RIGHT)"
 
 
-def initial_road_placement(settlement: Vertex, game: Game) -> Edge:
+def initial_road_placement(settlement: Vertex, controller: GameController) -> Edge:
     """Prompt the user to enter an edge for a road, validating via game rules."""
     player = settlement.owner
     error_msg = None
     while True:
         try:
             clear_screen()
-            display_board(game)
+            display_board(controller.get_game_state())
             print(f"\n--- {player.name}'s road placement turn ---\n")
             if error_msg:
                 print(error_msg)
@@ -67,10 +68,10 @@ def initial_road_placement(settlement: Vertex, game: Game) -> Edge:
                 direction = EdgeDirection(int(dir_str))
             else:
                 direction = EdgeDirection[dir_str.upper()]
-            edge = game.get_edge(x, y, direction)
+            edge = controller.get_edge(x, y, direction)
 
             # Validate placement via Game
-            success, msg = game.try_build_road(player, edge, on_vertex=settlement, use_resources=False)
+            success, msg = controller.try_build_road(player, edge, on_vertex=settlement, use_resources=False)
             if success:
                 return edge
             else:
@@ -80,15 +81,14 @@ def initial_road_placement(settlement: Vertex, game: Game) -> Edge:
             error_msg = "Invalid input. Format: x y DIRECTION (e.g. 0 2 EAST)"
 
 
-def make_round_move(player: Player, game_flow: GameFlow):
+def make_round_move(player: Player, controller: GameController):
     """Handle a full turn for a human player, including dice roll, resource display, and building actions."""
-    game = game_flow.game
-    d1, d2, total = game.roll_dice()
+    d1, d2, total = controller.roll_dice(player)
     error_msg = None
 
     while True:
         clear_screen()
-        display_board(game)
+        display_board(controller.get_game_state())
         print(f"\n--- {player.name}'s turn ---\n")
         print(f"Dice rolled: {d1} + {d2} = {total}")
 
@@ -106,7 +106,7 @@ def make_round_move(player: Player, game_flow: GameFlow):
 
         # Show dynamic options
         options = {"1": "End turn", "2": "Open Trade Menu"}
-        buildable = game.get_buildable_options(player)
+        buildable = controller.get_buildable_options(player)
         option_number = 3
 
         for action_type in Buildable:
@@ -129,7 +129,7 @@ def make_round_move(player: Player, game_flow: GameFlow):
             break
 
         if choice == "2":
-            trading_menu(player, game_flow)
+            trading_menu(player, controller)
 
         elif choice in options:
             # Determine which build action
@@ -159,11 +159,11 @@ def make_round_move(player: Player, game_flow: GameFlow):
 
             # Apply build
             if action_type == Buildable.ROAD:
-                success, msg = game.try_build_road(player, selected)
+                success, msg = controller.try_build_road(player, selected)
             elif action_type == Buildable.SETTLEMENT:
-                success, msg = game.try_build_settlement(player, selected)
+                success, msg = controller.try_build_settlement(player, selected)
             elif action_type == Buildable.CITY:
-                success, msg = game.try_build_city(player, selected)
+                success, msg = controller.try_build_city(player, selected)
             else:
                 success, msg = False, "Unknown build type"
 
@@ -174,7 +174,7 @@ def make_round_move(player: Player, game_flow: GameFlow):
             error_msg = "Invalid option. Try again."
 
 
-def select_player_to_trade(game: Game, player: Player, original_offer: ResourceCount,
+def select_player_to_trade(controller: GameController, player: Player, original_offer: ResourceCount,
                            willing_players: List[Tuple[Player, Optional[ResourceCount]]]
                            ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
     """
@@ -183,7 +183,7 @@ def select_player_to_trade(game: Game, player: Player, original_offer: ResourceC
         Marks trades as Affordable / Cannot Afford.
     """
     clear_screen()
-    display_board(game)
+    display_board(controller.get_game_state())
     print(f"\n--- {player.name}'s Trading Menu ---\n")
 
     if not willing_players:
@@ -236,15 +236,14 @@ def select_player_to_trade(game: Game, player: Player, original_offer: ResourceC
         print("Invalid choice, please enter a number from the list of affordable trades.")
 
 
-def trading_menu(player: Player, game_flow: GameFlow):
+def trading_menu(player: Player, controller: GameController):
     """Display trading menu, allow bank or player trades, auto-return after trade or cancel."""
     selling: ResourceCount = {res: 0 for res in Resource}
     buying: ResourceCount = {res: 0 for res in Resource}
-    game = game_flow.game
 
     while True:
         clear_screen()
-        display_board(game)
+        display_board(controller.get_game_state())
         print(f"\n--- {player.name}'s Trading Menu ---\n")
 
         # Print current trading hand
@@ -256,7 +255,7 @@ def trading_menu(player: Player, game_flow: GameFlow):
 
         trade_incomplete = all(v == 0 for v in selling.values()) or all(v == 0 for v in buying.values())
         valid_bank_trade = (not trade_incomplete and
-                            game.try_trade_with_bank(player, selling, buying, use_resources=False))
+                            controller.try_trade_with_bank(player, selling, buying, use_resources=False))
         valid_player_trade = not trade_incomplete
 
         print("\nOptions:")
@@ -302,7 +301,7 @@ def trading_menu(player: Player, game_flow: GameFlow):
 
         elif option == "3":
             # Trade with bank using the current selling and buying dicts
-            success = game.try_trade_with_bank(player, selling, buying)
+            success = controller.try_trade_with_bank(player, selling, buying)
             if success:
                 print("Bank trade completed!")
                 # Reset trade
@@ -314,15 +313,15 @@ def trading_menu(player: Player, game_flow: GameFlow):
 
         elif option == "4":
             # Trade with players
-            willing_players = game_flow.trade_with_players(player, selling, buying)
-            deal = select_player_to_trade(game, player, selling, willing_players)
+            willing_players = controller.trade_with_players(player, selling, buying)
+            deal = select_player_to_trade(controller, player, selling, willing_players)
 
             if deal is not None:
                 buying_player, counter = deal
                 if counter is not None:
                     selling = counter  # Player accepted counteroffer
 
-                game.trade_between_players(player, selling, buying_player, buying)
+                controller.trade_between_players(player, selling, buying_player, buying)
                 print(f"\nTrade completed with {buying_player.name}.")
 
                 # Reset trade
@@ -339,15 +338,15 @@ def trading_menu(player: Player, game_flow: GameFlow):
             input()
 
 
-def trade_manager(game: Game, player: Player, selling: ResourceCount,
+def trade_manager(controller: GameController, player: Player, selling: ResourceCount,
                   buying: ResourceCount, selling_player: Player) -> Tuple[bool, Optional[ResourceCount]]:
     """Display AI trade and give options to accept or reject, only if player can afford it."""
 
     # Auto-decline if player cannot afford the trade
     if not all(player.resources.get(res, 0) >= amt for res, amt in buying.items()):
         clear_screen()
-        display_board(game)
-        display_trade_offer(game, selling_player, selling, buying, player)
+        display_board(controller.get_game_state())
+        display_trade_offer(controller.get_game_state(), selling_player, selling, buying, player)
         print("\nYou do not have the required resources for this trade.")
         input("Press enter to continue...")
         return False, None
@@ -356,8 +355,8 @@ def trade_manager(game: Game, player: Player, selling: ResourceCount,
 
     while True:
         clear_screen()
-        display_board(game)
-        display_trade_offer(game, selling_player, counter_offer, buying, player)
+        display_board(controller.get_game_state())
+        display_trade_offer(controller.get_game_state(), selling_player, counter_offer, buying, player)
 
         print("\nOptions:")
         label = "Accept" if counter_offer == original_selling else "Propose Counteroffer"
@@ -407,3 +406,95 @@ def trade_manager(game: Game, player: Player, selling: ResourceCount,
         else:
             print("Invalid option.")
             input("Press enter to continue...")
+
+
+def robber_discard(player: Player, controller: GameController, num_resources: int, steal: bool) -> ResourceCount:
+    """Handle a robber discard by selecting and returning a resource to discard."""
+    giving: ResourceCount = {res: 0 for res in Resource}
+
+    if steal and sum(player.resources.values()) == 0:
+        # Nothing to steal
+        return giving
+
+    while sum(giving.values()) < num_resources:
+        remaining = num_resources - sum(giving.values())
+        clear_screen()
+        display_board(controller.get_game_state())
+        if steal:
+            print(f"\nThe robber has been moved to your tile!")
+        else:
+            print(f"\nThe robber has been rolled!")
+        print(f"You need to give {remaining} more resource{'s' if remaining > 1 else ''}.\n")
+
+        print("Current discard selection:")
+        display_resources(giving, player.resources)
+
+        user_input = input("Enter [RESOURCE] [AMOUNT] to give: ").strip().lower()
+        try:
+            res_name, amount_str = user_input.split()
+            amount = int(amount_str)
+            res_enum = Resource[res_name.upper()]
+
+            # Clamp amount to amount of resources player actually has
+            amount = max(0, min(amount, player.resources[res_enum]))
+
+            # Clamp to not give more than remaining resources
+            amount = giving[res_enum] + min(amount - giving[res_enum], remaining)
+
+            giving[res_enum] = amount
+
+        except (ValueError, KeyError):
+            print("Invalid input. Format: '[RESOURCE] [AMOUNT]', e.g., 'brick 2'.")
+
+    return giving
+
+
+def place_robber(player: Player, controller: GameController) -> Tuple[HexTile, Optional[Player]]:
+    """Prompt the player to select a hex tile to move the robber, and pick a player to steal from if possible."""
+    error_msg = None
+    while True:
+        try:
+            clear_screen()
+            display_board(controller.get_game_state())
+            print(f"\n--- {player.name}'s Robber Move ---\n")
+            print("Your resources:")
+            display_resources(player.resources)
+            if error_msg:
+                print(error_msg)
+
+            # Prompt for hex coordinates
+            coords = input("\nEnter hex coordinates (x y) to move the robber: ").strip()
+            x_str, y_str = coords.split()
+            x, y = int(x_str), int(y_str)
+
+            hex_tile = controller.get_hex_tile(x, y)
+            if hex_tile is None or (x, y) not in Board.HEX_COORDS:
+                error_msg = f"Invalid coordinate ({x}, {y})"
+                continue
+
+            # Get players on vertices adjacent to this hex (excluding the moving player)
+            adjacent_players = [
+                p for p in controller.get_players_on_hex(hex_tile)
+                if p != player and any(v > 0 for v in p.resources.values())
+            ]
+
+            # If there are no stealable players, return hex_tile with None
+            if not adjacent_players:
+                return hex_tile, None
+
+            # Otherwise, player must pick one
+            print("\nPlayers on this hex to steal from:")
+            for idx, p in enumerate(adjacent_players, 1):
+                print(f"  {idx}. {p.name}")
+
+            while True:
+                choice = input("Select a player to steal from: ").strip()
+                if choice.isdigit():
+                    choice = int(choice)
+                    if 1 <= choice <= len(adjacent_players):
+                        return hex_tile, adjacent_players[choice - 1]
+
+                print("Invalid choice. Enter a number from the list.")
+
+        except (ValueError, KeyError):
+            error_msg = "Invalid input. Format: x y (e.g., 1 2)"

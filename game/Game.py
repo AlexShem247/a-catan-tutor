@@ -20,6 +20,7 @@ class Game:
     }
 
     VICTORY_POINTS_TO_WIN = 10
+    ROBBER_DICE_NUM = 7
 
     def __init__(self, human_player_one: bool = True):
         self.players: List[Player] = [Player(human_player_one if p == PlayerNumber.P1
@@ -274,7 +275,7 @@ class Game:
         """Return a list of hex tiles in row r, sorted by their q coordinate."""
         return sorted([h for h in self._board.hexes if h.r == r], key=lambda h: h.q)
 
-    def get_hex_tile(self, q: int, r: int) -> Optional[Vertex]:
+    def get_hex_tile(self, q: int, r: int) -> Optional[HexTile]:
         """Return the HexTile object for hex (q,r)."""
         return self._board.hex_map.get((q, r))
 
@@ -336,3 +337,25 @@ class Game:
         for resource, amount in buying.items():
             player.resources[resource] += amount
 
+    def set_robber(self, tile: HexTile):
+        """Replace the robber tile with 'tile'"""
+        self._board.robber_position.robber = False
+        self._board.robber_position = tile
+        self._board.robber_position.robber = True
+
+    @staticmethod
+    def get_players_on_hex(hex_tile: HexTile) -> List[Player]:
+        """Return a list of players who own a settlement or city on the given hex tile."""
+        return [v.owner for v in hex_tile.vertices if v.owner is not None]
+
+    def get_all_hexes(self):
+        """Return a list of all hex tiles on the board."""
+        return self._board.hexes
+
+    def get_hex_tiles_with_players(self):
+        """Return a list of hex tiles that have at least one player on them."""
+        return [h for h in self._board.hexes if Game.get_players_on_hex(h)]
+
+    def get_robber_tile(self) -> HexTile:
+        """Returns the robber's current position"""
+        return self._board.robber_position

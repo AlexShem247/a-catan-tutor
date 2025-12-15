@@ -38,6 +38,7 @@ class Board:
         self.production_to_hex: Dict[int, List[HexTile]] = defaultdict(list)
         self.vertex_map: Dict[Tuple[int, int, VertexDirection], Vertex] = {}
         self.edge_map: Dict[Tuple[int, int, EdgeDirection], Edge] = {}
+        self.robber_position: HexTile = HexTile(0, 0, "desert")
 
         self.create_hexes()
         self.create_vertices()
@@ -65,7 +66,10 @@ class Board:
             hex_tile = HexTile(q, r, hex_type, production_number)
             self.hexes.append(hex_tile)
             self.hex_map[(q, r)] = hex_tile
-            if hex_type != "desert":
+            if hex_type == "desert":
+                hex_tile.robber = True
+                self.robber_position = hex_tile
+            else:
                 self.production_to_hex[production_number].append(hex_tile)
 
     def create_vertices(self) -> None:

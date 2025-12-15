@@ -2,8 +2,9 @@ import random
 from math import ceil
 from typing import Optional, List, Tuple
 
-from GameFlow import GameFlow
+from GameController import GameController
 from game.Game import Game
+from game.HexTile import HexTile
 from game.Player import Player
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex, Buildable
@@ -20,19 +21,19 @@ ACCEPT_PROBABILITY_BY_OVERCOST = {  # Counter trades probabilities
 }
 
 
-def random_initial_settlement_placement(player: Player, game: Game):
+def random_initial_settlement_placement(player: Player, controller: GameController):
     """Choose a valid random vertex for settlement."""
-    available_vertices = game.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
+    available_vertices = controller.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
 
     return random.choice(available_vertices) if available_vertices else None
 
 
-def random_initial_road_placement(settlement: Vertex, game: Game):
+def random_initial_road_placement(settlement: Vertex, controller: GameController):
     """
     Choose a valid edge connected to the given settlement.
     Picks a random edge adjacent to the settlement where a road can be built.
     """
-    available_edges = game.get_buildable_edges_for_vertex(settlement)
+    available_edges = controller.get_buildable_edges_for_vertex(settlement)
 
     if not available_edges:
         return None
@@ -158,10 +159,9 @@ def pick_trade_partner(
     return None
 
 
-def ai_attempt_trade(player: Player, game_flow: GameFlow, desired_build: Buildable, round_num: int):
+def ai_attempt_trade(player: Player, controller: GameController, desired_build: Buildable, round_num: int):
     """Try one bank trade to help the AI reach the resources needed for a desired build."""
-    game = game_flow.game
-    cost = game.BUILDING_COST[desired_build]
+    cost = Game.BUILDING_COST[desired_build]
 
     # Determine missing resources
     missing = {
@@ -176,7 +176,7 @@ def ai_attempt_trade(player: Player, game_flow: GameFlow, desired_build: Buildab
     spare = {
         r: player.resources.get(r, 0)
         for r in Resource
-        if r not in cost and player.resources.get(r, 0) >= game.get_trade_rate(player, r)
+        if r not in cost and player.resources.get(r, 0) >= controller.get_trade_rate(player, r)
     }
     if not spare:
         return None  # Nothing safe to trade away
@@ -186,7 +186,7 @@ def ai_attempt_trade(player: Player, game_flow: GameFlow, desired_build: Buildab
 
     # Pick a spare resource to sell
     selling_resource = random.choice(list(spare.keys()))
-    bank_rate = game.get_trade_rate(player, selling_resource)
+    bank_rate = controller.get_trade_rate(player, selling_resource)
 
     ai_buying_rate = get_required_trade_ratio(round_num)
     buying = {res: 0 for res in Resource}
@@ -199,7 +199,7 @@ def ai_attempt_trade(player: Player, game_flow: GameFlow, desired_build: Buildab
             # Not enough resources to offer a player trade
             return None
 
-        willing_players = game_flow.trade_with_players(player, selling, buying)
+        willing_players = controller.trade_with_players(player, selling, buying)
         deal = pick_trade_partner(willing_players, ai_buying_rate)
         if deal is not None:
             buying_player, counter = deal
@@ -208,7 +208,7 @@ def ai_attempt_trade(player: Player, game_flow: GameFlow, desired_build: Buildab
                 selling = counter  # AI accepted counteroffer
 
             # Actually perform trade
-            game.trade_between_players(player, selling, buying_player, buying)
+            controller.trade_between_players(player, selling, buying_player, buying)
             return (
                 f"{player.name} trades {resource_dict_to_str(selling)} with "
                 f"{buying_player.name} for {resource_dict_to_str(buying)} "
@@ -220,7 +220,7 @@ def ai_attempt_trade(player: Player, game_flow: GameFlow, desired_build: Buildab
     selling = {res: 0 for res in Resource}
     selling[selling_resource] = bank_rate
 
-    success = game.try_trade_with_bank(player, selling, buying)
+    success = controller.try_trade_with_bank(player, selling, buying)
     if not success:
         return None
 
@@ -230,10 +230,10 @@ def ai_attempt_trade(player: Player, game_flow: GameFlow, desired_build: Buildab
     )
 
 
-def ai_attempt_build(player: Player, game: Game, action: Buildable):
+def ai_attempt_build(player: Player, controller: GameController, action: Buildable):
     """Attempt a build action and return the resulting message."""
 
-    buildable = game.get_buildable_options(player)
+    buildable = controller.get_buildable_options(player)
     if action not in buildable or not buildable[action]:
         return f"{player.name} chooses to do nothing."
 
@@ -241,21 +241,20 @@ def ai_attempt_build(player: Player, game: Game, action: Buildable):
     chosen_location = random.choice(locations)
 
     if action == Buildable.ROAD:
-        success, msg = game.try_build_road(player, chosen_location)
+        success, msg = controller.try_build_road(player, chosen_location)
     elif action == Buildable.SETTLEMENT:
-        success, msg = game.try_build_settlement(player, chosen_location)
+        success, msg = controller.try_build_settlement(player, chosen_location)
     elif action == Buildable.CITY:
-        success, msg = game.try_build_city(player, chosen_location)
+        success, msg = controller.try_build_city(player, chosen_location)
     else:
         msg = "AI attempted unknown action"
 
     return msg
 
 
-def make_round_move_ai(player: Player, game_flow: GameFlow):
+def make_round_move_ai(player: Player, controller: GameController):
     """AI turn: decides what to build, trades if helpful, then attempts the build."""
-    game = game_flow.game
-    d1, d2, total = game.roll_dice()
+    d1, d2, total = controller.roll_dice(player)
 
     # 1. AI chooses what it wants to build
     chosen_action = ai_choose_build_action()
@@ -263,14 +262,14 @@ def make_round_move_ai(player: Player, game_flow: GameFlow):
     # 2. Try a bank trade if needed
     trade_msg = None
     if chosen_action != "NOTHING":
-        trade_msg = ai_attempt_trade(player, game_flow, chosen_action, game_flow.round_num)
+        trade_msg = ai_attempt_trade(player, controller, chosen_action, controller.round_num)
 
     # 3. Attempt the build
-    build_msg = ai_attempt_build(player, game, chosen_action)
+    build_msg = ai_attempt_build(player, controller, chosen_action)
 
     # 4. Display results
     clear_screen()
-    display_board(game)
+    display_board(controller.get_game_state())
 
     print(f"\n--- {player.name}'s turn (AI) ---\n")
     print(f"{player.name} rolled {d1} + {d2} = {total}")
@@ -324,3 +323,37 @@ def trade_manager_ai(player: Player, selling: ResourceCount, buying: ResourceCou
 
     # Otherwise, reject
     return False, None
+
+
+def robber_discard_ai(player: Player, num_resources: int) -> ResourceCount:
+    """Handle a robber discard by selecting and returning a resource to discard."""
+    return pick_random_resources(player.resources, num_resources)
+
+
+def place_robber_ai(player: Player, controller: GameController) -> Tuple[HexTile, Optional[Player]]:
+    """AI chooses a hex with players and randomly steals from one of them."""
+    # Filter hexes that have at least one player (excluding the AI itself)
+    stealable_hexes = [
+        hex_tile for hex_tile in controller.get_hex_tiles_with_players()
+        if any(p != player and any(v > 0 for v in p.resources.values()) for
+               p in controller.get_players_on_hex(hex_tile))
+    ]
+
+    if not stealable_hexes:
+        # No valid hex to steal from, just pick a random hex
+        hex_tile = random.choice(controller.get_all_hexes())
+        return hex_tile, None
+
+    # Pick a random hex from the stealable hexes
+    hex_tile = random.choice(stealable_hexes)
+
+    # Get list of stealable players on this hex
+    stealable_players = [
+        p for p in controller.get_players_on_hex(hex_tile)
+        if p != player and any(v > 0 for v in p.resources.values())
+    ]
+
+    # Randomly pick one player to steal from
+    target_player = random.choice(stealable_players) if stealable_players else None
+
+    return hex_tile, target_player

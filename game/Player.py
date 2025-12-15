@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 from game.Edge import Edge
 from game.Resources import Resource, ResourceCount
@@ -59,6 +59,11 @@ class Player:
         """Removes a given amount of a resource."""
         self.resources[resource] = max(0, self.resources[resource] - amount)
 
+    def remove_resources(self, resources: ResourceCount) -> None:
+        """Removes multiple resources."""
+        for resource, amount in resources.items():
+            self.resources[resource] = max(0, self.resources[resource] - amount)
+
     def add_settlement(self, vertex) -> None:
         """Add a settlement at the given vertex."""
         self.settlements.append(vertex)
@@ -76,3 +81,10 @@ class Player:
     def get_ports(self) -> List[Port]:
         """Returns the list of ports owned by the player"""
         return [v.port for v in self.settlements + self.cities if v.port is not None]
+
+    def calculate_discard_count(self) -> int:
+        """Return the number of resource cards to discard when a robber is thrown"""
+        resource_count = sum(self.resources.values())
+        if resource_count < 7:
+            return 0
+        return resource_count // 2
