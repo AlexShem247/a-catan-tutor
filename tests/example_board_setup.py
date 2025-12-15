@@ -1,23 +1,16 @@
 import unittest
 
-from game.Board import Board
+from game.Edge import EdgeDirection
 from game.Game import Game
 from game.Vertex import VertexDirection
-from game.Edge import EdgeDirection
-from game.Player import Player, PlayerNumber
 from view.display import display_board
 
 
-class TestBoardSetup(unittest.TestCase):
+class ExampleBoardSetup(unittest.TestCase):
 
     def test_example_board_setup(self):
-        # Create Players
-        p1 = Player(False, PlayerNumber.P1)
-        p2 = Player(False, PlayerNumber.P2)
-        p3 = Player(False, PlayerNumber.P3)
-        p4 = Player(False, PlayerNumber.P4)
-
-        game = Game([p1, p2, p3, p4], Board())
+        game = Game(human_player_one=False)
+        p1, p2, p3, p4 = game.players
 
         # Settlements
         game.try_build_settlement(p1, game.get_vertex(0, 2, VertexDirection.TOP_RIGHT), road_restriction=False)

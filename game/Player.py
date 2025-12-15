@@ -65,7 +65,8 @@ class Player:
 
     def add_city(self, vertex) -> None:
         """Upgrade a settlement to a city at the given vertex."""
-        self.settlements.remove(vertex)
+        if vertex in self.settlements:
+            self.settlements.remove(vertex)
         self.cities.append(vertex)
 
     def add_road(self, edge) -> None:
