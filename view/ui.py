@@ -7,7 +7,8 @@ from game.Game import Game
 from game.Player import Player
 from game.Resources import Resource, ResourceCount
 from game.Vertex import VertexDirection, Vertex, Buildable
-from view.display import display_board, clear_screen, get_player_lead_status, display_resources, display_trade_offer
+from view.display import display_board, clear_screen, get_player_lead_status, display_resources, display_trade_offer, \
+    format_counter_offer
 
 
 def initial_settlement_placement(player: Player, game: Game) -> Vertex:
@@ -173,10 +174,13 @@ def make_round_move(player: Player, game_flow: GameFlow):
             error_msg = "Invalid option. Try again."
 
 
-def select_player_to_trade(game: Game, player: Player, willing_players: List[Player]) -> Optional[Player]:
+def select_player_to_trade(game: Game, player: Player, original_offer: ResourceCount,
+                           willing_players: List[Tuple[Player, Optional[ResourceCount]]]
+                           ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
     """
-    Let the human player select a willing player to trade with.
-    Returns the selected player or None if trade is canceled.
+        Let human select a trade to accept.
+        Shows AI counteroffers, even if unaffordable.
+        Marks trades as Affordable / Cannot Afford.
     """
     clear_screen()
     display_board(game)
@@ -187,26 +191,49 @@ def select_player_to_trade(game: Game, player: Player, willing_players: List[Pla
         input("\nPress enter to continue...")
         return None
 
-    # List willing players
-    print("Players willing to trade:")
-    cancel_action = len(willing_players) + 1
-    for i, p in enumerate(willing_players, start=1):
-        print(f"{i}. {p.name}")
-    print(f"{cancel_action}. Cancel trade")
+    # Prepare display and valid options
+    valid_options = {}
+    option_num = 1
+    print("Available trades:")
 
-    # Ask user to choose
-    while True:
-        choice = input("\nSelect a player to trade with: ")
-        if choice.isdigit():
-            choice = int(choice)
-            if 1 <= choice <= cancel_action:
-                break
-        print("Invalid choice, please enter a number from the list.")
+    for p, counter in willing_players:
+        # Format trade string
+        if counter is None:
+            can_afford = True
+            trade_str = format_counter_offer(original_offer, original_offer)
+        else:
+            can_afford = all(player.resources.get(res, 0) >= amt for res, amt in counter.items())
+            trade_str = (format_counter_offer(original_offer, counter) +
+                         (" (AFFORDABLE)" if can_afford else " (CANNOT AFFORD)"))
 
-    if choice == cancel_action:
+        # Print option
+        if can_afford:
+            print(f"{option_num}. Trade {p.name}: {trade_str}")
+            valid_options[option_num] = (p, counter)
+            option_num += 1
+        else:
+            # Show unaffordable with X
+            print(f"X. Trade {p.name}: {trade_str}")
+
+    if not valid_options:
+        print("\nYou cannot afford any of these trades.")
+        input("Press enter to continue...")
         return None
 
-    return willing_players[choice - 1]
+    # Cancel option always last
+    print(f"{option_num}. Cancel trade")
+    valid_options[option_num] = None
+
+    # Ask player to select
+    while True:
+        choice = input("\nSelect a trade to accept: ").strip()
+        if choice == "":
+            return None
+        if choice.isdigit():
+            choice = int(choice)
+            if choice in valid_options:
+                return valid_options[choice]
+        print("Invalid choice, please enter a number from the list of affordable trades.")
 
 
 def trading_menu(player: Player, game_flow: GameFlow):
@@ -287,11 +314,14 @@ def trading_menu(player: Player, game_flow: GameFlow):
 
         elif option == "4":
             # Trade with players
-            available_players = game_flow.trade_with_players(player, selling, buying)
-            willing_players = [p for (p, counter) in available_players if counter is None]  # Filter out counteroffers
-            buying_player = select_player_to_trade(game, player, willing_players)
+            willing_players = game_flow.trade_with_players(player, selling, buying)
+            deal = select_player_to_trade(game, player, selling, willing_players)
 
-            if buying_player:
+            if deal is not None:
+                buying_player, counter = deal
+                if counter is not None:
+                    selling = counter  # Player accepted counteroffer
+
                 game.trade_between_players(player, selling, buying_player, buying)
                 print(f"\nTrade completed with {buying_player.name}.")
 

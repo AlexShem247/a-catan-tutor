@@ -257,3 +257,20 @@ def display_trade_offer(
     display_resources(selling)
     print("\nYou give:")
     display_resources(buying, player.resources)
+
+
+def format_counter_offer(original: ResourceCount, counter: ResourceCount) -> str:
+    """
+    Show resources in the format:
+      - 'wood 1' if unchanged
+      - 'brick 2 -> 3' if changed
+    """
+    parts = []
+    for res in Resource:
+        orig_amt = original.get(res, 0)
+        new_amt = counter.get(res, 0)
+        if orig_amt != new_amt:
+            parts.append(f"{res.name.upper()} {orig_amt} -> {new_amt}")
+        elif orig_amt > 0:  # unchanged but present
+            parts.append(f"{res.name.upper()} {orig_amt}")
+    return ", ".join(parts) if parts else "No resources"

@@ -298,12 +298,29 @@ def trade_manager_ai(player: Player, selling: ResourceCount, buying: ResourceCou
         if player.resources.get(resource, 0) < amount:
             return False, None  # Cannot trade what you don't have
 
-    # 2. Calculate AI's required ratio for this round
+    # 2. AI expected ratio
     required_ratio = get_required_trade_ratio(round_num)
 
-    # 3. Calculate totals
-    total_selling = sum(selling.values())  # What the AI would get
+    # 3. Totals
+    total_selling = sum(selling.values())  # What AI would get
     total_buying = sum(buying.values())  # What AI would give
 
-    # 4. Accept trade if total offered meets or exceeds AI's required ratio
-    return total_selling >= required_ratio * total_buying, None
+    over_cost = total_selling - required_ratio * total_buying
+    over_cost_int = int(abs(over_cost))
+
+    # 4. Decide accept or counter probabilistically
+    prob = ACCEPT_PROBABILITY_BY_OVERCOST.get(over_cost_int, 0.0)
+    if random.random() < prob:
+        return True, None  # Accept
+
+    # 5. Generate simple counteroffer if not accepting
+    if total_selling < required_ratio * total_buying:
+        missing = required_ratio * total_buying - total_selling
+        # Pick one offered resource to increase
+        resource_to_increase = max(selling, key=lambda r: selling[r])
+        counter_selling = selling.copy()
+        counter_selling[resource_to_increase] += int(missing)
+        return True, counter_selling
+
+    # Otherwise, reject
+    return False, None
