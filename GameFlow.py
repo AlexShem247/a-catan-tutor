@@ -1,9 +1,9 @@
-from typing import Callable, List, Dict
+from typing import Callable, List, Tuple, Optional
 
 from game.Edge import Edge
 from game.Game import Game
 from game.Player import Player
-from game.Resources import Resource
+from game.Resources import ResourceCount
 from game.Vertex import Vertex
 from view.display import display_results
 
@@ -15,16 +15,18 @@ class GameFlow:
     """
 
     def __init__(
-        self,
-        game: Game,
-        get_settlement_choice: Callable[[Player, Game], Vertex] = None,
-        get_road_choice: Callable[[Vertex, Game], Edge] = None,
-        get_settlement_choice_ai: Callable[[Player, Game], Vertex] = None,
-        get_road_choice_ai: Callable[[Vertex, Game], Edge] = None,
-        play_round_hook: Callable[[Player, "GameFlow"], None] = None,
-        play_round_ai_hook: Callable[[Player, "GameFlow"], None] = None,
-        trade_manager_hook: Callable[[Game, Player, Dict[Resource, int], Dict[Resource, int], Player], bool] = None,
-        trade_manager_ai_hook: Callable[[Player, Dict[Resource, int], Dict[Resource, int], Player, int], bool] = None
+            self,
+            game: Game,
+            get_settlement_choice: Callable[[Player, Game], Vertex] = None,
+            get_road_choice: Callable[[Vertex, Game], Edge] = None,
+            get_settlement_choice_ai: Callable[[Player, Game], Vertex] = None,
+            get_road_choice_ai: Callable[[Vertex, Game], Edge] = None,
+            play_round_hook: Callable[[Player, "GameFlow"], None] = None,
+            play_round_ai_hook: Callable[[Player, "GameFlow"], None] = None,
+            trade_manager_hook: Callable[[
+                Game, Player, ResourceCount, ResourceCount, Player], Tuple[bool, Optional[ResourceCount]]] = None,
+            trade_manager_ai_hook: Callable[
+                [Player, ResourceCount, ResourceCount, int], Tuple[bool, Optional[ResourceCount]]] = None
     ):
         self.game = game
         self.round_num = 1
@@ -39,8 +41,6 @@ class GameFlow:
 
         self.trade_manager_hook = trade_manager_hook
         self.trade_manager_ai_hook = trade_manager_ai_hook
-
-    # Initial placement phase
 
     def run_initial_placement(self):
         """
@@ -63,8 +63,6 @@ class GameFlow:
                 edge = self.get_road_choice_ai(vertex, self.game)
             self.game.try_build_road(player, edge, use_resources=False)
 
-    # Main game loop
-
     def start_game(self):
         """Run initial placement, then loop turns until game over."""
         self.run_initial_placement()
@@ -84,12 +82,17 @@ class GameFlow:
 
         display_results(self.game)
 
-    def trade_with_players(self, selling_player, selling, buying) -> List[Player]:
+    def trade_with_players(self, selling_player, selling, buying) -> List[Tuple[Player, Optional[ResourceCount]]]:
         """Sees which players are willing to trade"""
-        return [
-            p for p in self.game.players
-            if p != selling_player and (
-                self.trade_manager_hook(self.game, p, selling, buying, selling_player) if p.is_human
-                else self.trade_manager_ai_hook(p, selling, buying, selling_player, self.round_num)
-            )
-        ]
+        results = []
+        for player in self.game.players:
+            if player != selling_player:
+                if player.is_human:
+                    interested, counter = self.trade_manager_hook(self.game, player, selling, buying, selling_player)
+                else:
+                    interested, counter = self.trade_manager_ai_hook(player, selling, buying, self.round_num)
+
+                if interested:
+                    results.append((player, counter))
+
+        return results

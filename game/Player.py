@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Dict, List, Optional
 
 from game.Edge import Edge
-from game.Resources import Resource
+from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex, Port
 
 
@@ -20,7 +20,7 @@ class Player:
         self.playerNumber = playerNumber
 
         # Resources (0 for each)
-        self.resources: Dict[Resource, int] = {
+        self.resources: ResourceCount = {
             resource: 0 for resource in Resource
         }
 

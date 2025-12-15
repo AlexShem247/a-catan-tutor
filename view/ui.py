@@ -1,13 +1,13 @@
-from typing import Dict, List, Optional
+from typing import List, Optional, Tuple
 
 from GameFlow import GameFlow
 from game.Board import Board
 from game.Edge import EdgeDirection, Edge
 from game.Game import Game
 from game.Player import Player
-from game.Resources import Resource
+from game.Resources import Resource, ResourceCount
 from game.Vertex import VertexDirection, Vertex, Buildable
-from view.display import display_board, clear_screen, get_player_lead_status, display_resources
+from view.display import display_board, clear_screen, get_player_lead_status, display_resources, display_trade_offer
 
 
 def initial_settlement_placement(player: Player, game: Game) -> Vertex:
@@ -211,8 +211,8 @@ def select_player_to_trade(game: Game, player: Player, willing_players: List[Pla
 
 def trading_menu(player: Player, game_flow: GameFlow):
     """Display trading menu, allow bank or player trades, auto-return after trade or cancel."""
-    selling: Dict[Resource, int] = {res: 0 for res in Resource}
-    buying: Dict[Resource, int] = {res: 0 for res in Resource}
+    selling: ResourceCount = {res: 0 for res in Resource}
+    buying: ResourceCount = {res: 0 for res in Resource}
     game = game_flow.game
 
     while True:
@@ -222,7 +222,7 @@ def trading_menu(player: Player, game_flow: GameFlow):
 
         # Print current trading hand
         print("You give:")
-        display_resources(selling, player)
+        display_resources(selling, player.resources)
 
         print("\nYou receive:")
         display_resources(buying)
@@ -287,7 +287,8 @@ def trading_menu(player: Player, game_flow: GameFlow):
 
         elif option == "4":
             # Trade with players
-            willing_players = game_flow.trade_with_players(player, selling, buying)
+            available_players = game_flow.trade_with_players(player, selling, buying)
+            willing_players = [p for (p, counter) in available_players if counter is None]  # Filter out counteroffers
             buying_player = select_player_to_trade(game, player, willing_players)
 
             if buying_player:
@@ -308,33 +309,71 @@ def trading_menu(player: Player, game_flow: GameFlow):
             input()
 
 
-def trade_manager(game: Game, player: Player, selling: Dict[Resource, int],
-                  buying: Dict[Resource, int], selling_player: Player) -> bool:
+def trade_manager(game: Game, player: Player, selling: ResourceCount,
+                  buying: ResourceCount, selling_player: Player) -> Tuple[bool, Optional[ResourceCount]]:
     """Display AI trade and give options to accept or reject, only if player can afford it."""
 
-    # Display trade offer
-    clear_screen()
-    display_board(game)
-    print(f"\n--- Trade Offer from {selling_player.name} ---\n")
-    print(f"{selling_player.name} offers:")
-    display_resources(selling)
-    print("\nIn exchange for:")
-    display_resources(buying, player.resources)
-    print("\nDo you accept this trade? (y/n)")
+    # Auto-decline if player cannot afford the trade
+    if not all(player.resources.get(res, 0) >= amt for res, amt in buying.items()):
+        clear_screen()
+        display_board(game)
+        display_trade_offer(game, selling_player, selling, buying, player)
+        print("\nYou do not have the required resources for this trade.")
+        input("Press enter to continue...")
+        return False, None
 
-    # Check if human player has required resources
-    for res, amt in buying.items():
-        if player.resources.get(res, 0) < amt:
-            print("\nYou do not have the required resources for this trade.")
-            input("Press enter to continue...")
-            return False
+    original_selling, counter_offer = selling.copy(), selling.copy()
 
-    # Get human input
     while True:
-        choice = input("Enter choice: ").strip().lower()
-        if choice in {"y", "yes"}:
-            return True
-        elif choice in {"n", "no", ""}:
-            return False
+        clear_screen()
+        display_board(game)
+        display_trade_offer(game, selling_player, counter_offer, buying, player)
+
+        print("\nOptions:")
+        label = "Accept" if counter_offer == original_selling else "Propose Counteroffer"
+        print(f"  1. {label}")
+        print("  2. Decline")
+        print("  3. [RESOURCE] [AMOUNT] - Modify Buying Resource")
+
+        user_input = input("Enter option: ").strip().split()
+
+        # Default: decline
+        if not user_input:
+            return False, None
+
+        option = user_input[0]
+
+        # Accept or propose counteroffer
+        if option == "1":
+            if counter_offer == original_selling:
+                return True, None
+            else:
+                return True, counter_offer
+
+        # Decline
+        elif option == "2":
+            return False, None
+
+        # Modify buying only
+        elif option == "3":
+            if len(user_input) != 3:
+                print("Invalid input. Usage: 3 [RESOURCE] [AMOUNT]")
+                input("Press enter to continue...")
+                continue
+
+            res_str = user_input[1].upper()
+            amt_str = user_input[2]
+
+            try:
+                res = Resource[res_str]
+                amt = max(0, int(amt_str))
+            except (KeyError, ValueError):
+                print("Invalid resource or amount.")
+                input("Press enter to continue...")
+                continue
+
+            counter_offer[res] = amt
+
         else:
-            print("Invalid input. Enter 'y' or 'n'.")
+            print("Invalid option.")
+            input("Press enter to continue...")

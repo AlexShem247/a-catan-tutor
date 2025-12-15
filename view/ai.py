@@ -1,16 +1,23 @@
 import random
 from math import ceil
-from typing import Dict, Optional, List
+from typing import Optional, List, Tuple
 
 from GameFlow import GameFlow
 from game.Game import Game
 from game.Player import Player
-from game.Resources import Resource
+from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex, Buildable
 from view.display import clear_screen, display_board, get_player_lead_status, resource_dict_to_str
 
 TOTAL_ROUNDS = 20  # Estimated total rounds in the game
-MAX_RATIO = 4      # Maximum resources AI will ask for 1 resource late game
+MAX_RATIO = 4  # Maximum resources AI will ask for 1 resource late game
+HUMAN_BIAS_WEIGHT, AI_BIAS_WEIGHT = 1.2, 1.0
+
+ACCEPT_PROBABILITY_BY_OVERCOST = {  # Counter trades probabilities
+    0: 1.0,
+    1: 0.4,
+    2: 0.1,
+}
 
 
 def random_initial_settlement_placement(player: Player, game: Game):
@@ -62,7 +69,7 @@ def ai_choose_build_action():
     return random.choice(weighted_actions)
 
 
-def pick_random_resources(resources: Dict[Resource, int], num_resources: int) -> Optional[Dict[Resource, int]]:
+def pick_random_resources(resources: ResourceCount, num_resources: int) -> Optional[ResourceCount]:
     """Randomly pick num_resources resource units from the given resource dict."""
     total = sum(resources.values())
     if total < num_resources:
@@ -76,20 +83,79 @@ def pick_random_resources(resources: Dict[Resource, int], num_resources: int) ->
 
     chosen = random.sample(pool, num_resources)
 
-    result: Dict[Resource, int] = {}
+    result: ResourceCount = {}
     for resource in chosen:
         result[resource] = result.get(resource, 0) + 1
 
     return result
 
 
-def pick_trade_partner(available_players: List[Player]) -> Player:
-    """Randomly pick a trade partner with a slight bias toward the human player."""
-    weights = [
-        1.2 if player.is_human else 1.0
-        for player in available_players
+def resource_cost(resources: ResourceCount) -> int:
+    return sum(resources.values())
+
+
+def player_trade_weight(player: Player) -> float:
+    """Return selection weight for a player in trade decisions."""
+    return HUMAN_BIAS_WEIGHT if player.is_human else AI_BIAS_WEIGHT
+
+
+def accept_probability(over_cost: int) -> float:
+    """Probability of accepting a counteroffer exceeding estimated cost."""
+    if over_cost <= 0:
+        return 1.0
+    return ACCEPT_PROBABILITY_BY_OVERCOST.get(over_cost, 0.0)
+
+
+def weighted_pick(players: List[Player]) -> Player:
+    weights = [player_trade_weight(p) for p in players]
+    return random.choices(players, weights=weights, k=1)[0]
+
+
+def pick_trade_partner(
+        available_players: List[Tuple[Player, Optional[ResourceCount]]],
+        estimated_cost: int
+) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+    """Decide which trade to follow through with. Returns (Player, counteroffer) or None."""
+
+    if not available_players:
+        return None
+
+    # Prefer original trades
+    originals = [(p, c) for (p, c) in available_players if c is None]
+    if originals:
+        players = [p for (p, _) in originals]
+        chosen = weighted_pick(players)
+        return chosen, None
+
+    # Evaluate Counteroffers
+    counters_with_cost = [
+        (p, c, resource_cost(c))
+        for (p, c) in available_players
+        if c is not None
     ]
-    return random.choices(available_players, weights=weights, k=1)[0]
+
+    if not counters_with_cost:
+        return None
+
+    # Find minimum cost
+    min_cost = min(cost for (_, _, cost) in counters_with_cost)
+    cheapest = [(p, c, cost) for (p, c, cost) in counters_with_cost if cost == min_cost]
+
+    # Acceptance probability
+    over_cost = min_cost - estimated_cost
+    if random.random() > accept_probability(over_cost):
+        return None
+
+    # Bias toward human if tied
+    players = [p for (p, _, _) in cheapest]
+    chosen_player = weighted_pick(players)
+
+    # Retrieve that player's counteroffer
+    for p, c, _ in cheapest:
+        if p == chosen_player:
+            return p, c
+
+    return None
 
 
 def ai_attempt_trade(player: Player, game_flow: GameFlow, desired_build: Buildable, round_num: int):
@@ -133,9 +199,13 @@ def ai_attempt_trade(player: Player, game_flow: GameFlow, desired_build: Buildab
             # Not enough resources to offer a player trade
             return None
 
-        available_players = game_flow.trade_with_players(player, selling, buying)
-        if available_players:
-            buying_player = pick_trade_partner(available_players)
+        willing_players = game_flow.trade_with_players(player, selling, buying)
+        deal = pick_trade_partner(willing_players, ai_buying_rate)
+        if deal is not None:
+            buying_player, counter = deal
+
+            if counter is not None:
+                selling = counter  # AI accepted counteroffer
 
             # Actually perform trade
             game.trade_between_players(player, selling, buying_player, buying)
@@ -216,8 +286,8 @@ def make_round_move_ai(player: Player, game_flow: GameFlow):
     input("\nPress enter to continue...")
 
 
-def trade_manager_ai(player: Player, selling: Dict[Resource, int], buying: Dict[Resource, int],
-                     selling_player: Player, round_num: int) -> bool:
+def trade_manager_ai(player: Player, selling: ResourceCount, buying: ResourceCount,
+                     round_num: int) -> Tuple[bool, Optional[ResourceCount]]:
     """
     Basic AI logic for accepting or rejecting a trade.
     - Player must have the required resources (buying)
@@ -226,14 +296,14 @@ def trade_manager_ai(player: Player, selling: Dict[Resource, int], buying: Dict[
     # 1. Check if AI has the resources it is being asked to give
     for resource, amount in buying.items():
         if player.resources.get(resource, 0) < amount:
-            return False  # Cannot trade what you don't have
+            return False, None  # Cannot trade what you don't have
 
     # 2. Calculate AI's required ratio for this round
     required_ratio = get_required_trade_ratio(round_num)
 
     # 3. Calculate totals
     total_selling = sum(selling.values())  # What the AI would get
-    total_buying = sum(buying.values())    # What AI would give
+    total_buying = sum(buying.values())  # What AI would give
 
     # 4. Accept trade if total offered meets or exceeds AI's required ratio
-    return total_selling >= required_ratio * total_buying
+    return total_selling >= required_ratio * total_buying, None

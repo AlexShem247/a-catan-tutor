@@ -5,13 +5,13 @@ from game.Board import Board
 from game.Edge import Edge, EdgeDirection
 from game.HexTile import HexTile
 from game.Player import Player, PlayerNumber
-from game.Resources import Resource
+from game.Resources import Resource, ResourceCount
 from game.Vertex import Building, Vertex, Buildable, VertexDirection, Port
 
 
 class Game:
     # Resource cost for each building type
-    BUILDING_COST: Dict[Buildable, Dict[Resource, int]] = {
+    BUILDING_COST: Dict[Buildable, ResourceCount] = {
         Buildable.ROAD: {Resource.WOOD: 1, Resource.BRICK: 1},
         Buildable.SETTLEMENT: {
             Resource.WOOD: 1, Resource.BRICK: 1, Resource.SHEEP: 1, Resource.WHEAT: 1
@@ -87,8 +87,8 @@ class Game:
         return 4
 
     def try_trade_with_bank(
-            self, player: Player, selling: Dict[Resource, int],
-            buying: Dict[Resource, int], use_resources: bool = True
+            self, player: Player, selling: ResourceCount,
+            buying: ResourceCount, use_resources: bool = True
     ) -> bool:
         """Attempt a bank trade using correct port discounts (2:1, 3:1, 4:1)."""
 
@@ -316,8 +316,8 @@ class Game:
         return [e for e in vertex.edges if self.try_build_road(vertex.owner, e, build=False)[0]]
 
     @staticmethod
-    def trade_between_players(player: Player, selling: Dict[Resource, int],
-                              buying_player: Player, buying: Dict[Resource, int]):
+    def trade_between_players(player: Player, selling: ResourceCount,
+                              buying_player: Player, buying: ResourceCount):
         """Execute a trade of resources between two players."""
 
         # Remove resources from the selling player

@@ -1,12 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import Dict
 
 from game.Board import Board
 from game.Edge import EdgeDirection, Edge
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
-from game.Resources import Resource
+from game.Resources import Resource, ResourceCount
 from game.Vertex import VertexDirection, Building, Vertex, Port
 from view.Color import Color, colorise, brighten
 
@@ -208,7 +207,7 @@ def display_results(game: Game):
         print(f"{i}. {player.name}: {player.calc_victory_points()} points")
 
 
-def display_resources(resources: Dict[Resource, int], player_resources: Dict[Resource, int] | None = None):
+def display_resources(resources: ResourceCount, player_resources: ResourceCount | None = None):
     resources_list = list(resources.items())
     for i in range(0, len(resources_list), 2):
         first = resources_list[i]
@@ -226,7 +225,7 @@ def display_resources(resources: Dict[Resource, int], player_resources: Dict[Res
             print(f"{format_res(first)}")
 
 
-def resource_dict_to_str(resources: Dict[Resource, int]) -> str:
+def resource_dict_to_str(resources: ResourceCount) -> str:
     """Convert a resource-count dict into a human-readable string."""
     parts = [
         f"{count} {resource.name.upper()}"
@@ -242,3 +241,19 @@ def resource_dict_to_str(resources: Dict[Resource, int]) -> str:
         return " and ".join(parts)
 
     return ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
+def display_trade_offer(
+    game: Game,
+    selling_player: Player,
+    selling: ResourceCount,
+    buying: ResourceCount,
+    player: Player
+):
+    clear_screen()
+    display_board(game)
+    print(f"\n--- Trade Offer from {selling_player.name} ---\n")
+    print(f"{selling_player.name} gives:")
+    display_resources(selling)
+    print("\nYou give:")
+    display_resources(buying, player.resources)
