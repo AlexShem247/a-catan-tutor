@@ -37,11 +37,6 @@ class Game:
         self.development_deck = DevelopmentDeck()
         self.game_over = False
 
-        # Testing
-        for player in self.players:
-            for resource in Resource:
-                player.add_resource(resource, 10)
-
     def can_afford(self, player: Player, building_type: Buildable) -> bool:
         """Check if the player has enough resources to build the given type."""
         cost = self.BUILDING_COST[building_type]
