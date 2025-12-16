@@ -214,7 +214,7 @@ def ai_attempt_trade(player: Player, controller: GameController, desired_build: 
             return (
                 f"{player.name} trades {resource_dict_to_str(selling)} with "
                 f"{buying_player.name} for {resource_dict_to_str(buying)} "
-                f"to work towards a {desired_build.name.lower()}."
+                f"to work towards a {desired_build.name.replace('_', ' ').lower()}."
             )
         # If no player accepts, fall through to bank trade
 
@@ -269,7 +269,12 @@ def make_round_move_ai(player: Player, controller: GameController):
     # 3. Attempt the build
     build_msg = ai_attempt_build(player, controller, chosen_action)
 
-    # 4. Display results
+    # 4. Use playable development card if AI has one
+    playable_cards = [c.card_type for c in player.development_cards if c.playable]
+    if playable_cards:
+        controller.play_development_card(player, random.choice(playable_cards))
+
+    # 5. Display results
     clear_screen()
     display_board(controller.get_game_state())
 

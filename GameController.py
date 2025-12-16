@@ -4,7 +4,7 @@ from game.Edge import Edge, EdgeDirection
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
-from game.PlayerAssets import Buildable
+from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import ResourceCount, Resource
 from game.Vertex import Vertex, VertexDirection
 from view.display import display_results
@@ -80,11 +80,13 @@ class GameController:
         while not self._game.game_over:
             for player in self._game.players:
                 if player.is_human:
-                    if self.play_round_hook:
-                        self.play_round_hook(player, self)
+                    self.play_round_hook(player, self)
                 else:
-                    if self.play_round_ai_hook:
-                        self.play_round_ai_hook(player, self)
+                    self.play_round_ai_hook(player, self)
+
+                # Set development cards to playable
+                for card in player.development_cards:
+                    card.playable = card.card_type != DevelopmentCardType.VICTORY_POINT  # You cannot play VP cards
 
                 if self._game.game_over:
                     break
@@ -128,21 +130,58 @@ class GameController:
                     p.remove_resources(resources_to_discard)
 
             # 2. Player who rolled dice can move robber and collect resources
-            if player.is_human:
-                tile, steal_from = self.place_robber_hook(player, self)
-            else:
-                tile, steal_from = self.place_robber_ai_hook(player, self)
-
-            self._game.set_robber(tile)
-
-            if steal_from is not None:
-                if steal_from.is_human:
-                    resource = self.robber_discard_hook(steal_from, self, 1, True)
-                else:
-                    resource = self.robber_discard_ai_hook(steal_from, self, 1, True)
-                self._game.trade_between_players(player, {}, steal_from, resource)
+            self.handle_robber_action(player)
 
         return d1, d2, total
+
+    def handle_robber_action(self, player):
+        """
+        Handles moving the robber and stealing a resource for a given player,
+        supporting both human and AI players.
+        """
+        # Choose the robber placement and target player
+        if player.is_human:
+            tile, steal_from = self.place_robber_hook(player, self)
+        else:
+            tile, steal_from = self.place_robber_ai_hook(player, self)
+
+        # Move the robber
+        self._game.set_robber(tile)
+
+        # If there is a player to steal from, handle the discard
+        if steal_from is not None:
+            if steal_from.is_human:
+                resource = self.robber_discard_hook(steal_from, self, 1, True)
+            else:
+                resource = self.robber_discard_ai_hook(steal_from, self, 1, True)
+            self._game.trade_between_players(player, {}, steal_from, resource)
+
+    def play_development_card(self, player: Player, card_type: DevelopmentCardType):
+        """Plays the development card for player assuming they have it"""
+        if card_type == DevelopmentCardType.KNIGHT:
+            self.handle_robber_action(player)
+
+            # Update army variables
+            player.army_size += 1
+
+            if player.army_size >= 3:
+                # Find current holder of Largest Army (excluding this player)
+                other_holder = next(
+                    (p for p in self._game.players if p.has_largest_army and p != player),
+                    None
+                )
+
+                # Transfer Largest Army if needed
+                if other_holder is None or player.army_size > other_holder.army_size:
+                    if other_holder is not None:
+                        other_holder.has_largest_army = False
+                    player.has_largest_army = True
+
+        # Remove card
+        for card in player.development_cards:
+            if card.card_type == card_type:
+                player.development_cards.remove(card)
+                break  # Only remove a single card, not all
 
     # <editor-fold desc="Controller wrapper methods for model">
 

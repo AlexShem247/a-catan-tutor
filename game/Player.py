@@ -33,6 +33,7 @@ class Player:
         # Game metrics
         self.longest_road_length: int = 0
         self.has_longest_road: bool = False
+        self.army_size: int = 0
         self.has_largest_army: bool = False
         self.best_opponents_victory_point: int = 0
 

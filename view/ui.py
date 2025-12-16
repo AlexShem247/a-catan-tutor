@@ -6,7 +6,7 @@ from game.Edge import EdgeDirection, Edge
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
-from game.PlayerAssets import Buildable
+from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
 from game.Vertex import VertexDirection, Vertex
 from view.display import display_board, clear_screen, get_player_lead_status, display_resources, display_trade_offer, \
@@ -104,6 +104,7 @@ def make_round_move(player: Player, controller: GameController):
             true_vp_str = f" ({true_vp})"
 
         print(f"Longest Road: \t{player.longest_road_length} {'♕' if player.has_longest_road else ''}")
+        print(f"Army Size: \t{player.army_size} {'♕' if player.has_largest_army else ''}")
         print(f"Victory Points: {visible_vp}{true_vp_str} {get_player_lead_status(player)}\n")
 
         # Show resources
@@ -115,11 +116,18 @@ def make_round_move(player: Player, controller: GameController):
         buildable = controller.get_buildable_options(player)
         option_number = 3
 
+        # Add buildable options
         for action_type in Buildable:
             if buildable[action_type]:
                 action = "Buy " if action_type == Buildable.DEVELOPMENT_CARD else "Build "
                 options[str(option_number)] = action + action_type.name.replace("_", " ").capitalize()
                 option_number += 1
+        dc_option_index = option_number
+
+        # Add development card options
+        playable_cards = set([c.card_type for c in player.development_cards if c.playable])
+        for card_type in playable_cards:
+            options[str(option_number)] = f"Use {card_type.name.upper()} card"
 
         # Print options
         print("\nOptions:")
@@ -138,7 +146,7 @@ def make_round_move(player: Player, controller: GameController):
         if choice == "2":
             trading_menu(player, controller)
 
-        elif choice in options:
+        elif choice.isnumeric() and 3 <= int(choice) < dc_option_index and choice in options:
             # Determine which build action
             action_str = options[choice].split()[1].upper()
             if "DEVELOPMENT" in action_str:
@@ -183,6 +191,10 @@ def make_round_move(player: Player, controller: GameController):
 
             print(msg)
             input("Press enter to continue...")
+        elif choice.isnumeric() and dc_option_index <= int(choice) and choice in options:
+            # Play development card
+            card_type = DevelopmentCardType[options[choice].split()[1]]
+            controller.play_development_card(player, card_type)
 
         else:
             error_msg = "Invalid option. Try again."

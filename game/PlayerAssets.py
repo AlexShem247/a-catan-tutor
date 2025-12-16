@@ -43,7 +43,7 @@ class DevelopmentCard:
 class DevelopmentDeck:
     def __init__(self):
         self._deck: list[DevelopmentCard] = []
-        # self._add_cards(DevelopmentCardType.KNIGHT, 14)
+        self._add_cards(DevelopmentCardType.KNIGHT, 14)
         # self._add_cards(DevelopmentCardType.ROAD_BUILDING, 2)
         # self._add_cards(DevelopmentCardType.YEAR_OF_PLENTY, 2)
         # self._add_cards(DevelopmentCardType.MONOPOLY, 2)

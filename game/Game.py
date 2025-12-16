@@ -358,7 +358,7 @@ class Game:
     @staticmethod
     def get_players_on_hex(hex_tile: HexTile) -> List[Player]:
         """Return a list of players who own a settlement or city on the given hex tile."""
-        return [v.owner for v in hex_tile.vertices if v.owner is not None]
+        return list(set([v.owner for v in hex_tile.vertices if v.owner is not None]))
 
     def get_all_hexes(self):
         """Return a list of all hex tiles on the board."""
@@ -379,5 +379,8 @@ class Game:
 
         card = self.development_deck.draw()
         player.development_cards.append(card)
+
+        for res, amt in Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD].items():
+            player.remove_resource(res, amt)
 
         return True, f"You got a {card.card_type.name.replace('_', ' ').capitalize()} card!"
