@@ -3,8 +3,9 @@ import unittest
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game
 from game.HexTile import HexTile
+from game.PlayerAssets import Buildable
 from game.Resources import Resource
-from game.Vertex import Buildable, Vertex, Building, VertexDirection, Port
+from game.Vertex import Vertex, Building, VertexDirection, Port
 
 
 class TestGame(unittest.TestCase):
@@ -45,6 +46,7 @@ class TestGame(unittest.TestCase):
     def test_get_buildable_options_empty_when_cannot_afford(self):
         self.player.resources = {res: 0 for res in Resource}
         options = self.game.get_buildable_options(self.player)
+        del options[Buildable.DEVELOPMENT_CARD]
         for buildable, locations in options.items():
             self.assertEqual(locations, [])
 
@@ -62,6 +64,7 @@ class TestGame(unittest.TestCase):
         selling = {Resource.WOOD: 1}
         buying = {Resource.BRICK: 1}
         self.player.resources[Resource.WOOD] = 4
+        self.player.bank_resources[Resource.BRICK] += 1
         success = self.game.try_trade_with_bank(self.player, selling, buying)
         self.assertTrue(success)
         self.assertEqual(self.player.resources[Resource.BRICK], 6)
@@ -116,15 +119,15 @@ class TestGame(unittest.TestCase):
         self.assertFalse(success)
 
     def test_update_best_opponent_victory_points(self):
-        self.player.calc_victory_points = lambda: 5
-        self.opponent.calc_victory_points = lambda: 7
+        self.player.calc_victory_points = lambda: (5, 5)
+        self.opponent.calc_victory_points = lambda: (7, 7)
         self.game.update_best_opponent_victory_points()
         self.assertEqual(self.player.best_opponents_victory_point, 7)
         self.assertFalse(self.game.game_over)
 
     def test_update_best_opponent_victory_points_game_over(self):
-        self.player.calc_victory_points = lambda: 10
-        self.opponent.calc_victory_points = lambda: 5
+        self.player.calc_victory_points = lambda: (10, 10)
+        self.opponent.calc_victory_points = lambda: (5, 5)
         self.game.update_best_opponent_victory_points()
         self.assertTrue(self.game.game_over)
 

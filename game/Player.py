@@ -15,10 +15,12 @@ class PlayerNumber(Enum):
 
 
 class Player:
-    def __init__(self, is_human: bool, playerNumber: PlayerNumber, name: Optional[str] = None):
+    def __init__(self, is_human: bool, playerNumber: PlayerNumber, bank_resources: ResourceCount,
+                 name: Optional[str] = None):
         self.is_human = is_human
         self.name = playerNumber.name if name is None else name
         self.playerNumber = playerNumber
+        self.bank_resources = bank_resources
 
         # Resources (0 for each)
         self.resources: ResourceCount = {
@@ -67,16 +69,27 @@ class Player:
 
     def add_resource(self, resource: Resource, amount: int) -> None:
         """Add a given amount of a resource to the player."""
-        self.resources[resource] += amount
+        move_amount = min(self.bank_resources[resource], amount)
+
+        self.bank_resources[resource] -= move_amount
+        self.resources[resource] += move_amount
+
+    def add_resources(self, resources: ResourceCount) -> None:
+        """Adds multiple resources."""
+        for resource, amount in resources.items():
+            self.add_resource(resource, amount)
 
     def remove_resource(self, resource: Resource, amount: int) -> None:
         """Removes a given amount of a resource."""
-        self.resources[resource] = max(0, self.resources[resource] - amount)
+        move_amount = min(self.resources[resource], amount)
+
+        self.bank_resources[resource] += move_amount
+        self.resources[resource] -= move_amount
 
     def remove_resources(self, resources: ResourceCount) -> None:
         """Removes multiple resources."""
         for resource, amount in resources.items():
-            self.resources[resource] = max(0, self.resources[resource] - amount)
+            self.remove_resource(resource, amount)
 
     def add_settlement(self, vertex) -> None:
         """Add a settlement at the given vertex."""

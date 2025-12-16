@@ -1,3 +1,4 @@
+from collections import defaultdict
 from random import randint
 from typing import List, Optional, Dict
 
@@ -21,12 +22,17 @@ class Game:
         Buildable.DEVELOPMENT_CARD: {Resource.ORE: 1, Resource.WOOD: 1, Resource.WHEAT: 1}
     }
 
+    BANK_INITIAL_RESOURCES: ResourceCount = {
+        Resource.WOOD: 19, Resource.BRICK: 19, Resource.SHEEP: 19, Resource.WHEAT: 19, Resource.ORE: 19,
+    }
+
     VICTORY_POINTS_TO_WIN = 10
     ROBBER_DICE_NUM = 7
 
     def __init__(self, human_player_one: bool = True):
+        self.bank_resources = self.BANK_INITIAL_RESOURCES.copy()
         self.players: List[Player] = [Player(human_player_one if p == PlayerNumber.P1
-                                             else False, p) for p in PlayerNumber]
+                                             else False, p, bank_resources=self.bank_resources) for p in PlayerNumber]
         self._board = Board()
         self.development_deck = DevelopmentDeck()
         self.game_over = False
@@ -46,12 +52,36 @@ class Game:
         d1, d2 = randint(1, 6), randint(1, 6)
         total = d1 + d2
 
+        # 1. Aggregate production demands per player per resource
+        production: Dict[Player, Dict[Resource, int]] = defaultdict(lambda: defaultdict(int))
+
         tiles = self._board.production_to_hex.get(total, [])
         for tile in tiles:
+            if tile.robber:
+                continue  # Robber blocks production
+
             for vertex in tile.vertices:
                 if vertex.owner is not None:
-                    # Give main resource
-                    vertex.owner.add_resource(tile.resource, vertex.building.get_resource_yield())
+                    amount = vertex.building.get_resource_yield()
+                    production[vertex.owner][tile.resource] += amount
+
+        # 2. Aggregate total demand per resource
+        total_needed: Dict[Resource, int] = defaultdict(int)
+        for res_map in production.values():
+            for res, amount in res_map.items():
+                total_needed[res] += amount
+
+        # 3. Distribute only if the bank can satisfy the FULL amount
+        for res, needed in total_needed.items():
+            if self.bank_resources[res] < needed:
+                # Not enough -> nobody gets this resource
+                for res_map in production.values():
+                    res_map.pop(res, None)
+
+        # 4. Apply distribution
+        for player, res_map in production.items():
+            player.add_resources(res_map)
+
         return d1, d2, total
 
     def get_buildable_options(self, player: Player) -> dict:
@@ -155,8 +185,7 @@ class Game:
         if build:
             Board.build_settlement(vertex, player)
             if use_resources:
-                for res, amt in Game.BUILDING_COST[Buildable.SETTLEMENT].items():
-                    player.remove_resource(res, amt)
+                player.remove_resources(Game.BUILDING_COST[Buildable.SETTLEMENT])
             self.update_best_opponent_victory_points()
 
         return True, f"Settlement built at {vertex}"
@@ -177,8 +206,7 @@ class Game:
         if build:
             Board.build_city(vertex, player)
             if use_resources:
-                for res, amt in Game.BUILDING_COST[Buildable.CITY].items():
-                    player.remove_resource(res, amt)
+                player.remove_resources(Game.BUILDING_COST[Buildable.CITY])
 
             self.update_best_opponent_victory_points()
 
@@ -198,8 +226,7 @@ class Game:
             if build:
                 Board.build_road(edge, player)
                 if use_resources:
-                    for res, amt in Game.BUILDING_COST[Buildable.ROAD].items():
-                        player.remove_resource(res, amt)
+                    player.remove_resources(Game.BUILDING_COST[Buildable.ROAD])
 
                 # Recalculate longest road length
                 player.longest_road_length = Board.calculate_longest_road_length(player.roads)
@@ -315,7 +342,7 @@ class Game:
                     available.append(vertex)
         return available
 
-    def get_available_edges(self, player: Player) -> list[Edge]:
+    def get_available_edges(self, player: Player) -> List[Edge]:
         """Return a list of edges where the player can build a road."""
         available = []
         for edge in self._board.edges:
@@ -379,8 +406,6 @@ class Game:
 
         card = self.development_deck.draw()
         player.development_cards.append(card)
-
-        for res, amt in Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD].items():
-            player.remove_resource(res, amt)
+        player.remove_resources(Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD])
 
         return True, f"You got a {card.card_type.name.replace('_', ' ').capitalize()} card!"

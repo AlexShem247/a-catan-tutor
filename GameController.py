@@ -20,9 +20,9 @@ class GameController:
             self,
             game: Game,
             get_settlement_choice: Callable[[Player, "GameController"], Vertex] = None,
-            get_road_choice: Callable[[Vertex, "GameController"], Edge] = None,
+            get_road_choice: Callable[[Player, "GameController", Optional[Vertex]], Edge] = None,
             get_settlement_choice_ai: Callable[[Player, "GameController"], Vertex] = None,
-            get_road_choice_ai: Callable[[Vertex, "GameController"], Edge] = None,
+            get_road_choice_ai: Callable[[Player, "GameController", Optional[Vertex]], Edge] = None,
             play_round_hook: Callable[[Player, "GameController"], None] = None,
             play_round_ai_hook: Callable[[Player, "GameController"], None] = None,
             trade_manager_hook: Callable[["GameController", Player, ResourceCount, ResourceCount,
@@ -33,6 +33,11 @@ class GameController:
             robber_discard_ai_hook: Callable[[Player, "GameController", int, bool], ResourceCount] = ResourceCount,
             place_robber_hook: Callable[[Player, "GameController"], Tuple[HexTile, Optional[Player]]] = None,
             place_robber_ai_hook: Callable[[Player, "GameController"], Tuple[HexTile, Optional[Player]]] = None,
+
+            year_of_plenty_selection: Callable[["GameController"], ResourceCount] = None,
+            year_of_plenty_selection_ai: Callable[["GameController"], ResourceCount] = None,
+            monopoly_selection: Callable[["GameController"], Resource] = None,
+            monopoly_selection_ai: Callable[["GameController"], Resource] = None,
     ):
         self._game = game
         self.round_num = 1
@@ -53,6 +58,12 @@ class GameController:
         self.place_robber_hook = place_robber_hook
         self.place_robber_ai_hook = place_robber_ai_hook
 
+        self.year_of_plenty_selection = year_of_plenty_selection
+        self.year_of_plenty_selection_ai = year_of_plenty_selection_ai
+
+        self.monopoly_selection = monopoly_selection
+        self.monopoly_selection_ai = monopoly_selection_ai
+
     def run_initial_placement(self):
         """
         Each player places two settlements and two roads in order:
@@ -69,9 +80,9 @@ class GameController:
 
             # Road
             if player.is_human and self.get_road_choice:
-                edge = self.get_road_choice(vertex, self)
+                edge = self.get_road_choice(player, self, vertex)
             else:
-                edge = self.get_road_choice_ai(vertex, self)
+                edge = self.get_road_choice_ai(player, self, vertex)
             self._game.try_build_road(player, edge, use_resources=False)
 
     def start_game(self):
@@ -134,7 +145,7 @@ class GameController:
 
         return d1, d2, total
 
-    def handle_robber_action(self, player):
+    def handle_robber_action(self, player) -> Optional[Tuple[Player, Resource]]:
         """
         Handles moving the robber and stealing a resource for a given player,
         supporting both human and AI players.
@@ -156,32 +167,78 @@ class GameController:
                 resource = self.robber_discard_ai_hook(steal_from, self, 1, True)
             self._game.trade_between_players(player, {}, steal_from, resource)
 
-    def play_development_card(self, player: Player, card_type: DevelopmentCardType):
-        """Plays the development card for player assuming they have it"""
-        if card_type == DevelopmentCardType.KNIGHT:
-            self.handle_robber_action(player)
+            return steal_from, next(iter(resource.keys()))
 
-            # Update army variables
+    def play_development_card(self, player: Player, card_type: DevelopmentCardType) -> str:
+        """Plays the development card for a player and returns a descriptive message."""
+        msg = f"{player.name} played {card_type.name.replace('_', ' ').title()}."
+
+        if card_type == DevelopmentCardType.KNIGHT:
+            # KNIGHT: Move the robber and steal one resource from a player adjacent to the new robber location
+            stolen_player, stolen_resource = self.handle_robber_action(player)
             player.army_size += 1
 
+            # If player has at least 3 knights and largest army is bigger than others, assign Largest Army
             if player.army_size >= 3:
-                # Find current holder of Largest Army (excluding this player)
                 other_holder = next(
                     (p for p in self._game.players if p.has_largest_army and p != player),
                     None
                 )
-
-                # Transfer Largest Army if needed
                 if other_holder is None or player.army_size > other_holder.army_size:
                     if other_holder is not None:
                         other_holder.has_largest_army = False
                     player.has_largest_army = True
+                    msg += " They now have the Largest Army!"
 
-        # Remove card
+            if stolen_player and stolen_resource:
+                msg += f" Stole 1 {stolen_resource.name.replace('_', ' ').title()} from {stolen_player.name}."
+
+        elif card_type == DevelopmentCardType.ROAD_BUILDING:
+            # ROAD BUILDING: Allows player to place two roads for free
+            built_edges = []
+            for _ in range(2):
+                if self.get_available_edges(player):
+                    if player.is_human:
+                        edge = self.get_road_choice(player, self, None)
+                    else:
+                        edge = self.get_road_choice_ai(player, self, None)
+                    self._game.try_build_road(player, edge, use_resources=False)
+                    built_edges.append(edge)
+            msg += f" Built {len(built_edges)} road(s)."
+
+        elif card_type == DevelopmentCardType.YEAR_OF_PLENTY:
+            # YEAR OF PLENTY: Player chooses two resources from the bank to add to their hand
+            if player.is_human:
+                resources = self.year_of_plenty_selection(self)
+            else:
+                resources = self.year_of_plenty_selection_ai(self)
+            player.add_resources(resources)
+            resource_list = ", ".join(
+                f"{amt} {res.name.replace('_', ' ').title()}" for res, amt in resources.items() if amt > 0)
+            msg += f" Took {resource_list} from the bank."
+
+        elif card_type == DevelopmentCardType.MONOPOLY:
+            # MONOPOLY: Player chooses a single resource type; all other players give all of that resource to the player
+            if player.is_human:
+                resource = self.monopoly_selection(self)
+            else:
+                resource = self.monopoly_selection_ai(self)
+            total_taken = 0
+            for p in self._game.players:
+                if p == player:
+                    continue
+                amount = p.resources[resource]
+                self.trade_between_players(player, {}, p, {resource: amount})
+                total_taken += amount
+            msg += f" Monopolised {total_taken} {resource.name.replace('_', ' ').title()} from other players."
+
+        # Remove one card of this type from player's hand
         for card in player.development_cards:
             if card.card_type == card_type:
                 player.development_cards.remove(card)
-                break  # Only remove a single card, not all
+                break
+
+        return msg
 
     # <editor-fold desc="Controller wrapper methods for model">
 
@@ -273,8 +330,16 @@ class GameController:
         """Return a list of hex tiles that have at least one player on them."""
         return self._game.get_hex_tiles_with_players()
 
-    def try_buy_development_card(self, player) -> tuple[bool, str]:
+    def try_buy_development_card(self, player) -> Tuple[bool, str]:
         """Attempt to buy a development card for a player."""
         return self._game.try_buy_development_card(player)
+
+    def get_available_edges(self, player: Player) -> List[Edge]:
+        """Return a list of edges where the player can build a road."""
+        return self._game.get_available_edges(player)
+
+    def get_bank_resources(self) -> ResourceCount:
+        """Returns the bank's resources"""
+        return self._game.bank_resources
 
     # </editor-fold>

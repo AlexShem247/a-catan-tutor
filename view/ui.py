@@ -47,9 +47,8 @@ def initial_settlement_placement(player: Player, controller: GameController) -> 
             error_msg = "Invalid input. Format: x y DIRECTION (e.g. 0 2 TOP_RIGHT)"
 
 
-def initial_road_placement(settlement: Vertex, controller: GameController) -> Edge:
+def initial_road_placement(player: Player, controller: GameController, settlement: Optional[Vertex] = None) -> Edge:
     """Prompt the user to enter an edge for a road, validating via game rules."""
-    player = settlement.owner
     error_msg = None
     while True:
         try:
@@ -86,6 +85,7 @@ def make_round_move(player: Player, controller: GameController):
     """Handle a full turn for a human player, including dice roll, resource display, and building actions."""
     d1, d2, total = controller.roll_dice(player)
     error_msg = None
+    used_dev_card = False
 
     while True:
         clear_screen()
@@ -125,14 +125,15 @@ def make_round_move(player: Player, controller: GameController):
         dc_option_index = option_number
 
         # Add development card options
-        playable_cards = set([c.card_type for c in player.development_cards if c.playable])
-        for card_type in playable_cards:
-            options[str(option_number)] = f"Use {card_type.name.upper()} card"
+        if not used_dev_card:
+            playable_cards = set([c.card_type for c in player.development_cards if c.playable])
+            for card_type in playable_cards:
+                options[str(option_number)] = f"Use '{card_type.name.title()}' card"
 
         # Print options
         print("\nOptions:")
         for key, val in options.items():
-            print(f"  {key}. {val}")
+            print(f"  {key}. {val.replace('_', ' ').title()}")
 
         if player.calc_victory_points()[1] >= Game.VICTORY_POINTS_TO_WIN:
             break
@@ -193,8 +194,9 @@ def make_round_move(player: Player, controller: GameController):
             input("Press enter to continue...")
         elif choice.isnumeric() and dc_option_index <= int(choice) and choice in options:
             # Play development card
-            card_type = DevelopmentCardType[options[choice].split()[1]]
-            controller.play_development_card(player, card_type)
+            card_type = DevelopmentCardType[options[choice].split()[1].strip("'").upper()]
+            error_msg = controller.play_development_card(player, card_type)
+            used_dev_card = True
 
         else:
             error_msg = "Invalid option. Try again."
@@ -434,45 +436,93 @@ def trade_manager(controller: GameController, player: Player, selling: ResourceC
             input("Press enter to continue...")
 
 
-def robber_discard(player: Player, controller: GameController, num_resources: int, steal: bool) -> ResourceCount:
-    """Handle a robber discard by selecting and returning a resource to discard."""
-    giving: ResourceCount = {res: 0 for res in Resource}
+def choose_resources(
+        *,
+        controller: GameController,
+        num_resources: int,
+        title: str,
+        resource_caps: dict[Resource, int] | None = None
+) -> ResourceCount:
+    """
+    Generic resource selection helper.
+    Allows choosing exactly `num_resources` resources, optionally capped per resource.
+    """
+    chosen: ResourceCount = {res: 0 for res in Resource}
 
-    if steal and sum(player.resources.values()) == 0:
-        # Nothing to steal
-        return giving
+    if resource_caps is None:
+        resource_caps = {res: num_resources for res in Resource}
 
-    while sum(giving.values()) < num_resources:
-        remaining = num_resources - sum(giving.values())
+    while sum(chosen.values()) < num_resources:
+        remaining = num_resources - sum(chosen.values())
         clear_screen()
         display_board(controller.get_game_state())
-        if steal:
-            print(f"\nThe robber has been moved to your tile!")
-        else:
-            print(f"\nThe robber has been rolled!")
-        print(f"You need to give {remaining} more resource{'s' if remaining > 1 else ''}.\n")
 
-        print("Current discard selection:")
-        display_resources(giving, player.resources)
+        print(f"\n{title}")
+        print(f"You need to select {remaining} more resource{'s' if remaining > 1 else ''}.\n")
 
-        user_input = input("Enter [RESOURCE] [AMOUNT] to give: ").strip().lower()
+        print("Current selection:")
+        display_resources(chosen, resource_caps)
+
+        user_input = input("Enter [RESOURCE] [AMOUNT]: ").strip().lower()
+
         try:
             res_name, amount_str = user_input.split()
             amount = int(amount_str)
-            res_enum = Resource[res_name.upper()]
+            res = Resource[res_name.upper()]
 
-            # Clamp amount to amount of resources player actually has
-            amount = max(0, min(amount, player.resources[res_enum]))
+            max_allowed = resource_caps[res]
+            current = chosen[res]
 
-            # Clamp to not give more than remaining resources
-            amount = giving[res_enum] + min(amount - giving[res_enum], remaining)
+            # Clamp
+            amount = max(0, min(amount, max_allowed))
+            amount = current + min(amount - current, remaining)
 
-            giving[res_enum] = amount
+            chosen[res] = amount
 
         except (ValueError, KeyError):
-            print("Invalid input. Format: '[RESOURCE] [AMOUNT]', e.g., 'brick 2'.")
+            print("Invalid input. Format: '[RESOURCE] [AMOUNT]'")
 
-    return giving
+    return chosen
+
+
+def robber_discard(
+        player: Player,
+        controller: GameController,
+        num_resources: int,
+        steal: bool
+) -> ResourceCount:
+    """Handle a robber discard or steal."""
+    if steal and sum(player.resources.values()) == 0:
+        return {res: 0 for res in Resource}
+
+    return choose_resources(
+        controller=controller,
+        num_resources=num_resources,
+        title="The robber has been moved to your tile!" if steal else "The robber has been rolled!",
+        resource_caps=player.resources
+    )
+
+
+def year_of_plenty_selection(controller: GameController) -> ResourceCount:
+    """Let player choose two resources from the bank."""
+    return choose_resources(
+        controller=controller,
+        num_resources=2,
+        title="Year of Plenty: choose any two resources from the bank.",
+        resource_caps=controller.get_bank_resources()
+    )
+
+
+def monopoly_selection(controller: GameController) -> Resource:
+    """Let player choose one resource from the other players."""
+    chosen = choose_resources(
+        controller=controller,
+        num_resources=1,
+        title="Monopoly: choose a resource to get from the other players.",
+        resource_caps={res: 1 for res in Resource}
+    )
+    # Extract the single Resource enum
+    return next(iter(chosen.keys()))
 
 
 def place_robber(player: Player, controller: GameController) -> Tuple[HexTile, Optional[Player]]:

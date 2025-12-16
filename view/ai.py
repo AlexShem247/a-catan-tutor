@@ -6,7 +6,7 @@ from GameController import GameController
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
-from game.PlayerAssets import Buildable
+from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
 from view.display import clear_screen, display_board, get_player_lead_status, resource_dict_to_str
@@ -29,12 +29,15 @@ def random_initial_settlement_placement(player: Player, controller: GameControll
     return random.choice(available_vertices) if available_vertices else None
 
 
-def random_initial_road_placement(settlement: Vertex, controller: GameController):
+def random_initial_road_placement(player: Player, controller: GameController, settlement: Optional[Vertex] = None):
     """
     Choose a valid edge connected to the given settlement.
     Picks a random edge adjacent to the settlement where a road can be built.
     """
-    available_edges = controller.get_buildable_edges_for_vertex(settlement)
+    if settlement is None:
+        available_edges = controller.get_available_edges(player)
+    else:
+        available_edges = controller.get_buildable_edges_for_vertex(settlement)
 
     if not available_edges:
         return None
@@ -228,7 +231,7 @@ def ai_attempt_trade(player: Player, controller: GameController, desired_build: 
 
     return (
         f"{player.name} trades {resource_dict_to_str(selling)} with the bank "
-        f"for {resource_dict_to_str(buying)} to work towards a {desired_build.name.lower()}."
+        f"for {resource_dict_to_str(buying)} to work towards a {desired_build.name.replace('_', ' ').lower()}."
     )
 
 
@@ -271,8 +274,10 @@ def make_round_move_ai(player: Player, controller: GameController):
 
     # 4. Use playable development card if AI has one
     playable_cards = [c.card_type for c in player.development_cards if c.playable]
+    card_msg = ""
     if playable_cards:
-        controller.play_development_card(player, random.choice(playable_cards))
+        card: DevelopmentCardType = random.choice(playable_cards)
+        card_msg = controller.play_development_card(player, card)
 
     # 5. Display results
     clear_screen()
@@ -288,6 +293,9 @@ def make_round_move_ai(player: Player, controller: GameController):
         print(trade_msg)
 
     print(build_msg)
+
+    if card_msg:
+        print(card_msg)
 
     input("\nPress enter to continue...")
 
@@ -364,3 +372,15 @@ def place_robber_ai(player: Player, controller: GameController) -> Tuple[HexTile
     target_player = random.choice(stealable_players) if stealable_players else None
 
     return hex_tile, target_player
+
+
+def year_of_plenty_selection_ai(controller: GameController) -> ResourceCount:
+    """Randomly pick two resources from the bank."""
+    return pick_random_resources(controller.get_bank_resources(), 2)
+
+
+def monopoly_selection_ai(controller: GameController) -> Resource:
+    """Randomly pick two resources from the bank."""
+    res_dict = pick_random_resources(controller.get_bank_resources(), 1)
+    # Extract the single key
+    return next(iter(res_dict.keys()))
