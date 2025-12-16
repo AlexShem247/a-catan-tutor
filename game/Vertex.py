@@ -2,32 +2,11 @@ from enum import IntEnum, Enum
 from typing import List, Optional, TYPE_CHECKING, Tuple
 
 from game.HexTile import HexTile
+from game.PlayerAssets import Building
 
 if TYPE_CHECKING:
     from game.Player import Player
     from game.Edge import Edge
-
-
-class Buildable(Enum):
-    ROAD = ("road", 15)
-    SETTLEMENT = ("settlement", 5)
-    CITY = ("city", 4)
-
-    def __init__(self, label: str, max_on_board: int):
-        self.label = label
-        self.max_on_board = max_on_board
-
-
-class Building(Enum):
-    SETTLEMENT = Buildable.SETTLEMENT
-    CITY = Buildable.CITY
-
-    def get_resource_yield(self) -> int:
-        """Return how many resources this building produces per turn."""
-        if self == Building.CITY:
-            return 2
-
-        return 1
 
 
 class VertexDirection(IntEnum):

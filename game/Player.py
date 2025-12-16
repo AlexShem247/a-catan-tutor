@@ -1,7 +1,8 @@
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from game.Edge import Edge
+from game.PlayerAssets import DevelopmentCard, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex, Port
 
@@ -32,21 +33,33 @@ class Player:
         # Game metrics
         self.longest_road_length: int = 0
         self.has_longest_road: bool = False
+        self.has_largest_army: bool = False
         self.best_opponents_victory_point: int = 0
 
-    def calc_victory_points(self) -> int:
-        """Calculate total victory points for a player."""
-        points = 0
+        self.development_cards: List[DevelopmentCard] = []
+
+    def calc_victory_points(self) -> Tuple[int, int]:
+        """Return (visible_points, total_points), with hidden Victory Point cards included in total."""
+        visible_points = 0
 
         # Buildings
-        points += len(self.settlements) * 1  # 1 point per settlement
-        points += len(self.cities) * 2  # 2 points per city
+        visible_points += len(self.settlements) * 1  # 1 point per settlement
+        visible_points += len(self.cities) * 2  # 2 points per city
 
         # Special achievements
         if self.has_longest_road:
-            points += 2
+            visible_points += 2
+        if self.has_largest_army:
+            visible_points += 2
 
-        return points
+        # Hidden Victory Point development cards
+        hidden_vp_cards = sum(
+            1 for card in self.development_cards
+            if card.card_type == DevelopmentCardType.VICTORY_POINT
+        )
+
+        total_points = visible_points + hidden_vp_cards
+        return visible_points, total_points
 
     def __repr__(self):
         return self.name

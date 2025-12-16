@@ -66,19 +66,19 @@ class PlayerTests(unittest.TestCase):
 
     def test_calc_victory_points(self):
         # No buildings, no achievements
-        self.assertEqual(self.player.calc_victory_points(), 0)
+        self.assertEqual(self.player.calc_victory_points()[1], 0)
 
         # Add settlements and cities
         v1, v2 = Vertex(pos=(0, 0, VertexDirection.TOP)), Vertex(pos=(0, 0, VertexDirection.TOP_RIGHT))
         self.player.add_settlement(v1)
-        self.assertEqual(self.player.calc_victory_points(), 1)
+        self.assertEqual(self.player.calc_victory_points()[1], 1)
 
         self.player.add_city(v2)
-        self.assertEqual(self.player.calc_victory_points(), 3)  # 1 settlement + 2 city
+        self.assertEqual(self.player.calc_victory_points()[1], 3)  # 1 settlement + 2 city
 
         # Add longest road achievement
         self.player.has_longest_road = True
-        self.assertEqual(self.player.calc_victory_points(), 5)
+        self.assertEqual(self.player.calc_victory_points()[1], 5)
 
     def test_get_ports(self):
         v1, v2, v3 = Vertex(pos=(0, 0, VertexDirection.TOP)), Vertex(pos=(0, 0, VertexDirection.TOP_RIGHT)), \

@@ -6,6 +6,7 @@ from game.Edge import EdgeDirection, Edge
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
+from game.PlayerAssets import DevelopmentCardType
 from game.Resources import Resource, ResourceCount
 from game.Vertex import VertexDirection, Building, Vertex, Port
 from view.Color import Color, colorise, brighten
@@ -201,7 +202,7 @@ def display_board(game: Game) -> None:
 
 def get_player_lead_status(player: Player) -> str:
     """Return lead status."""
-    player_vp = player.calc_victory_points()
+    player_vp = player.calc_victory_points()[0]
     best_opponent_vp = player.best_opponents_victory_point
 
     if player_vp > best_opponent_vp:
@@ -216,12 +217,27 @@ def display_results(game: Game):
     clear_screen()
     print("Board final values:\n")
     display_board(game)
-    sorted_players = sorted(game.players, key=lambda p: p.calc_victory_points(), reverse=True)
+    sorted_players = sorted(game.players, key=lambda p: p.calc_victory_points()[1], reverse=True)
 
     print(f"\nThe winner is: {sorted_players[0].name}!\n")
     print("Scores:")
     for i, player in enumerate(sorted_players, start=1):
-        print(f"{i}. {player.name}: {player.calc_victory_points()} points")
+        print(f"{i}. {player.name}: {player.calc_victory_points()[1]} points")
+
+    for player in sorted_players:
+        print(f"\nPoint Summary {player.name}:")
+        if len(player.settlements) > 0:
+            print(f"Settlements: {len(player.settlements)}")
+        if len(player.cities) > 0:
+            print(f"Cities: {len(player.cities)}")
+        if player.has_longest_road:
+            print(f"Longest Road: {player.longest_road_length}")
+        if player.has_largest_army:
+            print(f"Largest Army: X")
+
+        num_vp_cards = len([c for c in player.development_cards if c.card_type == DevelopmentCardType.VICTORY_POINT])
+        if num_vp_cards > 0:
+            print(f"Victory Card Points: {num_vp_cards}")
 
 
 def display_resources(resources: ResourceCount, player_resources: ResourceCount | None = None):

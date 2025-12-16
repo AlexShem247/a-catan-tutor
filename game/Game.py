@@ -5,8 +5,9 @@ from game.Board import Board
 from game.Edge import Edge, EdgeDirection
 from game.HexTile import HexTile
 from game.Player import Player, PlayerNumber
+from game.PlayerAssets import Buildable, DevelopmentDeck
 from game.Resources import Resource, ResourceCount
-from game.Vertex import Building, Vertex, Buildable, VertexDirection, Port
+from game.Vertex import Building, Vertex, VertexDirection, Port
 
 
 class Game:
@@ -16,7 +17,8 @@ class Game:
         Buildable.SETTLEMENT: {
             Resource.WOOD: 1, Resource.BRICK: 1, Resource.SHEEP: 1, Resource.WHEAT: 1
         },
-        Buildable.CITY: {Resource.ORE: 3, Resource.WHEAT: 2}
+        Buildable.CITY: {Resource.ORE: 3, Resource.WHEAT: 2},
+        Buildable.DEVELOPMENT_CARD: {Resource.ORE: 1, Resource.WOOD: 1, Resource.WHEAT: 1}
     }
 
     VICTORY_POINTS_TO_WIN = 10
@@ -26,7 +28,13 @@ class Game:
         self.players: List[Player] = [Player(human_player_one if p == PlayerNumber.P1
                                              else False, p) for p in PlayerNumber]
         self._board = Board()
+        self.development_deck = DevelopmentDeck()
         self.game_over = False
+
+        # Testing
+        for player in self.players:
+            for resource in Resource:
+                player.add_resource(resource, 10)
 
     def can_afford(self, player: Player, building_type: Buildable) -> bool:
         """Check if the player has enough resources to build the given type."""
@@ -51,7 +59,7 @@ class Game:
         Returns dict of possible Buildable actions and valid board locations.
         Empty list if player cannot afford or no legal space.
         """
-        options = {Buildable.ROAD: [], Buildable.SETTLEMENT: [], Buildable.CITY: []}
+        options = {Buildable.ROAD: [], Buildable.SETTLEMENT: [], Buildable.CITY: [], Buildable.DEVELOPMENT_CARD: False}
 
         # Roads
         if self.can_afford(player, Buildable.ROAD) and len(player.roads) < Buildable.ROAD.max_on_board:
@@ -65,6 +73,10 @@ class Game:
         # Cities
         if self.can_afford(player, Buildable.CITY) and len(player.cities) < Buildable.CITY.max_on_board:
             options[Buildable.CITY] = self.get_available_vertices(player, Buildable.CITY)
+
+        # Development Cards
+        if self.can_afford(player, Buildable.DEVELOPMENT_CARD) and not self.development_deck.empty():
+            options[Buildable.DEVELOPMENT_CARD] = True
 
         return options
 
@@ -260,15 +272,15 @@ class Game:
     def update_best_opponent_victory_points(self) -> None:
         """Update best_opponents_victory_point for all players."""
         # Calculate victory points for all players
-        player_vp = {player: player.calc_victory_points() for player in self.players}
+        player_vp = {player: player.calc_victory_points()[0] for player in self.players}
 
         # For each player, find the highest VP among their opponents
         for player in self.players:
             opponent_vps = [vp for p, vp in player_vp.items() if p != player]
             player.best_opponents_victory_point = max(opponent_vps) if opponent_vps else 0
 
-            if player_vp[player] >= Game.VICTORY_POINTS_TO_WIN:
-                # player has won
+            if player.calc_victory_points()[1] >= Game.VICTORY_POINTS_TO_WIN:
+                # Player has won
                 self.game_over = True
 
     def get_row_hexes(self, r: int) -> List[HexTile]:
@@ -359,3 +371,13 @@ class Game:
     def get_robber_tile(self) -> HexTile:
         """Returns the robber's current position"""
         return self._board.robber_position
+
+    def try_buy_development_card(self, player) -> tuple[bool, str]:
+        """Attempt to buy a development card for a player."""
+        if self.development_deck.empty():
+            return False, "There are no more development cards"
+
+        card = self.development_deck.draw()
+        player.development_cards.append(card)
+
+        return True, f"You got a {card.card_type.name.replace('_', ' ').capitalize()} card!"

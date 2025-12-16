@@ -4,8 +4,9 @@ from game.Edge import Edge, EdgeDirection
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
+from game.PlayerAssets import Buildable
 from game.Resources import ResourceCount, Resource
-from game.Vertex import Vertex, VertexDirection, Buildable
+from game.Vertex import Vertex, VertexDirection
 from view.display import display_results
 
 
@@ -29,7 +30,7 @@ class GameController:
             trade_manager_ai_hook: Callable[
                 [Player, ResourceCount, ResourceCount, int], Tuple[bool, Optional[ResourceCount]]] = None,
             robber_discard_hook: Callable[[Player, "GameController", int, bool], ResourceCount] = None,
-            robber_discard_ai_hook: Callable[[Player, int], ResourceCount] = ResourceCount,
+            robber_discard_ai_hook: Callable[[Player, "GameController", int, bool], ResourceCount] = ResourceCount,
             place_robber_hook: Callable[[Player, "GameController"], Tuple[HexTile, Optional[Player]]] = None,
             place_robber_ai_hook: Callable[[Player, "GameController"], Tuple[HexTile, Optional[Player]]] = None,
     ):
@@ -123,7 +124,7 @@ class GameController:
                     if p.is_human:
                         resources_to_discard = self.robber_discard_hook(p, self, discard_count, False)
                     else:
-                        resources_to_discard = self.robber_discard_ai_hook(p, discard_count)
+                        resources_to_discard = self.robber_discard_ai_hook(p, self, discard_count, False)
                     p.remove_resources(resources_to_discard)
 
             # 2. Player who rolled dice can move robber and collect resources
@@ -138,7 +139,7 @@ class GameController:
                 if steal_from.is_human:
                     resource = self.robber_discard_hook(steal_from, self, 1, True)
                 else:
-                    resource = self.robber_discard_ai_hook(steal_from, 1)
+                    resource = self.robber_discard_ai_hook(steal_from, self, 1, True)
                 self._game.trade_between_players(player, {}, steal_from, resource)
 
         return d1, d2, total
@@ -232,5 +233,9 @@ class GameController:
     def get_hex_tiles_with_players(self):
         """Return a list of hex tiles that have at least one player on them."""
         return self._game.get_hex_tiles_with_players()
+
+    def try_buy_development_card(self, player) -> tuple[bool, str]:
+        """Attempt to buy a development card for a player."""
+        return self._game.try_buy_development_card(player)
 
     # </editor-fold>

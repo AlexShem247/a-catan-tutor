@@ -6,8 +6,9 @@ from game.Edge import EdgeDirection, Edge
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
+from game.PlayerAssets import Buildable
 from game.Resources import Resource, ResourceCount
-from game.Vertex import VertexDirection, Vertex, Buildable
+from game.Vertex import VertexDirection, Vertex
 from view.display import display_board, clear_screen, get_player_lead_status, display_resources, display_trade_offer, \
     format_counter_offer
 
@@ -97,8 +98,13 @@ def make_round_move(player: Player, controller: GameController):
             error_msg = None
 
         # Show stats
+        visible_vp, true_vp = player.calc_victory_points()
+        true_vp_str = ""
+        if visible_vp != true_vp:
+            true_vp_str = f" ({true_vp})"
+
         print(f"Longest Road: \t{player.longest_road_length} {'♕' if player.has_longest_road else ''}")
-        print(f"Victory Points: {player.calc_victory_points()} {get_player_lead_status(player)}\n")
+        print(f"Victory Points: {visible_vp}{true_vp_str} {get_player_lead_status(player)}\n")
 
         # Show resources
         print("Your resources:")
@@ -111,7 +117,8 @@ def make_round_move(player: Player, controller: GameController):
 
         for action_type in Buildable:
             if buildable[action_type]:
-                options[str(option_number)] = f"Build {action_type.name.capitalize()}"
+                action = "Buy " if action_type == Buildable.DEVELOPMENT_CARD else "Build "
+                options[str(option_number)] = action + action_type.name.replace("_", " ").capitalize()
                 option_number += 1
 
         # Print options
@@ -119,7 +126,7 @@ def make_round_move(player: Player, controller: GameController):
         for key, val in options.items():
             print(f"  {key}. {val}")
 
-        if player.calc_victory_points() >= Game.VICTORY_POINTS_TO_WIN:
+        if player.calc_victory_points()[1] >= Game.VICTORY_POINTS_TO_WIN:
             break
 
         choice = input("Enter option: ").strip()
@@ -134,28 +141,33 @@ def make_round_move(player: Player, controller: GameController):
         elif choice in options:
             # Determine which build action
             action_str = options[choice].split()[1].upper()
-            action_type = Buildable[action_str]
+            if "DEVELOPMENT" in action_str:
+                action_type = Buildable.DEVELOPMENT_CARD
+            else:
+                action_type = Buildable[action_str]
+            selected: Edge | Vertex | None = None
 
-            # Get available locations
-            available = buildable[action_type]
-            if not available:
-                error_msg = f"No valid {action_type.name.lower()} locations available."
-                continue
+            if action_type != Buildable.DEVELOPMENT_CARD:
+                # Need to pick a location
+                available = buildable[action_type]
+                if not available:
+                    error_msg = f"No valid {action_type.name.lower()} locations available."
+                    continue
 
-            # Show locations and let player choose
-            print(f"\nAvailable {action_type.name.lower()} locations:")
-            for idx, loc in enumerate(available, 1):
-                print(f"  {idx}. ({loc.get_pos()})")
+                # Show locations and let player choose
+                print(f"\nAvailable {action_type.name.lower()} locations:")
+                for idx, loc in enumerate(available, 1):
+                    print(f"  {idx}. ({loc.get_pos()})")
 
-            loc_choice = input(f"Enter number to build {action_type.name.lower()} or 0 to cancel: ").strip()
-            try:
-                idx = int(loc_choice)
-                if idx == 0:
-                    continue  # cancel build
-                selected = available[idx - 1]
-            except (ValueError, IndexError):
-                error_msg = "Invalid selection."
-                continue
+                loc_choice = input(f"Enter number to build {action_type.name.lower()} or 0 to cancel: ").strip()
+                try:
+                    idx = int(loc_choice)
+                    if idx == 0:
+                        continue  # cancel build
+                    selected = available[idx - 1]
+                except (ValueError, IndexError):
+                    error_msg = "Invalid selection."
+                    continue
 
             # Apply build
             if action_type == Buildable.ROAD:
@@ -164,6 +176,8 @@ def make_round_move(player: Player, controller: GameController):
                 success, msg = controller.try_build_settlement(player, selected)
             elif action_type == Buildable.CITY:
                 success, msg = controller.try_build_city(player, selected)
+            elif action_type == Buildable.DEVELOPMENT_CARD:
+                success, msg = controller.try_buy_development_card(player)
             else:
                 success, msg = False, "Unknown build type"
 

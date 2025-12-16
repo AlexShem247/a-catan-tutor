@@ -6,8 +6,9 @@ from GameController import GameController
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
+from game.PlayerAssets import Buildable
 from game.Resources import Resource, ResourceCount
-from game.Vertex import Vertex, Buildable
+from game.Vertex import Vertex
 from view.display import clear_screen, display_board, get_player_lead_status, resource_dict_to_str
 
 TOTAL_ROUNDS = 20  # Estimated total rounds in the game
@@ -54,6 +55,7 @@ def ai_choose_build_action():
     action_weights = {
         Buildable.CITY: 10,
         Buildable.SETTLEMENT: 8,
+        Buildable.DEVELOPMENT_CARD: 6,
         Buildable.ROAD: 3,
         "NOTHING": 4,
     }
@@ -237,15 +239,15 @@ def ai_attempt_build(player: Player, controller: GameController, action: Buildab
     if action not in buildable or not buildable[action]:
         return f"{player.name} chooses to do nothing."
 
-    locations = buildable[action]
-    chosen_location = random.choice(locations)
-
     if action == Buildable.ROAD:
-        success, msg = controller.try_build_road(player, chosen_location)
+        success, msg = controller.try_build_road(player, random.choice(buildable[action]))
     elif action == Buildable.SETTLEMENT:
-        success, msg = controller.try_build_settlement(player, chosen_location)
+        success, msg = controller.try_build_settlement(player, random.choice(buildable[action]))
     elif action == Buildable.CITY:
-        success, msg = controller.try_build_city(player, chosen_location)
+        success, msg = controller.try_build_city(player, random.choice(buildable[action]))
+    elif action == Buildable.DEVELOPMENT_CARD:
+        success, _ = controller.try_buy_development_card(player)
+        msg = f"{player.name} bought a development card."
     else:
         msg = "AI attempted unknown action"
 
@@ -275,7 +277,7 @@ def make_round_move_ai(player: Player, controller: GameController):
     print(f"{player.name} rolled {d1} + {d2} = {total}")
 
     print(f"Longest Road: \t{player.longest_road_length} {'♕' if player.has_longest_road else ''}")
-    print(f"Victory Points: {player.calc_victory_points()} {get_player_lead_status(player)}\n")
+    print(f"Victory Points: {player.calc_victory_points()[0]} {get_player_lead_status(player)}\n")
 
     if trade_msg:
         print(trade_msg)
@@ -325,7 +327,7 @@ def trade_manager_ai(player: Player, selling: ResourceCount, buying: ResourceCou
     return False, None
 
 
-def robber_discard_ai(player: Player, num_resources: int) -> ResourceCount:
+def robber_discard_ai(player: Player, _: GameController, num_resources: int, __: bool) -> ResourceCount:
     """Handle a robber discard by selecting and returning a resource to discard."""
     return pick_random_resources(player.resources, num_resources)
 
