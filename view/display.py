@@ -233,7 +233,7 @@ def display_results(game: Game):
         if player.has_longest_road:
             print(f"Longest Road: {player.longest_road_length}")
         if player.has_largest_army:
-            print(f"Largest Army: X")
+            print(f"Largest Army: {player.army_size}")
 
         num_vp_cards = len([c for c in player.development_cards if c.card_type == DevelopmentCardType.VICTORY_POINT])
         if num_vp_cards > 0:
