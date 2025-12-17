@@ -1,3 +1,4 @@
+import random
 from enum import Enum
 from typing import List, Optional, Tuple
 
@@ -115,3 +116,18 @@ class Player:
         if resource_count < 7:
             return 0
         return resource_count // 2
+
+    def random_resource(self) -> ResourceCount:
+        """Returns a random resource the player has"""
+        # Build a flat list where each card appears once per count
+        pool = [
+            resource
+            for resource, count in self.resources.items()
+            for _ in range(count)
+        ]
+
+        if not pool:
+            return {}
+
+        resource_to_give = random.choice(pool)
+        return {resource_to_give: 1}

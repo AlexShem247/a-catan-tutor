@@ -81,11 +81,57 @@ def initial_road_placement(player: Player, controller: GameController, settlemen
             error_msg = "Invalid input. Format: x y DIRECTION (e.g. 0 2 EAST)"
 
 
+def play_dev_card_menu(player: Player, controller: GameController) -> bool:
+    """
+    Show playable development cards and allow the player to play one.
+    Returns True if a card was played, False otherwise.
+    """
+    used_dev_card = False
+    playable_cards = [c.card_type for c in player.development_cards if c.playable]
+    if not playable_cards:
+        return used_dev_card  # Nothing to do
+
+    while True:
+        print("\nPlayable development cards:")
+        for idx, card_type in enumerate(playable_cards, 1):
+            print(f"  {idx}. {card_type.name.title()}")
+        idx = len(playable_cards) + 1
+        print(f"  {idx}. Roll Dice")
+
+        choice = input("Choose a development card to play: ").strip()
+        if choice == str(idx) or choice == "":
+            break
+        try:
+            idx = int(choice) - 1
+            card_type = playable_cards[idx]
+            error_msg = controller.play_development_card(player, card_type)
+            used_dev_card = True
+            if error_msg:
+                print(error_msg)
+                input("Press enter to continue...")
+            else:
+                print(f"Played '{card_type.name.title()}' card.")
+                input("Press enter to continue...")
+            break  # Played successfully
+        except (ValueError, IndexError):
+            print("Invalid selection.")
+            input("Press enter to continue...")
+    return used_dev_card
+
+
 def make_round_move(player: Player, controller: GameController):
     """Handle a full turn for a human player, including dice roll, resource display, and building actions."""
-    d1, d2, total = controller.roll_dice(player)
-    error_msg = None
-    used_dev_card = False
+
+    # Pre-roll development cards
+    clear_screen()
+    display_board(controller.get_game_state())
+    print(f"\n--- {player.name}'s turn (Pre-Roll) ---\n")
+    print("Your resources:")
+    display_resources(player.resources)
+    used_dev_card = play_dev_card_menu(player, controller)
+
+    # Roll dice
+    d1, d2, total, error_msg = controller.roll_dice(player)
 
     while True:
         clear_screen()
@@ -546,6 +592,10 @@ def place_robber(player: Player, controller: GameController) -> Tuple[HexTile, O
             hex_tile = controller.get_hex_tile(x, y)
             if hex_tile is None or (x, y) not in Board.HEX_COORDS:
                 error_msg = f"Invalid coordinate ({x}, {y})"
+                continue
+
+            if hex_tile.robber:
+                error_msg = "Need to move robber to a NEW tile"
                 continue
 
             # Get players on vertices adjacent to this hex (excluding the moving player)

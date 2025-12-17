@@ -125,9 +125,10 @@ class GameController:
         """Returns the internal game state"""
         return self._game
 
-    def roll_dice(self, player: Player) -> Tuple[int, int, int]:
+    def roll_dice(self, player: Player) -> Tuple[int, int, int, Optional[str]]:
         """Roll two dice and distribute resources to players."""
         d1, d2, total = self._game.roll_dice()
+        msg = None
         if total == Game.ROBBER_DICE_NUM:
             # Perform robber actions
             # 1. All players must discard half of their resources
@@ -141,9 +142,11 @@ class GameController:
                     p.remove_resources(resources_to_discard)
 
             # 2. Player who rolled dice can move robber and collect resources
-            self.handle_robber_action(player)
-
-        return d1, d2, total
+            result = self.handle_robber_action(player)
+            if result is not None:
+                stolen_player, stolen_resource = result
+                msg = f"Stole 1 {stolen_resource.name.replace('_', ' ').title()} from {stolen_player.name}."
+        return d1, d2, total, msg
 
     def handle_robber_action(self, player) -> Optional[Tuple[Player, Resource]]:
         """
@@ -161,10 +164,7 @@ class GameController:
 
         # If there is a player to steal from, handle the discard
         if steal_from is not None:
-            if steal_from.is_human:
-                resource = self.robber_discard_hook(steal_from, self, 1, True)
-            else:
-                resource = self.robber_discard_ai_hook(steal_from, self, 1, True)
+            resource = steal_from.random_resource()
             self._game.trade_between_players(player, {}, steal_from, resource)
 
             return steal_from, next(iter(resource.keys()))
@@ -175,7 +175,7 @@ class GameController:
 
         if card_type == DevelopmentCardType.KNIGHT:
             # KNIGHT: Move the robber and steal one resource from a player adjacent to the new robber location
-            stolen_player, stolen_resource = self.handle_robber_action(player)
+            stolen_player, stolen_resource = self.handle_robber_action(player) or (None, None)
             player.army_size += 1
 
             # If player has at least 3 knights and largest army is bigger than others, assign Largest Army

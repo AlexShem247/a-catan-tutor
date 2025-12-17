@@ -259,7 +259,15 @@ def ai_attempt_build(player: Player, controller: GameController, action: Buildab
 
 def make_round_move_ai(player: Player, controller: GameController):
     """AI turn: decides what to build, trades if helpful, then attempts the build."""
-    d1, d2, total = controller.roll_dice(player)
+    used_dev_card = False
+    card_msg = ""
+    playable_cards = [c.card_type for c in player.development_cards if c.playable]
+    if playable_cards and random.random() < 0.3:  # Chance to play a card pre-roll
+        card: DevelopmentCardType = random.choice(playable_cards)
+        card_msg = controller.play_development_card(player, card) + " (Pre-roll)"
+        used_dev_card = True
+
+    d1, d2, total, roll_msg = controller.roll_dice(player)
 
     # 1. AI chooses what it wants to build
     chosen_action = ai_choose_build_action()
@@ -273,11 +281,9 @@ def make_round_move_ai(player: Player, controller: GameController):
     build_msg = ai_attempt_build(player, controller, chosen_action)
 
     # 4. Use playable development card if AI has one
-    playable_cards = [c.card_type for c in player.development_cards if c.playable]
-    card_msg = ""
-    if playable_cards:
+    if playable_cards and not used_dev_card:
         card: DevelopmentCardType = random.choice(playable_cards)
-        card_msg = controller.play_development_card(player, card)
+        card_msg = controller.play_development_card(player, card) + " (Post-roll)"
 
     # 5. Display results
     clear_screen()
@@ -296,6 +302,9 @@ def make_round_move_ai(player: Player, controller: GameController):
 
     if card_msg:
         print(card_msg)
+
+    if roll_msg:
+        print(roll_msg)
 
     input("\nPress enter to continue...")
 
@@ -347,31 +356,36 @@ def robber_discard_ai(player: Player, _: GameController, num_resources: int, __:
 
 def place_robber_ai(player: Player, controller: GameController) -> Tuple[HexTile, Optional[Player]]:
     """AI chooses a hex with players and randomly steals from one of them."""
-    # Filter hexes that have at least one player (excluding the AI itself)
+    # Exclude the hex that already has the robber
+    valid_hexes = [
+        hex_tile for hex_tile in controller.get_all_hexes()
+        if not hex_tile.robber
+    ]
+
+    # Filter hexes that have at least one stealable opponent
     stealable_hexes = [
-        hex_tile for hex_tile in controller.get_hex_tiles_with_players()
-        if any(p != player and any(v > 0 for v in p.resources.values()) for
-               p in controller.get_players_on_hex(hex_tile))
+        hex_tile for hex_tile in valid_hexes
+        if any(
+            p != player and any(v > 0 for v in p.resources.values())
+            for p in controller.get_players_on_hex(hex_tile)
+        )
     ]
 
-    if not stealable_hexes:
-        # No valid hex to steal from, just pick a random hex
-        hex_tile = random.choice(controller.get_all_hexes())
-        return hex_tile, None
+    if stealable_hexes:
+        # Pick a random hex where stealing is possible
+        hex_tile = random.choice(stealable_hexes)
 
-    # Pick a random hex from the stealable hexes
-    hex_tile = random.choice(stealable_hexes)
+        stealable_players = [
+            p for p in controller.get_players_on_hex(hex_tile)
+            if p != player and any(v > 0 for v in p.resources.values())
+        ]
 
-    # Get list of stealable players on this hex
-    stealable_players = [
-        p for p in controller.get_players_on_hex(hex_tile)
-        if p != player and any(v > 0 for v in p.resources.values())
-    ]
+        target_player = random.choice(stealable_players)
+        return hex_tile, target_player
 
-    # Randomly pick one player to steal from
-    target_player = random.choice(stealable_players) if stealable_players else None
-
-    return hex_tile, target_player
+    # Otherwise, move robber to any other valid hex (no stealing)
+    hex_tile = random.choice(valid_hexes)
+    return hex_tile, None
 
 
 def year_of_plenty_selection_ai(controller: GameController) -> ResourceCount:

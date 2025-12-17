@@ -145,7 +145,7 @@ class Game:
         total_cost = self.get_trade_rate(player, selling_resource) * buying_amount
 
         # Validate the selling amount
-        if player.resources.get(selling_resource, 0) < total_cost:
+        if selling_nonzero.get(selling_resource, 0) < total_cost:
             return False
 
         # Execute trade
@@ -244,8 +244,12 @@ class Game:
         if any(v.owner == player for v in edge.vertices):
             return _finalise()
 
-        # Or connected to player's road
+        # Or connected to player's road WITHOUT passing through opponent settlement
         for v in edge.vertices:
+            # If vertex is occupied by another player, it blocks road continuation
+            if v.owner is not None and v.owner != player:
+                continue
+
             for connected_edge in v.edges:
                 if connected_edge is not edge and connected_edge.owner == player:
                     return _finalise()
