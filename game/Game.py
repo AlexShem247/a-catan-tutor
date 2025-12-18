@@ -386,9 +386,17 @@ class Game:
         """Return a list of players who own a settlement or city on the given hex tile."""
         return list(set([v.owner for v in hex_tile.vertices if v.owner is not None]))
 
-    def get_all_hexes(self):
+    def get_all_hexes(self) -> List[HexTile]:
         """Return a list of all hex tiles on the board."""
         return self._board.hexes
+
+    def get_all_vertices(self) -> List[Vertex]:
+        """Return a list of all vertices on the board."""
+        return self._board.vertices
+
+    def get_all_edges(self) -> List[Edge]:
+        """Return a list of all edges on the board."""
+        return self._board.edges
 
     def get_hex_tiles_with_players(self):
         """Return a list of hex tiles that have at least one player on them."""

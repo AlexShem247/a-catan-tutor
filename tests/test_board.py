@@ -3,6 +3,7 @@ import unittest
 from game.Board import Board
 from game.Game import Game
 from game.Player import Player, PlayerNumber
+from game.Resources import HexType
 
 
 class TestBoard(unittest.TestCase):
@@ -14,13 +15,13 @@ class TestBoard(unittest.TestCase):
     def test_hex_count_and_desert(self):
         # Check total number of hexes and exactly one desert
         self.assertEqual(len(self.board.hexes), len(self.board.HEX_COORDS))
-        desert_tiles = [h for h in self.board.hexes if h.type == "desert"]
+        desert_tiles = [h for h in self.board.hexes if h.type == HexType.DESERT]
         self.assertEqual(len(desert_tiles), 1)
 
     def test_production_numbers(self):
         # Non-desert tiles have valid production numbers
         for hex_tile in self.board.hexes:
-            if hex_tile.type != "desert":
+            if hex_tile.type != HexType.DESERT:
                 self.assertIn(hex_tile.production_number, range(2, 13))
             else:
                 self.assertIsNone(hex_tile.production_number)
@@ -144,7 +145,7 @@ class TestBoard(unittest.TestCase):
         # Check that there is only one robber tile initialised to the desert tile
         robber_tiles = [hex_tile for hex_tile in self.board.hexes if hex_tile.robber]
         self.assertEqual(len(robber_tiles), 1)
-        self.assertEqual(robber_tiles[0].type, "desert")
+        self.assertEqual(robber_tiles[0].type, HexType.DESERT)
 
 
 if __name__ == "__main__":

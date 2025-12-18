@@ -7,7 +7,7 @@ from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
 from game.PlayerAssets import DevelopmentCardType
-from game.Resources import Resource, ResourceCount
+from game.Resources import Resource, ResourceCount, HexType
 from game.Vertex import VertexDirection, Building, Vertex, Port
 from view.Color import Color, colorise, brighten
 
@@ -41,20 +41,20 @@ class Empty(Renderable):
 
 class DisplayHexTile(Renderable):
     COLOR_MAP = {
-        "forest": Color.DARK_GREEN,
-        "hills": Color.RED_ORANGE,
-        "pasture": Color.LIME_GREEN,
-        "fields": Color.GOLD,
-        "mountains": Color.GREY,
-        "desert": Color.BEIGE,
+        HexType.FOREST: Color.DARK_GREEN,
+        HexType.HILLS: Color.RED_ORANGE,
+        HexType.PASTURE: Color.LIME_GREEN,
+        HexType.FIELDS: Color.GOLD,
+        HexType.MOUNTAINS: Color.GREY,
+        HexType.DESERT: Color.BEIGE,
     }
 
     HEX_LABEL = {
-        "forest": "FOR",
-        "hills": "HIL",
-        "pasture": "PAS",
-        "fields": "FLD",
-        "mountains": "MTN",
+        HexType.FOREST: "FOR",
+        HexType.HILLS: "HIL",
+        HexType.PASTURE: "PAS",
+        HexType.FIELDS: "FLD",
+        HexType.MOUNTAINS: "MTN",
     }
 
     def __init__(self, hex_tile: HexTile):
@@ -62,7 +62,7 @@ class DisplayHexTile(Renderable):
 
     def render(self) -> str:
         length = 4 - len(str(self.hex_tile.production_number))
-        label = "DESRT" if self.hex_tile.type == "desert" \
+        label = "DESRT" if self.hex_tile.type == HexType.DESERT \
             else f"{self.HEX_LABEL[self.hex_tile.type][:length]}-{self.hex_tile.production_number}"
         color = self.COLOR_MAP.get(self.hex_tile.type)
         return colorise(label, color, underline=True) if color else label

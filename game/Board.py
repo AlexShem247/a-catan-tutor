@@ -7,8 +7,6 @@ from game.HexTile import HexTile, HexType
 from game.Player import Player
 from game.Vertex import Vertex, VertexDirection, Building, Port
 
-HEX_TYPES: list[HexType] = ["forest", "hills", "pasture", "fields", "mountains", "desert"]
-
 PRODUCTION_NUMBERS = [2, 3, 3, 4, 4, 5, 5, 6, 6,
                       8, 8, 9, 9, 10, 10, 11, 11, 12]
 
@@ -38,7 +36,7 @@ class Board:
         self.production_to_hex: Dict[int, List[HexTile]] = defaultdict(list)
         self.vertex_map: Dict[Tuple[int, int, VertexDirection], Vertex] = {}
         self.edge_map: Dict[Tuple[int, int, EdgeDirection], Edge] = {}
-        self.robber_position: HexTile = HexTile(0, 0, "desert")
+        self.robber_position: HexTile = HexTile(0, 0, HexType.DESERT)
 
         self.create_hexes()
         self.create_vertices()
@@ -47,12 +45,12 @@ class Board:
 
     def create_hexes(self) -> None:
         hex_types_sequence: List[HexType] = [
-            "forest", "forest", "forest", "forest",
-            "hills", "hills", "hills",
-            "pasture", "pasture", "pasture", "pasture",
-            "fields", "fields", "fields", "fields",
-            "mountains", "mountains", "mountains",
-            "desert"
+            HexType.FOREST, HexType.FOREST, HexType.FOREST, HexType.FOREST,
+            HexType.HILLS, HexType.HILLS, HexType.HILLS,
+            HexType.PASTURE, HexType.PASTURE, HexType.PASTURE, HexType.PASTURE,
+            HexType.FIELDS, HexType.FIELDS, HexType.FIELDS, HexType.FIELDS,
+            HexType.MOUNTAINS, HexType.MOUNTAINS, HexType.MOUNTAINS,
+            HexType.DESERT
         ]
 
         random.shuffle(hex_types_sequence)
@@ -61,12 +59,12 @@ class Board:
         for i, (q, r) in enumerate(self.HEX_COORDS):
             hex_type = hex_types_sequence[i]
             production_number: Optional[int] = None
-            if hex_type != "desert":
+            if hex_type != HexType.DESERT:
                 production_number = prod_numbers.pop(0)
             hex_tile = HexTile(q, r, hex_type, production_number)
             self.hexes.append(hex_tile)
             self.hex_map[(q, r)] = hex_tile
-            if hex_type == "desert":
+            if hex_type == HexType.DESERT:
                 hex_tile.robber = True
                 self.robber_position = hex_tile
             else:

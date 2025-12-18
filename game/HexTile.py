@@ -18,6 +18,6 @@ class HexTile:
         self.robber = False
 
     def __repr__(self) -> str:
-        if self.type == "desert":
+        if self.type == HexType.DESERT:
             return "DESERT"
-        return f"{self.type.upper()}({self.production_number})"
+        return f"{self.type.name.upper()}({self.production_number})"

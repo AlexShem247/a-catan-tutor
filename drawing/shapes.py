@@ -1,0 +1,248 @@
+import math
+from typing import Dict
+
+from PyQt6.QtCore import QPointF, Qt, QRect
+from PyQt6.QtGui import QPolygonF, QPixmap, QPen, QColor
+
+from drawing.constants import TERRAIN_COLORS, TOKEN_COMMON_COLOR, TOKEN_COLOR, TOKEN_OUTLINE_COLOR, EDGE_COLOR, \
+    hex_to_filepath, SETTLEMENT_ICONS, PLAYER_COLORS
+from game.HexTile import HexTile
+from game.Vertex import Vertex
+
+
+class Shape:
+    def draw(self, painter, scale, offset):
+        raise NotImplementedError
+
+
+class Circle(Shape):
+    def __init__(self, x: float, y: float, r: float, color: QColor, outline_color=None):
+        self.x = int(x)
+        self.y = int(y)
+        self.r = int(r)
+        self.color = color
+        self.outline_color = outline_color
+
+    def draw(self, painter, scale, offset):
+        # Brush = fill color
+        painter.setBrush(self.color)
+
+        # Pen = outline color if provided
+        if self.outline_color:
+            painter.setPen(QPen(self.outline_color))
+        else:
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        px = self.x * scale + offset.x()
+        py = self.y * scale + offset.y()
+        pr = self.r * scale
+
+        painter.drawEllipse(int(px - pr), int(py - pr), int(pr * 2), int(pr * 2))
+
+
+class LineShape(Shape):
+    def __init__(self, x1: float, y1: float, x2: float, y2: float, thickness: float, color: QColor):
+        """
+        x1, y1 = start point
+        x2, y2 = end point
+        thickness = line width
+        color = QColor
+        """
+        self.x1 = x1
+        self.y1 = y1
+        self.x2 = x2
+        self.y2 = y2
+        self.thickness = thickness
+        self.color = color
+
+    def draw(self, painter, scale, offset):
+        pen = QPen(self.color)
+        pen.setWidthF(self.thickness * scale)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+
+        px1 = self.x1 * scale + offset.x()
+        py1 = self.y1 * scale + offset.y()
+        px2 = self.x2 * scale + offset.x()
+        py2 = self.y2 * scale + offset.y()
+
+        painter.drawLine(int(px1), int(py1), int(px2), int(py2))
+
+
+class Rectangle(Shape):
+    def __init__(self, x: float, y: float, w: float, h: float, color: QColor):
+        self.x = int(x)
+        self.y = int(y)
+        self.w = w
+        self.h = h
+        self.color = color
+
+    def draw(self, painter, scale, offset):
+        painter.setBrush(self.color)
+        painter.setPen(Qt.PenStyle.NoPen)
+        px = self.x * scale + offset.x()
+        py = self.y * scale + offset.y()
+        pw = self.w * scale
+        ph = self.h * scale
+        painter.drawRect(int(px), int(py), int(pw), int(ph))
+
+
+class TextShape(Shape):
+    def __init__(self, x: float, y: float, text: str, color: QColor, font_size=20):
+        self.x = int(x)
+        self.y = int(y)
+        self.text = text
+        self.color = color
+        self.font_size = font_size
+
+    def draw(self, painter, scale, offset):
+        painter.setPen(self.color)
+        font = painter.font()
+        font.setPointSizeF(self.font_size * scale)
+        painter.setFont(font)
+
+        px = self.x * scale + offset.x()
+        py = self.y * scale + offset.y()
+
+        # Create a square QRect around the position
+        size = self.font_size * 2 * scale  # approximate bounding box
+        rect = QRect(int(px - size / 2), int(py - size / 2), int(size), int(size))
+
+        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, self.text)
+
+
+class Hexagon(Shape):
+    def __init__(self, x: float, y: float, radius: float, color: QColor):
+        """
+        x, y = center of the hexagon in world coordinates
+        radius = distance from center to any vertex
+        color = QColor
+        """
+        self.x = int(x)
+        self.y = int(y)
+        self.radius = int(radius)
+        self.color = color
+
+    def draw(self, painter, scale, offset):
+        painter.setBrush(self.color)
+        painter.setPen(Qt.PenStyle.NoPen)
+
+        # Scale size
+        s = self.radius * scale
+        cx = self.x * scale + offset.x()
+        cy = self.y * scale + offset.y()
+
+        # Calculate the 6 points (pointing up)
+        points = []
+        for i in range(6):
+            angle_deg = 60 * i - 30  # -30 so the first point is top
+            angle_rad = math.radians(angle_deg)
+            px = cx + s * math.cos(angle_rad)
+            py = cy + s * math.sin(angle_rad)
+            points.append(QPointF(px, py))
+
+        polygon = QPolygonF(points)
+        painter.drawPolygon(polygon)
+
+
+class PixmapShape(Shape):
+    def __init__(self, x: float, y: float, width: float, height: float, pixmap: QPixmap):
+        """
+        x, y = center of the pixmap in world coordinates
+        width, height = size of the pixmap in world units
+        pixmap = QPixmap to draw
+        """
+        self.x = int(x)
+        self.y = int(y)
+        self.width = int(width)
+        self.height = int(height)
+        self.pixmap = pixmap
+
+    def draw(self, painter, scale, offset):
+        # Scale width and height
+        w = self.width * scale
+        h = self.height * scale
+
+        # Top-left position for centering
+        px = self.x * scale + offset.x() - w / 2
+        py = self.y * scale + offset.y() - h / 2
+
+        # Draw scaled pixmap
+        painter.drawPixmap(
+            int(px),
+            int(py),
+            self.pixmap.scaled(
+                int(w),
+                int(h),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+        )
+
+
+class HexTileShape(Shape):
+    def __init__(self, x: float, y: float, radius: float, tile: HexTile, icons: Dict[str, QPixmap]):
+        """
+        x, y = center of hex
+        radius = hex radius
+        tile = HexTile
+        icon = QPixmap icon for tile resource
+        """
+        self.shapes = []
+
+        # Hexagon
+        self.shapes.append(Hexagon(x, y, radius, TERRAIN_COLORS[tile.type]))
+
+        # Icon
+        icon_size = radius * 0.75
+        vertical_offset = -0.4 * radius
+        self.shapes.append(PixmapShape(x, y + vertical_offset, icon_size, icon_size, icons[hex_to_filepath(tile.type)]))
+
+        # Token
+        if tile.production_number:
+            token_offset_y = 0.35 * radius
+            cx = x
+            cy = y + token_offset_y
+            token_radius = radius * 0.3
+
+            # Token background
+            self.shapes.append(Circle(cx, cy, token_radius, TOKEN_COLOR, TOKEN_OUTLINE_COLOR))
+
+            # Number
+            colour = TOKEN_COMMON_COLOR if tile.production_number in (6, 8) else TOKEN_OUTLINE_COLOR
+            self.shapes.append(TextShape(cx, cy - 5, str(tile.production_number), colour))
+
+            # Frequency dots
+            dots_map = {
+                2: 1, 3: 2, 4: 3, 5: 4, 6: 5,
+                8: 5, 9: 4, 10: 3, 11: 2, 12: 1
+            }
+            dots = dots_map.get(tile.production_number, 0)
+            if dots > 0:
+                spacing = 0.2 * token_radius
+                total_width = (dots - 1) * spacing
+                dot_radius = 0.08 * token_radius
+                for i in range(dots):
+                    dx = cx - total_width / 2 + i * spacing
+                    dy = cy + 0.5 * token_radius
+                    self.shapes.append(Circle(dx, dy, dot_radius, colour))
+
+    def draw(self, painter, scale, offset):
+        for shape in self.shapes:
+            shape.draw(painter, scale, offset)
+
+
+class VertexShape(Shape):
+    def __init__(self, x: float, y: float, radius: float, vertex: Vertex, icons: dict):
+        self.shapes = []
+
+        if vertex.building and vertex.owner:
+            pixmap = icons[SETTLEMENT_ICONS[vertex.owner.playerNumber, vertex.building]]
+            icon_size = 3.0 * radius
+            self.shapes.append(PixmapShape(x, y, icon_size, icon_size, pixmap))
+        else:
+            self.shapes.append(Circle(x, y, radius, EDGE_COLOR))
+
+    def draw(self, painter, scale, offset):
+        for shape in self.shapes:
+            shape.draw(painter, scale, offset)
