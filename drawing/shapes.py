@@ -1,11 +1,12 @@
 import math
+from collections import Counter
 from typing import Dict
 
 from PyQt6.QtCore import QPointF, Qt, QRect
 from PyQt6.QtGui import QPolygonF, QPixmap, QPen, QColor
 
 from drawing.constants import TERRAIN_COLORS, TOKEN_COMMON_COLOR, TOKEN_COLOR, TOKEN_OUTLINE_COLOR, EDGE_COLOR, \
-    hex_to_filepath, SETTLEMENT_ICONS, PLAYER_COLORS
+    hex_to_filepath, SETTLEMENT_ICONS, PLAYER_COLORS, ROBBER_ICON
 from game.HexTile import HexTile
 from game.Vertex import Vertex
 
@@ -199,7 +200,7 @@ class HexTileShape(Shape):
         self.shapes.append(PixmapShape(x, y + vertical_offset, icon_size, icon_size, icons[hex_to_filepath(tile.type)]))
 
         # Token
-        if tile.production_number:
+        if tile.production_number or tile.robber:
             token_offset_y = 0.35 * radius
             cx = x
             cy = y + token_offset_y
@@ -208,24 +209,28 @@ class HexTileShape(Shape):
             # Token background
             self.shapes.append(Circle(cx, cy, token_radius, TOKEN_COLOR, TOKEN_OUTLINE_COLOR))
 
-            # Number
-            colour = TOKEN_COMMON_COLOR if tile.production_number in (6, 8) else TOKEN_OUTLINE_COLOR
-            self.shapes.append(TextShape(cx, cy - 5, str(tile.production_number), colour))
+            if tile.robber:
+                shape_radius = 1.8 * token_radius
+                self.shapes.append(PixmapShape(cx, cy, shape_radius, shape_radius, icons[ROBBER_ICON]))
+            if tile.production_number and not tile.robber:
+                # Number
+                colour = TOKEN_COMMON_COLOR if tile.production_number in (6, 8) else TOKEN_OUTLINE_COLOR
+                self.shapes.append(TextShape(cx, cy - 5, str(tile.production_number), colour))
 
-            # Frequency dots
-            dots_map = {
-                2: 1, 3: 2, 4: 3, 5: 4, 6: 5,
-                8: 5, 9: 4, 10: 3, 11: 2, 12: 1
-            }
-            dots = dots_map.get(tile.production_number, 0)
-            if dots > 0:
-                spacing = 0.2 * token_radius
-                total_width = (dots - 1) * spacing
-                dot_radius = 0.08 * token_radius
-                for i in range(dots):
-                    dx = cx - total_width / 2 + i * spacing
-                    dy = cy + 0.5 * token_radius
-                    self.shapes.append(Circle(dx, dy, dot_radius, colour))
+                # Frequency dots
+                dots_map = {
+                    2: 1, 3: 2, 4: 3, 5: 4, 6: 5,
+                    8: 5, 9: 4, 10: 3, 11: 2, 12: 1
+                }
+                dots = dots_map.get(tile.production_number, 0)
+                if dots > 0:
+                    spacing = 0.2 * token_radius
+                    total_width = (dots - 1) * spacing
+                    dot_radius = 0.08 * token_radius
+                    for i in range(dots):
+                        dx = cx - total_width / 2 + i * spacing
+                        dy = cy + 0.5 * token_radius
+                        self.shapes.append(Circle(dx, dy, dot_radius, colour))
 
     def draw(self, painter, scale, offset):
         for shape in self.shapes:
@@ -238,10 +243,15 @@ class VertexShape(Shape):
 
         if vertex.building and vertex.owner:
             pixmap = icons[SETTLEMENT_ICONS[vertex.owner.playerNumber, vertex.building]]
-            icon_size = 3.0 * radius
+            icon_size = 4.0 * radius
             self.shapes.append(PixmapShape(x, y, icon_size, icon_size, pixmap))
         else:
-            self.shapes.append(Circle(x, y, radius, EDGE_COLOR))
+            color = next(
+                (PLAYER_COLORS[p.playerNumber] for p, c in Counter(e.owner for e in vertex.edges if e.owner).items() if
+                 c >= 2),
+                EDGE_COLOR
+            )
+            self.shapes.append(Circle(x, y, radius, color))
 
     def draw(self, painter, scale, offset):
         for shape in self.shapes:

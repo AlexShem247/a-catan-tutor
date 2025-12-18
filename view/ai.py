@@ -3,6 +3,7 @@ from math import ceil
 from typing import Optional, List, Tuple
 
 from GameController import GameController
+from drawing.View import View
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
@@ -22,14 +23,15 @@ ACCEPT_PROBABILITY_BY_OVERCOST = {  # Counter trades probabilities
 }
 
 
-def random_initial_settlement_placement(player: Player, controller: GameController):
+def random_initial_settlement_placement(player: Player, controller: GameController, _: View):
     """Choose a valid random vertex for settlement."""
     available_vertices = controller.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
 
     return random.choice(available_vertices) if available_vertices else None
 
 
-def random_initial_road_placement(player: Player, controller: GameController, settlement: Optional[Vertex] = None):
+def random_initial_road_placement(player: Player, controller: GameController, _: View,
+                                  settlement: Optional[Vertex] = None):
     """
     Choose a valid edge connected to the given settlement.
     Picks a random edge adjacent to the settlement where a road can be built.
@@ -257,7 +259,7 @@ def ai_attempt_build(player: Player, controller: GameController, action: Buildab
     return msg
 
 
-def make_round_move_ai(player: Player, controller: GameController):
+def make_round_move_ai(player: Player, controller: GameController, view: View):
     """AI turn: decides what to build, trades if helpful, then attempts the build."""
     used_dev_card = False
     card_msg = ""
@@ -288,6 +290,7 @@ def make_round_move_ai(player: Player, controller: GameController):
     # 5. Display results
     clear_screen()
     display_board(controller.get_game_state())
+    view.display_board(controller.get_game_state())
 
     print(f"\n--- {player.name}'s turn (AI) ---\n")
     print(f"{player.name} rolled {d1} + {d2} = {total}")
@@ -349,12 +352,12 @@ def trade_manager_ai(player: Player, selling: ResourceCount, buying: ResourceCou
     return False, None
 
 
-def robber_discard_ai(player: Player, _: GameController, num_resources: int, __: bool) -> ResourceCount:
+def robber_discard_ai(player: Player, _: GameController, __: View, num_resources: int, ___: bool) -> ResourceCount:
     """Handle a robber discard by selecting and returning a resource to discard."""
     return pick_random_resources(player.resources, num_resources)
 
 
-def place_robber_ai(player: Player, controller: GameController) -> Tuple[HexTile, Optional[Player]]:
+def place_robber_ai(player: Player, controller: GameController, _: View) -> Tuple[HexTile, Optional[Player]]:
     """AI chooses a hex with players and randomly steals from one of them."""
     # Exclude the hex that already has the robber
     valid_hexes = [

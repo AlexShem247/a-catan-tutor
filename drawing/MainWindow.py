@@ -24,12 +24,9 @@ class MainWindow(QMainWindow):
 
         # Side panel
         side_panel = QWidget()
-        side_panel.setFixedWidth(300)
+        side_panel.setFixedWidth(100)
         side_layout = QVBoxLayout(side_panel)
         side_layout.addWidget(QPushButton("Button 1"))
         side_layout.addWidget(QPushButton("Button 2"))
         side_layout.addStretch()
         h_layout.addWidget(side_panel)
-
-        # Display board
-        self.canvas.display_board(self.controller.get_game_state())

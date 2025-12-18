@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import QWidget
 
 from drawing.board_geometry import hex_center, vertex_xy
 from drawing.constants import WINDOW_HEIGHT, BOARD_BG_COLOR, HEX_TILE_RADIUS, SETTLEMENT_ICONS, hex_to_filepath, \
-    EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE
+    EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON
 from drawing.shapes import HexTileShape, Circle, VertexShape, LineShape
 from game import Game
 from game.Resources import HexType
@@ -46,6 +46,7 @@ class SquareCanvas(QWidget):
             pm = QPixmap(path)
             if not pm.isNull():
                 self.icons[path] = pm
+        self.icons[ROBBER_ICON] = QPixmap(ROBBER_ICON)
 
     def sizeHint(self):
         return QSize(WINDOW_HEIGHT, WINDOW_HEIGHT)

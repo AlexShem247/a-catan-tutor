@@ -1,6 +1,7 @@
 from typing import List, Optional, Tuple
 
 from GameController import GameController
+from drawing.View import View
 from game.Board import Board
 from game.Edge import EdgeDirection, Edge
 from game.Game import Game
@@ -13,13 +14,14 @@ from view.display import display_board, clear_screen, get_player_lead_status, di
     format_counter_offer
 
 
-def initial_settlement_placement(player: Player, controller: GameController) -> Vertex:
+def initial_settlement_placement(player: Player, controller: GameController, view: View) -> Vertex:
     """Prompt the user to enter a vertex for a settlement."""
     error_msg = None
     while True:
         try:
             clear_screen()
             display_board(controller.get_game_state())
+            view.display_board(controller.get_game_state())
             print(f"\n--- {player.name}'s placement turn ---\n")
             if error_msg:
                 print(error_msg)
@@ -47,13 +49,15 @@ def initial_settlement_placement(player: Player, controller: GameController) -> 
             error_msg = "Invalid input. Format: x y DIRECTION (e.g. 0 2 TOP_RIGHT)"
 
 
-def initial_road_placement(player: Player, controller: GameController, settlement: Optional[Vertex] = None) -> Edge:
+def initial_road_placement(player: Player, controller: GameController, view: View,
+                           settlement: Optional[Vertex] = None) -> Edge:
     """Prompt the user to enter an edge for a road, validating via game rules."""
     error_msg = None
     while True:
         try:
             clear_screen()
             display_board(controller.get_game_state())
+            view.display_board(controller.get_game_state())
             print(f"\n--- {player.name}'s road placement turn ---\n")
             if error_msg:
                 print(error_msg)
@@ -119,12 +123,13 @@ def play_dev_card_menu(player: Player, controller: GameController) -> bool:
     return used_dev_card
 
 
-def make_round_move(player: Player, controller: GameController):
+def make_round_move(player: Player, controller: GameController, view: View):
     """Handle a full turn for a human player, including dice roll, resource display, and building actions."""
 
     # Pre-roll development cards
     clear_screen()
     display_board(controller.get_game_state())
+    view.display_board(controller.get_game_state())
     print(f"\n--- {player.name}'s turn (Pre-Roll) ---\n")
     print("Your resources:")
     display_resources(player.resources)
@@ -136,6 +141,7 @@ def make_round_move(player: Player, controller: GameController):
     while True:
         clear_screen()
         display_board(controller.get_game_state())
+        view.display_board(controller.get_game_state())
         print(f"\n--- {player.name}'s turn ---\n")
         print(f"Dice rolled: {d1} + {d2} = {total}")
 
@@ -191,7 +197,7 @@ def make_round_move(player: Player, controller: GameController):
             break
 
         if choice == "2":
-            trading_menu(player, controller)
+            trading_menu(player, controller, view)
 
         elif choice.isnumeric() and 3 <= int(choice) < dc_option_index and choice in options:
             # Determine which build action
@@ -248,7 +254,7 @@ def make_round_move(player: Player, controller: GameController):
             error_msg = "Invalid option. Try again."
 
 
-def select_player_to_trade(controller: GameController, player: Player, original_offer: ResourceCount,
+def select_player_to_trade(controller: GameController, player: Player, view: View, original_offer: ResourceCount,
                            willing_players: List[Tuple[Player, Optional[ResourceCount]]]
                            ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
     """
@@ -258,6 +264,7 @@ def select_player_to_trade(controller: GameController, player: Player, original_
     """
     clear_screen()
     display_board(controller.get_game_state())
+    view.display_board(controller.get_game_state())
     print(f"\n--- {player.name}'s Trading Menu ---\n")
 
     if not willing_players:
@@ -310,7 +317,7 @@ def select_player_to_trade(controller: GameController, player: Player, original_
         print("Invalid choice, please enter a number from the list of affordable trades.")
 
 
-def trading_menu(player: Player, controller: GameController):
+def trading_menu(player: Player, controller: GameController, view: View):
     """Display trading menu, allow bank or player trades, auto-return after trade or cancel."""
     selling: ResourceCount = {res: 0 for res in Resource}
     buying: ResourceCount = {res: 0 for res in Resource}
@@ -318,6 +325,7 @@ def trading_menu(player: Player, controller: GameController):
     while True:
         clear_screen()
         display_board(controller.get_game_state())
+        view.display_board(controller.get_game_state())
         print(f"\n--- {player.name}'s Trading Menu ---\n")
 
         # Print current trading hand
@@ -388,7 +396,7 @@ def trading_menu(player: Player, controller: GameController):
         elif option == "4":
             # Trade with players
             willing_players = controller.trade_with_players(player, selling, buying)
-            deal = select_player_to_trade(controller, player, selling, willing_players)
+            deal = select_player_to_trade(controller, player, view, selling, willing_players)
 
             if deal is not None:
                 buying_player, counter = deal
@@ -412,7 +420,7 @@ def trading_menu(player: Player, controller: GameController):
             input()
 
 
-def trade_manager(controller: GameController, player: Player, selling: ResourceCount,
+def trade_manager(controller: GameController, player: Player, view: View, selling: ResourceCount,
                   buying: ResourceCount, selling_player: Player) -> Tuple[bool, Optional[ResourceCount]]:
     """Display AI trade and give options to accept or reject, only if player can afford it."""
 
@@ -420,6 +428,7 @@ def trade_manager(controller: GameController, player: Player, selling: ResourceC
     if not all(player.resources.get(res, 0) >= amt for res, amt in buying.items()):
         clear_screen()
         display_board(controller.get_game_state())
+        view.display_board(controller.get_game_state())
         display_trade_offer(controller.get_game_state(), selling_player, selling, buying, player)
         print("\nYou do not have the required resources for this trade.")
         input("Press enter to continue...")
@@ -430,6 +439,7 @@ def trade_manager(controller: GameController, player: Player, selling: ResourceC
     while True:
         clear_screen()
         display_board(controller.get_game_state())
+        view.display_board(controller.get_game_state())
         display_trade_offer(controller.get_game_state(), selling_player, counter_offer, buying, player)
 
         print("\nOptions:")
@@ -485,6 +495,7 @@ def trade_manager(controller: GameController, player: Player, selling: ResourceC
 def choose_resources(
         *,
         controller: GameController,
+        view: View,
         num_resources: int,
         title: str,
         resource_caps: dict[Resource, int] | None = None
@@ -502,6 +513,7 @@ def choose_resources(
         remaining = num_resources - sum(chosen.values())
         clear_screen()
         display_board(controller.get_game_state())
+        view.display_board(controller.get_game_state())
 
         print(f"\n{title}")
         print(f"You need to select {remaining} more resource{'s' if remaining > 1 else ''}.\n")
@@ -534,6 +546,7 @@ def choose_resources(
 def robber_discard(
         player: Player,
         controller: GameController,
+        view: View,
         num_resources: int,
         steal: bool
 ) -> ResourceCount:
@@ -543,26 +556,29 @@ def robber_discard(
 
     return choose_resources(
         controller=controller,
+        view=view,
         num_resources=num_resources,
         title="The robber has been moved to your tile!" if steal else "The robber has been rolled!",
         resource_caps=player.resources
     )
 
 
-def year_of_plenty_selection(controller: GameController) -> ResourceCount:
+def year_of_plenty_selection(controller: GameController, view: View,) -> ResourceCount:
     """Let player choose two resources from the bank."""
     return choose_resources(
         controller=controller,
+        view=view,
         num_resources=2,
         title="Year of Plenty: choose any two resources from the bank.",
         resource_caps=controller.get_bank_resources()
     )
 
 
-def monopoly_selection(controller: GameController) -> Resource:
+def monopoly_selection(controller: GameController, view: View) -> Resource:
     """Let player choose one resource from the other players."""
     chosen = choose_resources(
         controller=controller,
+        view=view,
         num_resources=1,
         title="Monopoly: choose a resource to get from the other players.",
         resource_caps={res: 1 for res in Resource}
@@ -571,13 +587,14 @@ def monopoly_selection(controller: GameController) -> Resource:
     return next(iter(chosen.keys()))
 
 
-def place_robber(player: Player, controller: GameController) -> Tuple[HexTile, Optional[Player]]:
+def place_robber(player: Player, controller: GameController, view: View) -> Tuple[HexTile, Optional[Player]]:
     """Prompt the player to select a hex tile to move the robber, and pick a player to steal from if possible."""
     error_msg = None
     while True:
         try:
             clear_screen()
             display_board(controller.get_game_state())
+            view.display_board(controller.get_game_state())
             print(f"\n--- {player.name}'s Robber Move ---\n")
             print("Your resources:")
             display_resources(player.resources)

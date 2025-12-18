@@ -36,6 +36,7 @@ RESOURCE_ICONS: Dict[Resource, str] = {
 }
 
 DESERT_ICON = "assets/cactus.png"
+ROBBER_ICON = "assets/robber.png"
 
 PLAYER_COLORS: Dict[PlayerNumber, QColor] = {
     PlayerNumber.P1: QColor(0, 0, 255),
