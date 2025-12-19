@@ -207,12 +207,14 @@ class HexTileShape(Shape):
             cy = y + token_offset_y
             token_radius = radius * 0.3
 
+            if tile.production_number:
+                # Token background
+                self.shapes.append(Circle(cx, cy, token_radius, TOKEN_COLOR, TOKEN_OUTLINE_COLOR))
+
             if tile.robber:
                 shape_radius = 1.8 * token_radius
                 self.shapes.append(PixmapShape(cx, cy, shape_radius, shape_radius, icons[ROBBER_ICON]))
             if tile.production_number and not tile.robber:
-                # Token background
-                self.shapes.append(Circle(cx, cy, token_radius, TOKEN_COLOR, TOKEN_OUTLINE_COLOR))
 
                 # Number
                 colour = TOKEN_COMMON_COLOR if tile.production_number in (6, 8) else TOKEN_OUTLINE_COLOR

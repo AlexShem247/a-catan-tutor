@@ -199,6 +199,7 @@ class SquareCanvas(QWidget):
 
     def clear_interactives(self):
         self.interactive_shapes.clear()
+        self.shapes = [shape for shape in self.shapes if not isinstance(shape, InteractiveShape)]
         self.hovered_shape = None
 
     def screen_to_world(self, pos):

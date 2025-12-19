@@ -1,5 +1,7 @@
+from PyQt6 import uic
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton
+    QMainWindow, QWidget, QHBoxLayout, QSplitter
 )
 
 from GameController import GameController
@@ -8,25 +10,40 @@ from drawing.SquareCanvas import SquareCanvas
 
 class MainWindow(QMainWindow):
 
+    SIDE_PANEL_WIDTH = 320
+
     def __init__(self, controller: GameController):
         super().__init__()
         self.setWindowTitle("Settlers of Catan")
+
         self.controller = controller
 
-        central = QWidget()
+        # Central widget
+        central = QWidget(self)
         self.setCentralWidget(central)
 
-        h_layout = QHBoxLayout(central)
+        layout = QHBoxLayout(central)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # Splitter
+        splitter = QSplitter(Qt.Orientation.Horizontal, self)
+        layout.addWidget(splitter)
 
         # Canvas
         self.canvas = SquareCanvas()
-        h_layout.addWidget(self.canvas)
+        splitter.addWidget(self.canvas)
 
         # Side panel
-        side_panel = QWidget()
-        side_panel.setFixedWidth(100)
-        side_layout = QVBoxLayout(side_panel)
-        side_layout.addWidget(QPushButton("Button 1"))
-        side_layout.addWidget(QPushButton("Button 2"))
-        side_layout.addStretch()
-        h_layout.addWidget(side_panel)
+        self.side_panel = uic.loadUi("drawing/ui/main_menu.ui")
+        self.side_panel.setMinimumWidth(0)
+        self.side_panel.setMaximumWidth(self.SIDE_PANEL_WIDTH*2)
+        splitter.addWidget(self.side_panel)
+
+        splitter.setSizes([
+            1000,
+            self.SIDE_PANEL_WIDTH
+        ])
+
+        # Prevent canvas from being squashed too much
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 0)

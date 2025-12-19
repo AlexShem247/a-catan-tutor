@@ -45,6 +45,7 @@ class Game:
     def roll_dice(self) -> tuple[int, int, int]:
         """Roll two dice and distribute resources to players."""
         d1, d2 = randint(1, 6), randint(1, 6)
+        d1, d2 = 3, 4
         total = d1 + d2
 
         # 1. Aggregate production demands per player per resource
