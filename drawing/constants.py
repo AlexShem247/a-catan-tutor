@@ -14,8 +14,11 @@ EDGE_COLOR = QColor(240, 220, 170)
 ROAD_THICKNESS = 10
 VERTEX_SIZE = 15
 
+OUTLINE_COLOR = QColor(Qt.GlobalColor.black)
+HIGHLIGHT_COLOR = QColor(Qt.GlobalColor.yellow)
+
 TOKEN_COLOR = QColor(Qt.GlobalColor.white)
-TOKEN_OUTLINE_COLOR = QColor(Qt.GlobalColor.black)
+TOKEN_OUTLINE_COLOR = OUTLINE_COLOR
 TOKEN_COMMON_COLOR = QColor(Qt.GlobalColor.red)
 
 TERRAIN_COLORS: Dict[HexType, QColor] = {

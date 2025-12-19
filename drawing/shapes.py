@@ -206,13 +206,13 @@ class HexTileShape(Shape):
             cy = y + token_offset_y
             token_radius = radius * 0.3
 
-            # Token background
-            self.shapes.append(Circle(cx, cy, token_radius, TOKEN_COLOR, TOKEN_OUTLINE_COLOR))
-
             if tile.robber:
                 shape_radius = 1.8 * token_radius
                 self.shapes.append(PixmapShape(cx, cy, shape_radius, shape_radius, icons[ROBBER_ICON]))
             if tile.production_number and not tile.robber:
+                # Token background
+                self.shapes.append(Circle(cx, cy, token_radius, TOKEN_COLOR, TOKEN_OUTLINE_COLOR))
+
                 # Number
                 colour = TOKEN_COMMON_COLOR if tile.production_number in (6, 8) else TOKEN_OUTLINE_COLOR
                 self.shapes.append(TextShape(cx, cy - 5, str(tile.production_number), colour))
@@ -256,3 +256,58 @@ class VertexShape(Shape):
     def draw(self, painter, scale, offset):
         for shape in self.shapes:
             shape.draw(painter, scale, offset)
+
+
+class InteractiveShape(Shape):
+    def __init__(self, payload=None):
+        self.payload = payload
+        self.hovered = False
+
+    def contains(self, wx: float, wy: float) -> bool:
+        """World-space hit test"""
+        raise NotImplementedError
+
+    def set_hover(self, hovered: bool):
+        self.hovered = hovered
+
+
+class InteractiveCircle(InteractiveShape):
+    def __init__(self, x: float, y: float, r: float, color: QColor, outline_color=None, payload=None,
+                 normal_alpha=90, hover_alpha=180):
+        super().__init__(payload)
+
+        self.x = float(x)
+        self.y = float(y)
+        self.r = float(r)
+
+        self.base_color = QColor(color)
+        self.outline_color = outline_color
+
+        self.normal_alpha = normal_alpha
+        self.hover_alpha = hover_alpha
+
+        self.color = QColor(self.base_color)
+        self.color.setAlpha(self.normal_alpha)
+
+    def set_hover(self, hovered: bool):
+        super().set_hover(hovered)
+        self.color.setAlpha(self.hover_alpha if hovered else self.normal_alpha)
+
+    def contains(self, wx: float, wy: float) -> bool:
+        dx = wx - self.x
+        dy = wy - self.y
+        return dx * dx + dy * dy <= self.r * self.r
+
+    def draw(self, painter, scale, offset):
+        painter.setBrush(self.color)
+
+        if self.outline_color:
+            painter.setPen(QPen(self.outline_color))
+        else:
+            painter.setPen(Qt.PenStyle.NoPen)
+
+        px = self.x * scale + offset.x()
+        py = self.y * scale + offset.y()
+        pr = self.r * scale
+
+        painter.drawEllipse(int(px - pr), int(py - pr), int(pr * 2), int(pr * 2))

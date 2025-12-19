@@ -1,88 +1,52 @@
 from typing import List, Optional, Tuple
 
 from GameController import GameController
-from drawing.View import View
+from drawing.View import View, select_blocking
 from game.Board import Board
-from game.Edge import EdgeDirection, Edge
+from game.Edge import Edge
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
-from game.Vertex import VertexDirection, Vertex
+from game.Vertex import Vertex
 from view.display import display_board, clear_screen, get_player_lead_status, display_resources, display_trade_offer, \
     format_counter_offer
 
 
 def initial_settlement_placement(player: Player, controller: GameController, view: View) -> Vertex:
-    """Prompt the user to enter a vertex for a settlement."""
-    error_msg = None
+    """Human selects a vertex for initial settlement placement."""
+
     while True:
-        try:
-            clear_screen()
-            display_board(controller.get_game_state())
-            view.display_board(controller.get_game_state())
-            print(f"\n--- {player.name}'s placement turn ---\n")
-            if error_msg:
-                print(error_msg)
+        view.display_board(controller.get_game_state())
 
-            coords = input("Enter vertex coordinates (x y) and direction (TOP, TOP_RIGHT, TOP_LEFT, etc.): ")
-            x_str, y_str, dir_str = coords.strip().split()
-            x, y = int(x_str), int(y_str)
-            if dir_str.isdigit():
-                direction = VertexDirection(int(dir_str))
-            else:
-                direction = VertexDirection[dir_str.upper()]
-            if (x, y) not in Board.HEX_COORDS:
-                error_msg = f"Invalid Coordinate ({x}, {y})"
-                continue
-            vertex = controller.get_vertex(x, y, direction)
+        vertices = controller.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
+        vertex = select_blocking(view, view.draw_selectable_vertices, vertices)
 
-            # Validate placement via Game
-            success, msg = controller.try_build_settlement(player, vertex, use_resources=False, road_restriction=False)
-            if success:
-                return vertex
-            else:
-                error_msg = msg
+        success, msg = controller.try_build_settlement(player, vertex, use_resources=False, road_restriction=False)
 
-        except (ValueError, KeyError):
-            error_msg = "Invalid input. Format: x y DIRECTION (e.g. 0 2 TOP_RIGHT)"
+        if success:
+            return vertex
 
 
 def initial_road_placement(player: Player, controller: GameController, view: View,
                            settlement: Optional[Vertex] = None) -> Edge:
-    """Prompt the user to enter an edge for a road, validating via game rules."""
-    error_msg = None
+    """Human selects an edge for initial road placement."""
+
     while True:
-        try:
-            clear_screen()
-            display_board(controller.get_game_state())
-            view.display_board(controller.get_game_state())
-            print(f"\n--- {player.name}'s road placement turn ---\n")
-            if error_msg:
-                print(error_msg)
+        view.display_board(controller.get_game_state())
 
-            coords = input("Enter edge coordinates (x y) and direction (NORTH_WEST, EAST, etc.): ")
-            x_str, y_str, dir_str = coords.strip().split()
-            x, y = int(x_str), int(y_str)
-            if (x, y) not in Board.HEX_COORDS:
-                error_msg = f"Invalid Coordinate ({x}, {y})"
-                continue
-            if dir_str.isdigit():
-                direction = EdgeDirection(int(dir_str))
-            else:
-                direction = EdgeDirection[dir_str.upper()]
-            edge = controller.get_edge(x, y, direction)
+        edges = controller.get_available_edges(player)
+        if settlement is not None:
+            # Restrict edges to be directly connected to settlement
+            edges = [edge for edge in edges if settlement in edge.vertices]
 
-            # Validate placement via Game
-            success, msg = controller.try_build_road(player, edge, on_vertex=settlement, use_resources=False)
-            if success:
-                return edge
-            else:
-                error_msg = msg
+        edge = select_blocking(view, view.draw_selectable_edges, edges)
 
-        except (ValueError, KeyError):
-            error_msg = "Invalid input. Format: x y DIRECTION (e.g. 0 2 EAST)"
+        success, msg = controller.try_build_road(player, edge, on_vertex=settlement, use_resources=False)
+
+        if success:
+            return edge
 
 
 def play_dev_card_menu(player: Player, controller: GameController) -> bool:

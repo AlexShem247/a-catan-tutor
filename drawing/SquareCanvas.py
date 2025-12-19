@@ -1,19 +1,21 @@
-import math
-from typing import Dict
+from typing import Dict, List
 
-from PyQt6.QtCore import Qt, QRect, QPointF, QSize
+from PyQt6.QtCore import Qt, QRect, QPointF, QSize, pyqtSignal
 from PyQt6.QtGui import QPainter, QCursor, QPixmap
 from PyQt6.QtWidgets import QWidget
 
 from drawing.board_geometry import hex_center, vertex_xy
 from drawing.constants import WINDOW_HEIGHT, BOARD_BG_COLOR, HEX_TILE_RADIUS, SETTLEMENT_ICONS, hex_to_filepath, \
-    EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON
-from drawing.shapes import HexTileShape, Circle, VertexShape, LineShape
+    EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON, HIGHLIGHT_COLOR, OUTLINE_COLOR
+from drawing.shapes import HexTileShape, VertexShape, LineShape, InteractiveShape, InteractiveCircle
 from game import Game
+from game.Edge import Edge
 from game.Resources import HexType
 
 
 class SquareCanvas(QWidget):
+    selectionMade = pyqtSignal(object)
+
     def __init__(self):
         super().__init__()
         self.square_rect = None
@@ -33,6 +35,8 @@ class SquareCanvas(QWidget):
 
         # List of shapes
         self.shapes = []
+        self.interactive_shapes: List[InteractiveShape] = []
+        self.hovered_shape: InteractiveShape | None = None
 
         # Load icons
         self.icons: Dict[str, QPixmap] = {}
@@ -75,19 +79,48 @@ class SquareCanvas(QWidget):
             self.offset.setY(min(max(self.offset.y(), min_y), max_y))
 
     def mousePressEvent(self, event):
-        if (event.button() == Qt.MouseButton.LeftButton
-                and self.zoom > self.min_zoom
-                and self.square_rect.contains(event.position().toPoint())):
-            self.dragging = True
-            self.last_mouse_pos = event.position()
-            self.setCursor(QCursor(Qt.CursorShape.ClosedHandCursor))
+        if event.button() == Qt.MouseButton.LeftButton:
+
+            # Manage object selection
+            wx, wy = self.screen_to_world(event.position())
+            for shape in self.interactive_shapes:
+                if shape.contains(wx, wy):
+                    self.selectionMade.emit(shape.payload)
+                    return
+
+            # Manage zoom-in
+            if (self.zoom > self.min_zoom
+                    and self.square_rect.contains(event.position().toPoint())):
+                self.dragging = True
+                self.last_mouse_pos = event.position()
+                self.setCursor(QCursor(Qt.CursorShape.ClosedHandCursor))
 
     def mouseMoveEvent(self, event):
+        # Handle dragging
         if self.dragging:
             delta = event.position() - self.last_mouse_pos
             self.offset += delta
             self.last_mouse_pos = event.position()
             self.clamp_offset()
+            self.update()
+            return
+
+        # Hover detection (only when not dragging)
+        wx, wy = self.screen_to_world(event.position())
+
+        new_hover = None
+        for shape in self.interactive_shapes:
+            if shape.contains(wx, wy):
+                new_hover = shape
+                break
+
+        if new_hover != self.hovered_shape:
+            if self.hovered_shape:
+                self.hovered_shape.set_hover(False)
+            if new_hover:
+                new_hover.set_hover(True)
+
+            self.hovered_shape = new_hover
             self.update()
 
     def mouseReleaseEvent(self, event):
@@ -149,24 +182,66 @@ class SquareCanvas(QWidget):
         for shape in self.shapes:
             shape.draw(painter, scale, self.offset)
 
+    def clear_interactives(self):
+        self.interactive_shapes.clear()
+        self.hovered_shape = None
+
+    def screen_to_world(self, pos):
+        scale = self.base_scale * self.zoom
+        wx = (pos.x() - self.offset.x()) / scale
+        wy = (pos.y() - self.offset.y()) / scale
+        return wx, wy
+
     def display_board(self, game: Game):
         self.clear_shapes()
 
         cx = cy = self.world_size // 2
-        radius = HEX_TILE_RADIUS
 
         for tile in game.get_all_hexes():
-            x, y = hex_center(tile.q, tile.r, cx, cy, radius)
-            self.add_shape(HexTileShape(x, y, radius, tile, self.icons))
+            x, y = hex_center(tile.q, tile.r, cx, cy, HEX_TILE_RADIUS)
+            self.add_shape(HexTileShape(x, y, HEX_TILE_RADIUS, tile, self.icons))
 
         for edge in game.get_all_edges():
             v1, v2 = edge.vertices
-            x1, y1 = vertex_xy(v1, cx, cy, radius)
-            x2, y2 = vertex_xy(v2, cx, cy, radius)
+            x1, y1 = vertex_xy(v1, cx, cy, HEX_TILE_RADIUS)
+            x2, y2 = vertex_xy(v2, cx, cy, HEX_TILE_RADIUS)
 
             color = PLAYER_COLORS[edge.owner.playerNumber] if edge.owner else EDGE_COLOR
             self.add_shape(LineShape(x1, y1, x2, y2, ROAD_THICKNESS, color))
 
         for vertex in game.get_all_vertices():
-            x, y = vertex_xy(vertex, cx, cy, radius)
+            x, y = vertex_xy(vertex, cx, cy, HEX_TILE_RADIUS)
             self.add_shape(VertexShape(x, y, VERTEX_SIZE, vertex, self.icons))
+
+    def draw_selectable_vertices(self, vertices):
+        self.clear_interactives()
+        cx = cy = self.world_size // 2
+
+        for vertex in vertices:
+            x, y = vertex_xy(vertex, cx, cy, HEX_TILE_RADIUS)
+
+            shape = InteractiveCircle(x, y, VERTEX_SIZE * 1.5, HIGHLIGHT_COLOR,
+                                      outline_color=OUTLINE_COLOR, payload=vertex)
+
+            self.interactive_shapes.append(shape)
+            self.add_shape(shape)
+
+    def draw_selectable_edges(self, edges: List[Edge]):
+        self.clear_interactives()
+
+        cx = cy = self.world_size // 2
+
+        for edge in edges:
+            v1, v2 = edge.vertices
+            x1, y1 = vertex_xy(v1, cx, cy, HEX_TILE_RADIUS)
+            x2, y2 = vertex_xy(v2, cx, cy, HEX_TILE_RADIUS)
+
+            # Midpoint of the edge
+            x = (x1 + x2) / 2
+            y = (y1 + y2) / 2
+
+            shape = InteractiveCircle(x, y, VERTEX_SIZE * 1.25, HIGHLIGHT_COLOR,
+                                      outline_color=OUTLINE_COLOR, payload=edge)
+
+            self.interactive_shapes.append(shape)
+            self.add_shape(shape)
