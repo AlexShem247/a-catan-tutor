@@ -2,7 +2,6 @@ from typing import List, Optional, Tuple
 
 from GameController import GameController
 from drawing.View import View, select_blocking
-from game.Board import Board
 from game.Edge import Edge
 from game.Game import Game
 from game.HexTile import HexTile
@@ -16,37 +15,36 @@ from view.display import display_board, clear_screen, get_player_lead_status, di
 
 def initial_settlement_placement(player: Player, controller: GameController, view: View) -> Vertex:
     """Human selects a vertex for initial settlement placement."""
+    clear_screen()
+    print(f"\n--- {player.name}'s placement turn ---\n")
+    view.display_board(controller.get_game_state())
+    print("Select a position to build your settlement")
 
-    while True:
-        view.display_board(controller.get_game_state())
+    vertices = controller.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
+    vertex: Vertex = select_blocking(view, view.draw_selectable_vertices, vertices)
 
-        vertices = controller.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
-        vertex = select_blocking(view, view.draw_selectable_vertices, vertices)
+    controller.try_build_settlement(player, vertex, use_resources=False, road_restriction=False)
 
-        success, msg = controller.try_build_settlement(player, vertex, use_resources=False, road_restriction=False)
-
-        if success:
-            return vertex
+    return vertex
 
 
 def initial_road_placement(player: Player, controller: GameController, view: View,
                            settlement: Optional[Vertex] = None) -> Edge:
     """Human selects an edge for initial road placement."""
+    clear_screen()
+    print(f"\n--- {player.name}'s placement turn ---\n")
+    view.display_board(controller.get_game_state())
+    print("Select a position to build your road")
 
-    while True:
-        view.display_board(controller.get_game_state())
+    edges = controller.get_available_edges(player)
+    if settlement is not None:
+        # Restrict edges to be directly connected to settlement
+        edges = [edge for edge in edges if settlement in edge.vertices]
 
-        edges = controller.get_available_edges(player)
-        if settlement is not None:
-            # Restrict edges to be directly connected to settlement
-            edges = [edge for edge in edges if settlement in edge.vertices]
+    edge: Edge = select_blocking(view, view.draw_selectable_edges, edges)
+    controller.try_build_road(player, edge, on_vertex=settlement, use_resources=False)
 
-        edge = select_blocking(view, view.draw_selectable_edges, edges)
-
-        success, msg = controller.try_build_road(player, edge, on_vertex=settlement, use_resources=False)
-
-        if success:
-            return edge
+    return edge
 
 
 def play_dev_card_menu(player: Player, controller: GameController) -> bool:
@@ -92,7 +90,6 @@ def make_round_move(player: Player, controller: GameController, view: View):
 
     # Pre-roll development cards
     clear_screen()
-    display_board(controller.get_game_state())
     view.display_board(controller.get_game_state())
     print(f"\n--- {player.name}'s turn (Pre-Roll) ---\n")
     print("Your resources:")
@@ -115,9 +112,7 @@ def make_round_move(player: Player, controller: GameController, view: View):
 
         # Show stats
         visible_vp, true_vp = player.calc_victory_points()
-        true_vp_str = ""
-        if visible_vp != true_vp:
-            true_vp_str = f" ({true_vp})"
+        true_vp_str = f" ({true_vp})" if visible_vp != true_vp else ""
 
         print(f"Longest Road: \t{player.longest_road_length} {'♕' if player.has_longest_road else ''}")
         print(f"Army Size: \t{player.army_size} {'♕' if player.has_largest_army else ''}")
@@ -127,89 +122,73 @@ def make_round_move(player: Player, controller: GameController, view: View):
         print("Your resources:")
         display_resources(player.resources)
 
-        # Show dynamic options
-        options = {"1": "End turn", "2": "Open Trade Menu"}
+        # Buildable / menu options
         buildable = controller.get_buildable_options(player)
+        options = {"1": "End turn", "2": "Open Trade Menu"}
         option_number = 3
 
-        # Add buildable options
-        for action_type in Buildable:
-            if buildable[action_type]:
-                action = "Buy " if action_type == Buildable.DEVELOPMENT_CARD else "Build "
-                options[str(option_number)] = action + action_type.name.replace("_", " ").capitalize()
-                option_number += 1
+        # Only add Build / Place if player can build something
+        if buildable[Buildable.ROAD] or buildable[Buildable.SETTLEMENT] or buildable[Buildable.CITY]:
+            options[str(option_number)] = "Build / Place"
+            build_option_index = option_number
+            option_number += 1
+        else:
+            build_option_index = None
+
+        # Add option to buy development card
+        if buildable[Buildable.DEVELOPMENT_CARD]:
+            options[str(option_number)] = "Buy Development Card"
+            option_number += 1
         dc_option_index = option_number
 
-        # Add development card options
+        # Add playable development cards
         if not used_dev_card:
-            playable_cards = set([c.card_type for c in player.development_cards if c.playable])
+            playable_cards = set(c.card_type for c in player.development_cards if c.playable)
             for card_type in playable_cards:
                 options[str(option_number)] = f"Use '{card_type.name.title()}' card"
+                option_number += 1
 
-        # Print options
+        # Print menu
         print("\nOptions:")
         for key, val in options.items():
             print(f"  {key}. {val.replace('_', ' ').title()}")
 
+        # Check victory
         if player.calc_victory_points()[1] >= Game.VICTORY_POINTS_TO_WIN:
             break
 
+        # Get player choice
         choice = input("Enter option: ").strip()
 
+        # End turn
         if choice == "1" or choice == "":
-            # End turn
             break
 
-        if choice == "2":
+        # Trade
+        elif choice == "2":
             trading_menu(player, controller, view)
 
-        elif choice.isnumeric() and 3 <= int(choice) < dc_option_index and choice in options:
-            # Determine which build action
-            action_str = options[choice].split()[1].upper()
-            if "DEVELOPMENT" in action_str:
-                action_type = Buildable.DEVELOPMENT_CARD
-            else:
-                action_type = Buildable[action_str]
-            selected: Edge | Vertex | None = None
+        # Build / Place interactive
+        elif build_option_index is not None and choice == str(build_option_index):
+            selected_buildable: Vertex | Edge = select_blocking(view, view.draw_buildables, buildable)
 
-            if action_type != Buildable.DEVELOPMENT_CARD:
-                # Need to pick a location
-                available = buildable[action_type]
-                if not available:
-                    error_msg = f"No valid {action_type.name.lower()} locations available."
-                    continue
+            match selected_buildable:
+                case Edge():
+                    controller.try_build_road(player, selected_buildable)
+                case Vertex():
+                    if selected_buildable.building is None:
+                        controller.try_build_settlement(player, selected_buildable)
+                    else:
+                        controller.try_build_city(player, selected_buildable)
 
-                # Show locations and let player choose
-                print(f"\nAvailable {action_type.name.lower()} locations:")
-                for idx, loc in enumerate(available, 1):
-                    print(f"  {idx}. ({loc.get_pos()})")
-
-                loc_choice = input(f"Enter number to build {action_type.name.lower()} or 0 to cancel: ").strip()
-                try:
-                    idx = int(loc_choice)
-                    if idx == 0:
-                        continue  # cancel build
-                    selected = available[idx - 1]
-                except (ValueError, IndexError):
-                    error_msg = "Invalid selection."
-                    continue
-
-            # Apply build
-            if action_type == Buildable.ROAD:
-                success, msg = controller.try_build_road(player, selected)
-            elif action_type == Buildable.SETTLEMENT:
-                success, msg = controller.try_build_settlement(player, selected)
-            elif action_type == Buildable.CITY:
-                success, msg = controller.try_build_city(player, selected)
-            elif action_type == Buildable.DEVELOPMENT_CARD:
-                success, msg = controller.try_buy_development_card(player)
-            else:
-                success, msg = False, "Unknown build type"
-
+        # Buy development card
+        elif choice.isnumeric() and int(choice) < dc_option_index:
+            success, msg = controller.try_buy_development_card(player)
             print(msg)
             input("Press enter to continue...")
+
+        # Play development card
         elif choice.isnumeric() and dc_option_index <= int(choice) and choice in options:
-            # Play development card
             card_type = DevelopmentCardType[options[choice].split()[1].strip("'").upper()]
             error_msg = controller.play_development_card(player, card_type)
             used_dev_card = True
@@ -527,7 +506,7 @@ def robber_discard(
     )
 
 
-def year_of_plenty_selection(controller: GameController, view: View,) -> ResourceCount:
+def year_of_plenty_selection(controller: GameController, view: View, ) -> ResourceCount:
     """Let player choose two resources from the bank."""
     return choose_resources(
         controller=controller,
@@ -553,55 +532,30 @@ def monopoly_selection(controller: GameController, view: View) -> Resource:
 
 def place_robber(player: Player, controller: GameController, view: View) -> Tuple[HexTile, Optional[Player]]:
     """Prompt the player to select a hex tile to move the robber, and pick a player to steal from if possible."""
-    error_msg = None
-    while True:
-        try:
-            clear_screen()
-            display_board(controller.get_game_state())
-            view.display_board(controller.get_game_state())
-            print(f"\n--- {player.name}'s Robber Move ---\n")
-            print("Your resources:")
-            display_resources(player.resources)
-            if error_msg:
-                print(error_msg)
+    print(f"\n--- {player.name}'s Robber Move ---\n")
+    print("Select a hex to move the robber...")
 
-            # Prompt for hex coordinates
-            coords = input("\nEnter hex coordinates (x y) to move the robber: ").strip()
-            x_str, y_str = coords.split()
-            x, y = int(x_str), int(y_str)
+    # Get available hex tiles (exclude current robber tile)
+    available_hexes = [tile for tile in controller.get_all_hexes() if not tile.robber]
+    selected_hex: HexTile = select_blocking(view, view.draw_selectable_tiles, available_hexes)
 
-            hex_tile = controller.get_hex_tile(x, y)
-            if hex_tile is None or (x, y) not in Board.HEX_COORDS:
-                error_msg = f"Invalid coordinate ({x}, {y})"
-                continue
+    print(f"Hex selected at ({selected_hex.q}, {selected_hex.r})")
 
-            if hex_tile.robber:
-                error_msg = "Need to move robber to a NEW tile"
-                continue
+    # Check for stealable players on adjacent vertices
+    adjacent_player_buildings: List[Vertex] = [
+        v for v in selected_hex.vertices
+        if v.owner is not None  # Has a building
+        and v.owner != player  # Not the active player
+        and any(v.owner.resources.values())  # Owner has at least one resource
+    ]
 
-            # Get players on vertices adjacent to this hex (excluding the moving player)
-            adjacent_players = [
-                p for p in controller.get_players_on_hex(hex_tile)
-                if p != player and any(v > 0 for v in p.resources.values())
-            ]
+    if not adjacent_player_buildings:
+        return selected_hex, None
 
-            # If there are no stealable players, return hex_tile with None
-            if not adjacent_players:
-                return hex_tile, None
+    print("Select a player to steal from...")
+    selected_player_building: Vertex = select_blocking(view, view.draw_selectable_vertices, adjacent_player_buildings)
+    selected_player = selected_player_building.owner
 
-            # Otherwise, player must pick one
-            print("\nPlayers on this hex to steal from:")
-            for idx, p in enumerate(adjacent_players, 1):
-                print(f"  {idx}. {p.name}")
+    print(f"Player selected: {selected_player.name}")
 
-            while True:
-                choice = input("Select a player to steal from: ").strip()
-                if choice.isdigit():
-                    choice = int(choice)
-                    if 1 <= choice <= len(adjacent_players):
-                        return hex_tile, adjacent_players[choice - 1]
-
-                print("Invalid choice. Enter a number from the list.")
-
-        except (ValueError, KeyError):
-            error_msg = "Invalid input. Format: x y (e.g., 1 2)"
+    return selected_hex, selected_player

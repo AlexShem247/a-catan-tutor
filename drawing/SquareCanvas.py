@@ -1,15 +1,18 @@
 from typing import Dict, List
 
-from PyQt6.QtCore import Qt, QRect, QPointF, QSize, pyqtSignal
+from PyQt6.QtCore import Qt, QRect, QPointF, QSize, pyqtSignal, QTimer
 from PyQt6.QtGui import QPainter, QCursor, QPixmap
 from PyQt6.QtWidgets import QWidget
 
 from drawing.board_geometry import hex_center, vertex_xy
 from drawing.constants import WINDOW_HEIGHT, BOARD_BG_COLOR, HEX_TILE_RADIUS, SETTLEMENT_ICONS, hex_to_filepath, \
-    EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON, HIGHLIGHT_COLOR, OUTLINE_COLOR
+    EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON, HIGHLIGHT_COLOR, OUTLINE_COLOR, \
+    HIGHLIGHT_ANIMATION
 from drawing.shapes import HexTileShape, VertexShape, LineShape, InteractiveShape, InteractiveCircle
 from game import Game
 from game.Edge import Edge
+from game.HexTile import HexTile
+from game.PlayerAssets import Buildable
 from game.Resources import HexType
 
 
@@ -37,6 +40,11 @@ class SquareCanvas(QWidget):
         self.shapes = []
         self.interactive_shapes: List[InteractiveShape] = []
         self.hovered_shape: InteractiveShape | None = None
+
+        # Timer for animation
+        self.anim_timer = QTimer()
+        self.anim_timer.timeout.connect(self.update)
+        self.anim_timer.start(16)
 
         # Load icons
         self.icons: Dict[str, QPixmap] = {}
@@ -115,13 +123,21 @@ class SquareCanvas(QWidget):
                 break
 
         if new_hover != self.hovered_shape:
+            # Remove previous hover
             if self.hovered_shape:
                 self.hovered_shape.set_hover(False)
+            # Apply new hover
             if new_hover:
                 new_hover.set_hover(True)
 
             self.hovered_shape = new_hover
             self.update()
+
+        # Change cursor depending on hover
+        if self.hovered_shape:
+            self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        else:
+            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -194,7 +210,6 @@ class SquareCanvas(QWidget):
 
     def display_board(self, game: Game):
         self.clear_shapes()
-
         cx = cy = self.world_size // 2
 
         for tile in game.get_all_hexes():
@@ -214,7 +229,6 @@ class SquareCanvas(QWidget):
             self.add_shape(VertexShape(x, y, VERTEX_SIZE, vertex, self.icons))
 
     def draw_selectable_vertices(self, vertices):
-        self.clear_interactives()
         cx = cy = self.world_size // 2
 
         for vertex in vertices:
@@ -227,8 +241,6 @@ class SquareCanvas(QWidget):
             self.add_shape(shape)
 
     def draw_selectable_edges(self, edges: List[Edge]):
-        self.clear_interactives()
-
         cx = cy = self.world_size // 2
 
         for edge in edges:
@@ -245,3 +257,24 @@ class SquareCanvas(QWidget):
 
             self.interactive_shapes.append(shape)
             self.add_shape(shape)
+
+    def draw_selectable_tiles(self, tiles: List[HexTile]):
+        cx = cy = self.world_size // 2
+
+        for tile in tiles:
+            x, y = hex_center(tile.q, tile.r, cx, cy, HEX_TILE_RADIUS)
+            token_offset_y = 0.35 * HEX_TILE_RADIUS
+            token_radius = HEX_TILE_RADIUS * 0.3
+            shape = InteractiveCircle(x, y + token_offset_y, token_radius, HIGHLIGHT_COLOR,
+                                      outline_color=OUTLINE_COLOR, payload=tile, normal_alpha=140, hover_alpha=220)
+
+            self.interactive_shapes.append(shape)
+            self.add_shape(shape)
+
+    def draw_buildables(self, buildables: Dict):
+        # Roads (edges)
+        self.draw_selectable_edges(buildables[Buildable.ROAD])
+
+        # Settlements and Cities (vertices)
+        buildable_vertices = buildables[Buildable.SETTLEMENT] + buildables[Buildable.CITY]
+        self.draw_selectable_vertices(buildable_vertices)

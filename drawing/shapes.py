@@ -1,4 +1,5 @@
 import math
+import time
 from collections import Counter
 from typing import Dict
 
@@ -6,7 +7,7 @@ from PyQt6.QtCore import QPointF, Qt, QRect
 from PyQt6.QtGui import QPolygonF, QPixmap, QPen, QColor
 
 from drawing.constants import TERRAIN_COLORS, TOKEN_COMMON_COLOR, TOKEN_COLOR, TOKEN_OUTLINE_COLOR, EDGE_COLOR, \
-    hex_to_filepath, SETTLEMENT_ICONS, PLAYER_COLORS, ROBBER_ICON
+    hex_to_filepath, SETTLEMENT_ICONS, PLAYER_COLORS, ROBBER_ICON, HIGHLIGHT_ANIMATION
 from game.HexTile import HexTile
 from game.Vertex import Vertex
 
@@ -279,6 +280,7 @@ class InteractiveCircle(InteractiveShape):
         self.x = float(x)
         self.y = float(y)
         self.r = float(r)
+        self.base_r = r  # store original radius
 
         self.base_color = QColor(color)
         self.outline_color = outline_color
@@ -289,14 +291,30 @@ class InteractiveCircle(InteractiveShape):
         self.color = QColor(self.base_color)
         self.color.setAlpha(self.normal_alpha)
 
-    def set_hover(self, hovered: bool):
-        super().set_hover(hovered)
-        self.color.setAlpha(self.hover_alpha if hovered else self.normal_alpha)
+        # Animation parameters
+        self.pulse_amplitude = 0.15  # fraction of size to pulse
+        self.pulse_speed = 0.5       # cycles per second
+        self._start_time = time.time()
+
+    def current_radius(self):
+        """Compute animated radius based on elapsed time."""
+        if not HIGHLIGHT_ANIMATION:
+            return self.base_r
+
+        t = time.time() - self._start_time
+        pulse = math.sin(2 * math.pi * self.pulse_speed * t) * self.pulse_amplitude
+        return self.base_r * (1 + pulse)
 
     def contains(self, wx: float, wy: float) -> bool:
         dx = wx - self.x
+
         dy = wy - self.y
         return dx * dx + dy * dy <= self.r * self.r
+
+    def set_hover(self, hovered: bool):
+        super().set_hover(hovered)
+
+        self.color.setAlpha(self.hover_alpha if hovered else self.normal_alpha)
 
     def draw(self, painter, scale, offset):
         painter.setBrush(self.color)
@@ -308,6 +326,6 @@ class InteractiveCircle(InteractiveShape):
 
         px = self.x * scale + offset.x()
         py = self.y * scale + offset.y()
-        pr = self.r * scale
+        pr = self.current_radius() * scale  # use animated radius
 
         painter.drawEllipse(int(px - pr), int(py - pr), int(pr * 2), int(pr * 2))

@@ -1,10 +1,11 @@
-from typing import List
+from typing import List, Dict
 
 from PyQt6.QtCore import QEventLoop
 
 from drawing.SquareCanvas import SquareCanvas
 from game.Edge import Edge
 from game.Game import Game
+from game.HexTile import HexTile
 from game.Vertex import Vertex
 
 
@@ -25,6 +26,14 @@ class View:
     def draw_selectable_edges(self, edges: List[Edge]):
         """Draws which edges are selectable"""
         self.window.draw_selectable_edges(edges)
+
+    def draw_selectable_tiles(self, tiles: List[HexTile]):
+        """Draws which tiles are selectable"""
+        self.window.draw_selectable_tiles(tiles)
+
+    def draw_buildables(self, buildables: Dict):
+        """Draws which tiles are selectable"""
+        self.window.draw_buildables(buildables)
 
 
 def select_blocking(view: View, draw_fn, options):

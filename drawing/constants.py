@@ -14,6 +14,8 @@ EDGE_COLOR = QColor(240, 220, 170)
 ROAD_THICKNESS = 10
 VERTEX_SIZE = 15
 
+HIGHLIGHT_ANIMATION = True
+
 OUTLINE_COLOR = QColor(Qt.GlobalColor.black)
 HIGHLIGHT_COLOR = QColor(Qt.GlobalColor.yellow)
 
