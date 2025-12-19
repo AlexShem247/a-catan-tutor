@@ -72,14 +72,15 @@ class GameController:
         Each player places two settlements and two roads in order:
         forward + reverse order for second placement.
         """
-        players_order = self._game.players + list(reversed(self._game.players))
-        for player in players_order:
+        players_order = [(p, False) for p in self._game.players] + [(p, True) for p in reversed(self._game.players)]
+        for player, gain_resource in players_order:
             # Settlement
             if player.is_human and self.get_settlement_choice:
                 vertex = self.get_settlement_choice(player, self, self.view)
             else:
                 vertex = self.get_settlement_choice_ai(player, self, self.view)
-            self._game.try_build_settlement(player, vertex, use_resources=False, road_restriction=False)
+            self._game.try_build_settlement(player, vertex, use_resources=False,
+                                            road_restriction=False, gain_resources=gain_resource)
 
             # Road
             if player.is_human and self.get_road_choice:

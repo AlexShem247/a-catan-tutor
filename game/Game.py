@@ -161,7 +161,8 @@ class Game:
             vertex: Vertex,
             build: bool = True,
             use_resources: bool = True,
-            road_restriction: bool = True
+            road_restriction: bool = True,
+            gain_resources: bool = False,
     ) -> tuple[bool, str]:
         """Attempt to build a settlement with rules enforced."""
         if vertex.owner is not None or vertex.building is not None:
@@ -181,6 +182,12 @@ class Game:
             Board.build_settlement(vertex, player)
             if use_resources:
                 player.remove_resources(Game.BUILDING_COST[Buildable.SETTLEMENT])
+            if gain_resources:
+                # Add resources from neighbouring tiles
+                for tile in vertex.hexes:
+                    if tile.resource is not None:
+                        player.add_resource(tile.resource, 1)
+
             self.update_best_opponent_victory_points()
 
         return True, f"Settlement built at {vertex}"

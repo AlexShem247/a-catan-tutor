@@ -6,8 +6,7 @@ from PyQt6.QtWidgets import QWidget
 
 from drawing.board_geometry import hex_center, vertex_xy
 from drawing.constants import WINDOW_HEIGHT, BOARD_BG_COLOR, HEX_TILE_RADIUS, SETTLEMENT_ICONS, hex_to_filepath, \
-    EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON, HIGHLIGHT_COLOR, OUTLINE_COLOR, \
-    HIGHLIGHT_ANIMATION
+    EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON, HIGHLIGHT_COLOR, OUTLINE_COLOR
 from drawing.shapes import HexTileShape, VertexShape, LineShape, InteractiveShape, InteractiveCircle
 from game import Game
 from game.Edge import Edge
@@ -263,10 +262,9 @@ class SquareCanvas(QWidget):
 
         for tile in tiles:
             x, y = hex_center(tile.q, tile.r, cx, cy, HEX_TILE_RADIUS)
-            token_offset_y = 0.35 * HEX_TILE_RADIUS
-            token_radius = HEX_TILE_RADIUS * 0.3
-            shape = InteractiveCircle(x, y + token_offset_y, token_radius, HIGHLIGHT_COLOR,
-                                      outline_color=OUTLINE_COLOR, payload=tile, normal_alpha=140, hover_alpha=220)
+            radius = 0.4 * HEX_TILE_RADIUS
+            shape = InteractiveCircle(x, y, radius, HIGHLIGHT_COLOR,
+                                      outline_color=OUTLINE_COLOR, payload=tile)
 
             self.interactive_shapes.append(shape)
             self.add_shape(shape)

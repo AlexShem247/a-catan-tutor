@@ -292,7 +292,7 @@ class InteractiveCircle(InteractiveShape):
         self.color.setAlpha(self.normal_alpha)
 
         # Animation parameters
-        self.pulse_amplitude = 0.15  # fraction of size to pulse
+        self.pulse_amplitude = 0.10  # fraction of size to pulse
         self.pulse_speed = 0.5       # cycles per second
         self._start_time = time.time()
 

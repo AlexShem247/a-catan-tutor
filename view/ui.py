@@ -23,8 +23,6 @@ def initial_settlement_placement(player: Player, controller: GameController, vie
     vertices = controller.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
     vertex: Vertex = select_blocking(view, view.draw_selectable_vertices, vertices)
 
-    controller.try_build_settlement(player, vertex, use_resources=False, road_restriction=False)
-
     return vertex
 
 
@@ -42,7 +40,6 @@ def initial_road_placement(player: Player, controller: GameController, view: Vie
         edges = [edge for edge in edges if settlement in edge.vertices]
 
     edge: Edge = select_blocking(view, view.draw_selectable_edges, edges)
-    controller.try_build_road(player, edge, on_vertex=settlement, use_resources=False)
 
     return edge
 
