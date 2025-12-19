@@ -1,39 +1,49 @@
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 from PyQt6.QtCore import QEventLoop
 
-from drawing.SquareCanvas import SquareCanvas
+from drawing.MainWindow import MainWindow
 from game.Edge import Edge
 from game.Game import Game
 from game.HexTile import HexTile
+from game.Player import Player
 from game.Vertex import Vertex
 
 
 class View:
     """Provides hook functions that interact with Qt for the controller."""
 
-    def __init__(self, window: SquareCanvas):
+    def __init__(self, window: MainWindow):
         self.window = window
+        self.canvas = window.canvas
 
-    def display_board(self, game: Game):
+    def display_board(self, game: Game, player: Player, msg: str):
         """Hook to display the board in the Qt window."""
-        self.window.display_board(game)
+        self.canvas.display_board(game)
+        self.window.display_resources(game)
+        self.window.display_turn_info(game, player, msg=msg)
+
+    def display_board_turn(self, game: Game, player: Player, dice_roll: Tuple[int, int, int]):
+        """Hook to display the board in the Qt window."""
+        self.canvas.display_board(game)
+        self.window.display_resources(game)
+        self.window.display_turn_info(game, player, dice_roll=dice_roll)
 
     def draw_selectable_vertices(self, vertices: List[Vertex]):
         """Draws which vertices are selectable"""
-        self.window.draw_selectable_vertices(vertices)
+        self.canvas.draw_selectable_vertices(vertices)
 
     def draw_selectable_edges(self, edges: List[Edge]):
         """Draws which edges are selectable"""
-        self.window.draw_selectable_edges(edges)
+        self.canvas.draw_selectable_edges(edges)
 
     def draw_selectable_tiles(self, tiles: List[HexTile]):
         """Draws which tiles are selectable"""
-        self.window.draw_selectable_tiles(tiles)
+        self.canvas.draw_selectable_tiles(tiles)
 
     def draw_buildables(self, buildables: Dict):
         """Draws which tiles are selectable"""
-        self.window.draw_buildables(buildables)
+        self.canvas.draw_buildables(buildables)
 
 
 def select_blocking(view: View, draw_fn, options):
@@ -45,12 +55,12 @@ def select_blocking(view: View, draw_fn, options):
         selected = obj
         loop.quit()
 
-    view.window.selectionMade.connect(on_selected)
+    view.canvas.selectionMade.connect(on_selected)
     draw_fn(options)
 
     loop.exec()
 
-    view.window.selectionMade.disconnect(on_selected)
-    view.window.clear_interactives()
+    view.canvas.selectionMade.disconnect(on_selected)
+    view.canvas.clear_interactives()
 
     return selected

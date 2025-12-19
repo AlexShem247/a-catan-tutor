@@ -30,7 +30,7 @@ class Game:
     ROBBER_DICE_NUM = 7
 
     def __init__(self, human_player_one: bool = True):
-        self.bank_resources = self.BANK_INITIAL_RESOURCES.copy()
+        self.bank_resources: Dict[Resource, int] = self.BANK_INITIAL_RESOURCES.copy()
         self.players: List[Player] = [Player(human_player_one if p == PlayerNumber.P1
                                              else False, p, bank_resources=self.bank_resources) for p in PlayerNumber]
         self._board = Board()
@@ -45,7 +45,6 @@ class Game:
     def roll_dice(self) -> tuple[int, int, int]:
         """Roll two dice and distribute resources to players."""
         d1, d2 = randint(1, 6), randint(1, 6)
-        d1, d2 = 3, 4
         total = d1 + d2
 
         # 1. Aggregate production demands per player per resource

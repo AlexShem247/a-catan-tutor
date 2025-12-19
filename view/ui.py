@@ -16,9 +16,7 @@ from view.display import display_board, clear_screen, get_player_lead_status, di
 def initial_settlement_placement(player: Player, controller: GameController, view: View) -> Vertex:
     """Human selects a vertex for initial settlement placement."""
     clear_screen()
-    print(f"\n--- {player.name}'s placement turn ---\n")
-    view.display_board(controller.get_game_state())
-    print("Select a position to build your settlement")
+    view.display_board(controller.get_game_state(), player, "Select a position to build your settlement")
 
     vertices = controller.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
     vertex: Vertex = select_blocking(view, view.draw_selectable_vertices, vertices)
@@ -30,9 +28,7 @@ def initial_road_placement(player: Player, controller: GameController, view: Vie
                            settlement: Optional[Vertex] = None) -> Edge:
     """Human selects an edge for initial road placement."""
     clear_screen()
-    print(f"\n--- {player.name}'s placement turn ---\n")
-    view.display_board(controller.get_game_state())
-    print("Select a position to build your road")
+    view.display_board(controller.get_game_state(), player, "Select a position to build your road")
 
     edges = controller.get_available_edges(player)
     if settlement is not None:
@@ -87,7 +83,7 @@ def make_round_move(player: Player, controller: GameController, view: View):
 
     # Pre-roll development cards
     clear_screen()
-    view.display_board(controller.get_game_state())
+    view.display_board(controller.get_game_state(), player, "")
     print(f"\n--- {player.name}'s turn (Pre-Roll) ---\n")
     print("Your resources:")
     display_resources(player.resources)
@@ -99,7 +95,7 @@ def make_round_move(player: Player, controller: GameController, view: View):
     while True:
         clear_screen()
         display_board(controller.get_game_state())
-        view.display_board(controller.get_game_state())
+        view.display_board_turn(controller.get_game_state(), player, (d1, d2, total))
         print(f"\n--- {player.name}'s turn ---\n")
         print(f"Dice rolled: {d1} + {d2} = {total}")
 

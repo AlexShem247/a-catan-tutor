@@ -915,14 +915,14 @@
          </widget>
         </item>
         <item>
-         <widget class="QLabel" name="dice_label">
+         <widget class="QLabel" name="main_label">
           <property name="font">
            <font>
             <pointsize>10</pointsize>
            </font>
           </property>
           <property name="text">
-           <string>Dice Rolled: 3 + 5 = 8</string>
+           <string/>
           </property>
          </widget>
         </item>
