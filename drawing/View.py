@@ -31,7 +31,7 @@ class View:
         """Hook to display the board in the Qt window."""
         self.window.display_resources(self.controller)
         self.window.display_generic_info(player, msg)
-        ai_time_delay(AI_DECISION_ANIMATION_DELAY * 0)
+        ai_time_delay(AI_DECISION_ANIMATION_DELAY * 1)
 
     def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int]):
         """Hook to display the board in the Qt window."""
@@ -47,12 +47,14 @@ class View:
         delay = (3 if "\n" in msg else 1) * AI_DECISION_ANIMATION_DELAY
         ai_time_delay(delay)
 
-    def draw_selectable_vertices(self, vertices: List[Vertex]):
+    def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False):
         """Draws which vertices are selectable"""
+        self.canvas.disable_interactivity = disable_interactivity
         self.canvas.draw_selectable_vertices(vertices)
 
-    def draw_selectable_edges(self, edges: List[Edge]):
+    def draw_selectable_edges(self, edges: List[Edge], disable_interactivity: bool = False):
         """Draws which edges are selectable"""
+        self.canvas.disable_interactivity = disable_interactivity
         self.canvas.draw_selectable_edges(edges)
 
     def draw_selectable_tiles(self, tiles: List[HexTile]):

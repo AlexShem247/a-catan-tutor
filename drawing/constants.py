@@ -6,11 +6,13 @@ from PyQt6.QtGui import QColor
 from game.Player import PlayerNumber
 from game.PlayerAssets import Building
 from game.Resources import HexType, Resource, HEX_TO_RESOURCE
+from game.Vertex import Port
 
 WINDOW_WIDTH, WINDOW_HEIGHT = 1280, 720
 BOARD_BG_COLOR = QColor(10, 140, 200)
 HEX_TILE_RADIUS = 100
 EDGE_COLOR = QColor(240, 220, 170)
+PORT_EDGE_COLOR = QColor(220, 150, 50)
 ROAD_THICKNESS = 10
 VERTEX_SIZE = 15
 
@@ -43,6 +45,15 @@ RESOURCE_ICONS: Dict[Resource, str] = {
 
 DESERT_ICON = "assets/cactus.png"
 ROBBER_ICON = "assets/robber.png"
+
+PORT_ICONS: Dict[Port, str] = {
+    Port.THREE_TO_ONE: "assets/port_generic.png",
+    Port.WOOD: "assets/port_wood.png",
+    Port.BRICK: "assets/port_brick.png",
+    Port.SHEEP: "assets/port_sheep.png",
+    Port.WHEAT: "assets/port_wheat.png",
+    Port.ORE: "assets/port_ore.png",
+}
 
 PLAYER_COLORS: Dict[PlayerNumber, QColor] = {
     PlayerNumber.P1: QColor(0, 0, 255),

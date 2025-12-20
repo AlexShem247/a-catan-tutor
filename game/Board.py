@@ -32,6 +32,7 @@ class Board:
         self.hexes: List[HexTile] = []
         self.vertices: List[Vertex] = []
         self.edges: List[Edge] = []
+        self.port_vertices: List[Tuple[Port, Vertex, Vertex]] = []
         self.hex_map: Dict[Tuple[int, int], HexTile] = {}
         self.production_to_hex: Dict[int, List[HexTile]] = defaultdict(list)
         self.vertex_map: Dict[Tuple[int, int, VertexDirection], Vertex] = {}
@@ -135,15 +136,13 @@ class Board:
         for port in ports:
             # Pick the next edge
             edge = water_edges[i]
-            for vertex in edge.vertices:
-                vertex.port = port
+
+            v1, v2 = edge.vertices[0], edge.vertices[1]
+            v1.port = v2.port = port
+            self.port_vertices.append((port, v1, v2))
 
             # Move to next port
-            i += random.choice([3, 4])
-
-            # Wrap around if needed
-            if i >= len(water_edges):
-                i %= len(water_edges)
+            i += random.choice([3, 4]) if i < 22 else 3
 
     def assign_neighbors(self) -> None:
         directions: List[Tuple[int, int]] = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]

@@ -27,7 +27,7 @@ def random_initial_settlement_placement(player: Player, controller: GameControll
     """Choose a valid random vertex for settlement."""
     available_vertices = controller.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
     view.display_board()
-    view.draw_selectable_vertices(available_vertices)
+    view.draw_selectable_vertices(available_vertices, disable_interactivity=True)
     view.display_board_ai(player, "Select a position to build your settlement")
 
     return random.choice(available_vertices) if available_vertices else None
@@ -48,7 +48,7 @@ def random_initial_road_placement(player: Player, controller: GameController, vi
         return None
 
     view.display_board()
-    view.draw_selectable_edges(available_edges)
+    view.draw_selectable_edges(available_edges, disable_interactivity=True)
     view.display_board_ai(player, "Select a position to build your road")
 
     return random.choice(available_edges)

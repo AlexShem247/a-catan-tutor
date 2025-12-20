@@ -1,6 +1,6 @@
 from collections import defaultdict
 from random import randint
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 
 from game.Board import Board
 from game.Edge import Edge, EdgeDirection
@@ -423,3 +423,7 @@ class Game:
         player.remove_resources(Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD])
 
         return True, f"You got a {card.card_type.name.replace('_', ' ').capitalize()} card!"
+
+    def get_ports(self) -> List[Tuple[Port, Vertex, Vertex]]:
+        """Returns the list of ports and their position"""
+        return self._board.port_vertices

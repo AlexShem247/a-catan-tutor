@@ -6,7 +6,7 @@ from game.HexTile import HexTile
 from game.Player import Player
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import ResourceCount, Resource
-from game.Vertex import Vertex, VertexDirection
+from game.Vertex import Vertex, VertexDirection, Port
 from view.display import display_results
 
 if TYPE_CHECKING:
@@ -249,6 +249,10 @@ class GameController:
         return msg
 
     # <editor-fold desc="Controller wrapper methods for model">
+
+    def get_ports(self) -> List[Tuple[Port, Vertex, Vertex]]:
+        """Returns the list of ports and their position"""
+        return self._game.get_ports()
 
     def get_vertex(self, q: int, r: int, corner_index: VertexDirection) -> Optional[Vertex]:
         """Return the Vertex object for hex (q,r) at corner_index 0-5."""

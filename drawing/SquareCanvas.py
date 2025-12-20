@@ -1,4 +1,5 @@
-from typing import Dict, List
+import math
+from typing import Dict, List, Tuple
 
 from PyQt6.QtCore import Qt, QRect, QPointF, QSize, pyqtSignal, QTimer
 from PyQt6.QtGui import QPainter, QCursor, QPixmap
@@ -7,8 +8,9 @@ from PyQt6.QtWidgets import QWidget
 from GameController import GameController
 from drawing.board_geometry import hex_center, vertex_xy
 from drawing.constants import WINDOW_HEIGHT, BOARD_BG_COLOR, HEX_TILE_RADIUS, SETTLEMENT_ICONS, hex_to_filepath, \
-    EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON, HIGHLIGHT_COLOR, OUTLINE_COLOR
-from drawing.shapes import HexTileShape, VertexShape, LineShape, InteractiveShape, InteractiveCircle
+    EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON, HIGHLIGHT_COLOR, OUTLINE_COLOR, \
+    PORT_EDGE_COLOR, PORT_ICONS
+from drawing.shapes import HexTileShape, VertexShape, LineShape, InteractiveShape, InteractiveCircle, PixmapShape
 from game.Edge import Edge
 from game.HexTile import HexTile
 from game.PlayerAssets import Buildable
@@ -39,6 +41,7 @@ class SquareCanvas(QWidget):
         self.shapes = []
         self.interactive_shapes: List[InteractiveShape] = []
         self.hovered_shape: InteractiveShape | None = None
+        self.disable_interactivity = True
 
         # Timer for animation
         self.anim_timer = QTimer()
@@ -49,15 +52,15 @@ class SquareCanvas(QWidget):
         self.icons: Dict[str, QPixmap] = {}
         for hex_type in HexType:
             filepath = hex_to_filepath(hex_type)
-            pm = QPixmap(filepath)
-            if not pm.isNull():
-                self.icons[filepath] = pm
+            self.icons[filepath] = QPixmap(filepath)
 
         for key, path in SETTLEMENT_ICONS.items():
-            pm = QPixmap(path)
-            if not pm.isNull():
-                self.icons[path] = pm
+            self.icons[path] = QPixmap(path)
+
         self.icons[ROBBER_ICON] = QPixmap(ROBBER_ICON)
+
+        for key, path in PORT_ICONS.items():
+            self.icons[path] = QPixmap(path)
 
     def sizeHint(self):
         return QSize(WINDOW_HEIGHT, WINDOW_HEIGHT)
@@ -89,11 +92,12 @@ class SquareCanvas(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
 
             # Manage object selection
-            wx, wy = self.screen_to_world(event.position())
-            for shape in self.interactive_shapes:
-                if shape.contains(wx, wy):
-                    self.selectionMade.emit(shape.payload)
-                    return
+            if not self.disable_interactivity:
+                wx, wy = self.screen_to_world(event.position())
+                for shape in self.interactive_shapes:
+                    if shape.contains(wx, wy):
+                        self.selectionMade.emit(shape.payload)
+                        return
 
             # Manage zoom-in
             if (self.zoom > self.min_zoom
@@ -113,30 +117,31 @@ class SquareCanvas(QWidget):
             return
 
         # Hover detection (only when not dragging)
-        wx, wy = self.screen_to_world(event.position())
+        if not self.disable_interactivity:
+            wx, wy = self.screen_to_world(event.position())
 
-        new_hover = None
-        for shape in self.interactive_shapes:
-            if shape.contains(wx, wy):
-                new_hover = shape
-                break
+            new_hover = None
+            for shape in self.interactive_shapes:
+                if shape.contains(wx, wy):
+                    new_hover = shape
+                    break
 
-        if new_hover != self.hovered_shape:
-            # Remove previous hover
+            if new_hover != self.hovered_shape:
+                # Remove previous hover
+                if self.hovered_shape:
+                    self.hovered_shape.set_hover(False)
+                # Apply new hover
+                if new_hover:
+                    new_hover.set_hover(True)
+
+                self.hovered_shape = new_hover
+                self.update()
+
+            # Change cursor depending on hover
             if self.hovered_shape:
-                self.hovered_shape.set_hover(False)
-            # Apply new hover
-            if new_hover:
-                new_hover.set_hover(True)
-
-            self.hovered_shape = new_hover
-            self.update()
-
-        # Change cursor depending on hover
-        if self.hovered_shape:
-            self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        else:
-            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+                self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+            else:
+                self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -210,7 +215,7 @@ class SquareCanvas(QWidget):
 
     def display_board(self, controller: GameController):
         self.clear_shapes()
-        cx = cy = self.world_size // 2
+        cx, cy = self.get_world_centre()
 
         for tile in controller.get_all_hexes():
             x, y = hex_center(tile.q, tile.r, cx, cy, HEX_TILE_RADIUS)
@@ -224,12 +229,35 @@ class SquareCanvas(QWidget):
             color = PLAYER_COLORS[edge.owner.playerNumber] if edge.owner else EDGE_COLOR
             self.add_shape(LineShape(x1, y1, x2, y2, ROAD_THICKNESS, color))
 
+        # Draw ports
+        for port, v1, v2 in controller.get_ports():
+            x1, y1 = vertex_xy(v1, cx, cy, HEX_TILE_RADIUS)
+            x2, y2 = vertex_xy(v2, cx, cy, HEX_TILE_RADIUS)
+
+            # Work out position to draw port
+            dx, dy = x2 - x1, y2 - y1
+            mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+            dist = math.hypot(dx, dy)
+            scale = -0.7
+            x = mx - dy / dist * dist * scale
+            y = my + dx / dist * dist * scale
+
+            self.add_shape(LineShape(x1, y1, x, y, VERTEX_SIZE, PORT_EDGE_COLOR))
+            self.add_shape(LineShape(x2, y2, x, y, VERTEX_SIZE, PORT_EDGE_COLOR))
+
+            scale = -0.75
+            x = mx - dy / dist * dist * scale
+            y = my + dx / dist * dist * scale
+
+            self.add_shape(PixmapShape(x, y - 30, 80, 80, self.icons[PORT_ICONS[port]]))
+
         for vertex in controller.get_all_vertices():
             x, y = vertex_xy(vertex, cx, cy, HEX_TILE_RADIUS)
             self.add_shape(VertexShape(x, y, VERTEX_SIZE, vertex, self.icons))
 
     def draw_selectable_vertices(self, vertices):
-        cx = cy = self.world_size // 2
+        self.interactive_shapes.clear()
+        cx, cy = self.get_world_centre()
 
         for vertex in vertices:
             x, y = vertex_xy(vertex, cx, cy, HEX_TILE_RADIUS)
@@ -241,7 +269,8 @@ class SquareCanvas(QWidget):
             self.add_shape(shape)
 
     def draw_selectable_edges(self, edges: List[Edge]):
-        cx = cy = self.world_size // 2
+        self.interactive_shapes.clear()
+        cx, cy = self.get_world_centre()
 
         for edge in edges:
             v1, v2 = edge.vertices
@@ -259,7 +288,7 @@ class SquareCanvas(QWidget):
             self.add_shape(shape)
 
     def draw_selectable_tiles(self, tiles: List[HexTile]):
-        cx = cy = self.world_size // 2
+        cx, cy = self.get_world_centre()
 
         for tile in tiles:
             x, y = hex_center(tile.q, tile.r, cx, cy, HEX_TILE_RADIUS)
@@ -277,3 +306,6 @@ class SquareCanvas(QWidget):
         # Settlements and Cities (vertices)
         buildable_vertices = buildables[Buildable.SETTLEMENT] + buildables[Buildable.CITY]
         self.draw_selectable_vertices(buildable_vertices)
+
+    def get_world_centre(self) -> Tuple[int, int]:
+        return int(self.world_size * 0.5), int(self.world_size * (21/40))
