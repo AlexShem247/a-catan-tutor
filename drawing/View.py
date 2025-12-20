@@ -8,6 +8,7 @@ from drawing.constants import AI_DECISION_ANIMATION_DELAY
 from game.Edge import Edge
 from game.HexTile import HexTile
 from game.Player import Player
+from game.Resources import ResourceCount
 from game.Vertex import Vertex
 
 
@@ -25,18 +26,15 @@ class View:
         self.window.display_resources(self.controller)
         if msg is not None and player is not None:
             self.window.display_generic_info(player, msg)
-            if not player.is_human:
-                ai_time_delay(AI_DECISION_ANIMATION_DELAY * 1)
 
     def display_board_ai(self, player: Player, msg: str):
         """Hook to display the board in the Qt window."""
         self.window.display_resources(self.controller)
         self.window.display_generic_info(player, msg)
-        ai_time_delay(AI_DECISION_ANIMATION_DELAY * 1)
+        ai_time_delay(AI_DECISION_ANIMATION_DELAY * 0)
 
-    def display_board_turn(self, params: Tuple[Player, Tuple[int, int, int]]):
+    def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int]):
         """Hook to display the board in the Qt window."""
-        player, dice_info = params
         self.canvas.display_board(self.controller)
         self.window.display_resources(self.controller)
         self.window.display_round_info(self.controller, player, dice_info)
@@ -65,8 +63,12 @@ class View:
         """Draws which tiles are selectable"""
         self.canvas.draw_buildables(buildables)
 
+    def show_resource_chooser(self, player, num_resources: int, title: str,
+                              resource_caps: ResourceCount | None = None):
+        self.window.show_resource_chooser(player, num_resources, title, resource_caps)
 
-def select_blocking(view: View, draw_fn, options):
+
+def select_blocking(view: View, draw_fn, *args, **kwargs):
     loop = QEventLoop()
     selected = None
 
@@ -76,7 +78,8 @@ def select_blocking(view: View, draw_fn, options):
         loop.quit()
 
     view.canvas.selectionMade.connect(on_selected)
-    draw_fn(options)
+
+    draw_fn(*args, **kwargs)
 
     loop.exec()
 
@@ -86,14 +89,15 @@ def select_blocking(view: View, draw_fn, options):
     return selected
 
 
-def block_until_turn_finished(view: View, draw_fn, options):
+def block_until_turn_finished(view: View, draw_fn, *args, **kwargs):
     loop = QEventLoop()
 
     def on_selected(_):
         loop.quit()
 
     view.window.turnMade.connect(on_selected)
-    draw_fn(options)
+
+    draw_fn(*args, **kwargs)
 
     loop.exec()
 

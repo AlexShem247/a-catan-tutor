@@ -3,14 +3,14 @@ from typing import Dict, Tuple
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel
+    QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel, QPushButton, QToolButton
 )
 
 from GameController import GameController
 from drawing.SquareCanvas import SquareCanvas
 from game.Player import PlayerNumber, Player
 from game.PlayerAssets import Buildable
-from game.Resources import Resource
+from game.Resources import Resource, ResourceCount
 
 
 def get_player_lead_status(player: Player) -> str:
@@ -64,6 +64,8 @@ class MainWindow(QMainWindow):
         # Prevent canvas from being squashed too much
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 0)
+
+        self.resource_selector_widget = uic.loadUi("drawing/ui/resource_selector.ui")
 
         self.toggle_main_action_btns(False)
 
@@ -195,3 +197,78 @@ class MainWindow(QMainWindow):
         self.side_panel.main_label.setText(f"Dice rolled: {d1} + {d2} = {total}")
         self.side_panel.action_label.setText(self.word_wrap(msg))
         self.toggle_main_action_btns(False)
+
+    def show_resource_chooser(self, player, num_resources: int, title: str,
+                              resource_caps: ResourceCount | None = None):
+
+        selection_widget = self.resource_selector_widget
+        quantity_btns: Dict[Resource, Tuple[QLabel, QToolButton, QToolButton]] = {
+            Resource.WOOD: (selection_widget.wood_quantity, selection_widget.wood_quantity_dec,
+                            selection_widget.wood_quantity_inc),
+            Resource.BRICK: (selection_widget.brick_quantity, selection_widget.brick_quantity_dec,
+                             selection_widget.brick_quantity_inc),
+            Resource.SHEEP: (selection_widget.sheep_quantity, selection_widget.sheep_quantity_dec,
+                             selection_widget.sheep_quantity_inc),
+            Resource.WHEAT: (selection_widget.wheat_quantity, selection_widget.wheat_quantity_dec,
+                             selection_widget.wheat_quantity_inc),
+            Resource.ORE: (selection_widget.ore_quantity, selection_widget.ore_quantity_dec,
+                           selection_widget.ore_quantity_inc)
+        }
+        chosen: ResourceCount = {res: 0 for res in Resource}
+
+        if resource_caps is None:
+            resource_caps = {res: num_resources for res in Resource}
+
+        self.side_panel.turn_label.setText(f"{player.name}'s turn")
+        self.side_panel.main_label.setText(title)
+        self.side_panel.action_label.setText(
+            f"You need to select {num_resources} more resource{'s' if num_resources > 1 else ''}."
+        )
+
+        self.toggle_main_action_btns(False)
+        self.side_panel.action_btn_layout.addWidget(selection_widget)
+
+        # Bind buttons
+        def update_labels():
+            total_remaining = num_resources - sum(chosen.values())
+            self.side_panel.action_label.setText(
+                f"You need to select {total_remaining} more resource{'s' if total_remaining != 1 else ''}."
+            )
+            # Disable buttons that can't be used
+            for res, (_, dec, inc) in quantity_btns.items():
+                dec.setEnabled(chosen[res] > 0)
+                inc.setEnabled(chosen[res] < resource_caps[res] and total_remaining > 0)
+
+            selection_widget.submit_btn.setEnabled(total_remaining == 0)
+
+        for res, (_, dec_btn, inc_btn) in quantity_btns.items():
+            inc_btn.clicked.connect(lambda _, r=res: increase(r))
+            dec_btn.clicked.connect(lambda _, r=res: decrease(r))
+
+        def increase(res: Resource):
+            total_remaining = num_resources - sum(chosen.values())
+            if total_remaining > 0 and chosen[res] < resource_caps[res]:
+                chosen[res] += 1
+                update_quantity_display(res)
+                update_labels()
+
+        def decrease(res: Resource):
+            if chosen[res] > 0:
+                chosen[res] -= 1
+                update_quantity_display(res)
+                update_labels()
+
+        def update_quantity_display(res: Resource):
+            quantity_btns[res][0].setText(str(chosen[res]))
+
+        def submit():
+            self.canvas.selectionMade.emit(chosen)
+            self.side_panel.action_btn_layout.removeWidget(selection_widget)
+            selection_widget.setParent(None)
+
+        selection_widget.submit_btn.clicked.connect(submit)
+
+        update_labels()
+
+        for res in Resource:
+            update_quantity_display(res)

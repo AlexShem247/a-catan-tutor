@@ -79,7 +79,7 @@ def play_dev_card_menu(player: Player, controller: GameController) -> bool:
 def make_round_move(player: Player, controller: GameController, view: View):
     """Handle a full turn for a human player, including dice roll, resource display, and building actions."""
     d1, d2, total, _ = controller.roll_dice(player)
-    block_until_turn_finished(view, view.display_board_turn, (player, (d1, d2, total)))
+    block_until_turn_finished(view, view.display_board_turn, player, (d1, d2, total))
 
 
 def make_round_move_old(player: Player, controller: GameController, view: View):
@@ -442,42 +442,8 @@ def choose_resources(
     Generic resource selection helper.
     Allows choosing exactly `num_resources` resources, optionally capped per resource.
     """
-    chosen: ResourceCount = {res: 0 for res in Resource}
-
-    if resource_caps is None:
-        resource_caps = {res: num_resources for res in Resource}
-
-    while sum(chosen.values()) < num_resources:
-        remaining = num_resources - sum(chosen.values())
-        clear_screen()
-        display_board(controller.get_game_state())
-        view.display_board(controller.get_game_state())
-
-        print(f"\n{title}")
-        print(f"You need to select {remaining} more resource{'s' if remaining > 1 else ''}.\n")
-
-        print("Current selection:")
-        display_resources(chosen, resource_caps)
-
-        user_input = input("Enter [RESOURCE] [AMOUNT]: ").strip().lower()
-
-        try:
-            res_name, amount_str = user_input.split()
-            amount = int(amount_str)
-            res = Resource[res_name.upper()]
-
-            max_allowed = resource_caps[res]
-            current = chosen[res]
-
-            # Clamp
-            amount = max(0, min(amount, max_allowed))
-            amount = current + min(amount - current, remaining)
-
-            chosen[res] = amount
-
-        except (ValueError, KeyError):
-            print("Invalid input. Format: '[RESOURCE] [AMOUNT]'")
-
+    chosen: ResourceCount = select_blocking(view, view.show_resource_chooser, controller.get_all_players()[0],
+                                            num_resources, title, resource_caps)
     return chosen
 
 
@@ -527,15 +493,11 @@ def monopoly_selection(controller: GameController, view: View) -> Resource:
 
 def place_robber(player: Player, controller: GameController, view: View) -> Tuple[HexTile, Optional[Player]]:
     """Prompt the player to select a hex tile to move the robber, and pick a player to steal from if possible."""
-    print(f"\n--- {player.name}'s Robber Move ---\n")
-    print("Select a hex to move the robber...")
 
     # Get available hex tiles (exclude current robber tile)
     available_hexes = [tile for tile in controller.get_all_hexes() if not tile.robber]
     view.display_board(player, "Select a hex to move the robber")
     selected_hex: HexTile = select_blocking(view, view.draw_selectable_tiles, available_hexes)
-
-    print(f"Hex selected at ({selected_hex.q}, {selected_hex.r})")
 
     # Check for stealable players on adjacent vertices
     adjacent_player_buildings: List[Vertex] = [
@@ -548,11 +510,8 @@ def place_robber(player: Player, controller: GameController, view: View) -> Tupl
     if not adjacent_player_buildings:
         return selected_hex, None
 
-    print("Select a player to steal from...")
     view.display_board(player, "Select a player to steal from")
     selected_player_building: Vertex = select_blocking(view, view.draw_selectable_vertices, adjacent_player_buildings)
     selected_player = selected_player_building.owner
-
-    print(f"Player selected: {selected_player.name}")
 
     return selected_hex, selected_player
