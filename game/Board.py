@@ -142,7 +142,7 @@ class Board:
             self.port_vertices.append((port, v1, v2))
 
             # Move to next port
-            i += random.choice([3, 4]) if i < 22 else 3
+            i += random.choice([3, 4]) if i < 20 else 3
 
     def assign_neighbors(self) -> None:
         directions: List[Tuple[int, int]] = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]

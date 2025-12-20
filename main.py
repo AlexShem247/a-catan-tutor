@@ -6,6 +6,9 @@ from drawing.View import View
 
 sys.excepthook = lambda exc_type, exc_value, tb: (traceback.print_exception(exc_type, exc_value, tb), sys.exit(-1))
 
+import faulthandler
+faulthandler.enable()
+
 from PyQt6.QtWidgets import QApplication
 
 from GameController import GameController
@@ -28,9 +31,9 @@ if __name__ == "__main__":
         play_round_ai_hook=make_round_move_ai,
         trade_manager_hook=trade_manager,
         trade_manager_ai_hook=trade_manager_ai,
-        robber_discard_hook=robber_discard,
+        robber_discard_hook=robber_discard_ai,
         robber_discard_ai_hook=robber_discard_ai,
-        place_robber_hook=place_robber,
+        place_robber_hook=place_robber_ai,
         place_robber_ai_hook=place_robber_ai,
         year_of_plenty_selection=year_of_plenty_selection,
         year_of_plenty_selection_ai=year_of_plenty_selection_ai,

@@ -3,14 +3,16 @@ from typing import Dict, Tuple
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel, QPushButton, QToolButton
+    QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel, QToolButton
 )
 
 from GameController import GameController
 from drawing.SquareCanvas import SquareCanvas
+from game.Edge import Edge
 from game.Player import PlayerNumber, Player
 from game.PlayerAssets import Buildable
 from game.Resources import Resource, ResourceCount
+from game.Vertex import Vertex
 
 
 def get_player_lead_status(player: Player) -> str:
@@ -176,6 +178,10 @@ class MainWindow(QMainWindow):
         self.toggle_main_action_btns(False)
 
     def display_round_info(self, controller: GameController, player: Player, dice_info: Tuple[int, int, int]):
+        self.canvas.interactive_shapes.clear()
+        self.canvas.display_board(controller)
+        self.display_resources(controller)
+
         d1, d2, total = dice_info
         self.side_panel.turn_label.setText(f"{player.name}'s turn")
         self.side_panel.main_label.setText(f"Dice rolled: {d1} + {d2} = {total}\nWhat would you like to do?")
@@ -184,7 +190,30 @@ class MainWindow(QMainWindow):
         self.toggle_main_action_btns(True)
         buildable = controller.get_buildable_options(player)
         can_build = buildable[Buildable.ROAD] or buildable[Buildable.SETTLEMENT] or buildable[Buildable.CITY]
-        self.side_panel.action_label.setText("Click on the board to build" if can_build else "")
+
+        def build(selected_buildable: Vertex | Edge):
+            match selected_buildable:
+                case Edge():
+                    controller.try_build_road(player, selected_buildable)
+                case Vertex():
+                    if selected_buildable.building is None:
+                        controller.try_build_settlement(player, selected_buildable)
+                    else:
+                        controller.try_build_city(player, selected_buildable)
+
+            self.display_round_info(controller, player, dice_info)
+
+        if can_build:
+            self.canvas.draw_buildables(buildable)
+            try:
+                self.canvas.selectionMade.disconnect()
+            except TypeError:
+                pass
+            self.canvas.selectionMade.connect(build)
+            self.side_panel.action_label.setText("Click on the board to build")
+        else:
+            self.side_panel.action_label.setText("")
+
         self.side_panel.dev_btn.setEnabled(buildable[Buildable.DEVELOPMENT_CARD] or len(player.development_cards) > 0)
         self.side_panel.trade_btn.setEnabled(sum(player.resources.values()) > 0)
         self.side_panel.trade_btn.setEnabled(False)  # TODO: Add trading

@@ -305,7 +305,10 @@ class SquareCanvas(QWidget):
 
         # Settlements and Cities (vertices)
         buildable_vertices = buildables[Buildable.SETTLEMENT] + buildables[Buildable.CITY]
+
+        interactive_shapes = self.interactive_shapes.copy()
         self.draw_selectable_vertices(buildable_vertices)
+        self.interactive_shapes.extend(interactive_shapes)
 
     def get_world_centre(self) -> Tuple[int, int]:
         return int(self.world_size * 0.5), int(self.world_size * (21/40))

@@ -35,8 +35,6 @@ class View:
 
     def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int]):
         """Hook to display the board in the Qt window."""
-        self.canvas.display_board(self.controller)
-        self.window.display_resources(self.controller)
         self.window.display_round_info(self.controller, player, dice_info)
 
     def display_board_turn_ai(self, player: Player, dice_info: Tuple[int, int, int], msg: str):
