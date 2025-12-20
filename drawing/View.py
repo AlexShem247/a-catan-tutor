@@ -1,10 +1,11 @@
-from typing import List, Dict, Tuple
+from typing import List, Dict, Optional, Tuple
 
-from PyQt6.QtCore import QEventLoop
+from PyQt6.QtCore import QEventLoop, QTimer
 
+from GameController import GameController
 from drawing.MainWindow import MainWindow
+from drawing.constants import AI_DECISION_ANIMATION_DELAY
 from game.Edge import Edge
-from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
 from game.Vertex import Vertex
@@ -13,21 +14,40 @@ from game.Vertex import Vertex
 class View:
     """Provides hook functions that interact with Qt for the controller."""
 
-    def __init__(self, window: MainWindow):
+    def __init__(self, window: MainWindow, controller: GameController):
         self.window = window
         self.canvas = window.canvas
+        self.controller = controller
 
-    def display_board(self, game: Game, player: Player, msg: str):
+    def display_board(self, player: Optional[Player] = None, msg: Optional[str] = None):
         """Hook to display the board in the Qt window."""
-        self.canvas.display_board(game)
-        self.window.display_resources(game)
-        self.window.display_turn_info(game, player, msg=msg)
+        self.canvas.display_board(self.controller)
+        self.window.display_resources(self.controller)
+        if msg is not None and player is not None:
+            self.window.display_generic_info(player, msg)
+            if not player.is_human:
+                ai_time_delay(AI_DECISION_ANIMATION_DELAY * 1)
 
-    def display_board_turn(self, game: Game, player: Player, dice_roll: Tuple[int, int, int]):
+    def display_board_ai(self, player: Player, msg: str):
         """Hook to display the board in the Qt window."""
-        self.canvas.display_board(game)
-        self.window.display_resources(game)
-        self.window.display_turn_info(game, player, dice_roll=dice_roll)
+        self.window.display_resources(self.controller)
+        self.window.display_generic_info(player, msg)
+        ai_time_delay(AI_DECISION_ANIMATION_DELAY * 1)
+
+    def display_board_turn(self, params: Tuple[Player, Tuple[int, int, int]]):
+        """Hook to display the board in the Qt window."""
+        player, dice_info = params
+        self.canvas.display_board(self.controller)
+        self.window.display_resources(self.controller)
+        self.window.display_round_info(self.controller, player, dice_info)
+
+    def display_board_turn_ai(self, player: Player, dice_info: Tuple[int, int, int], msg: str):
+        """Hook to display the board in the Qt window."""
+        self.canvas.display_board(self.controller)
+        self.window.display_resources(self.controller)
+        self.window.display_round_info_ai_start(player, dice_info, msg)
+        delay = (3 if "\n" in msg else 1) * AI_DECISION_ANIMATION_DELAY
+        ai_time_delay(delay)
 
     def draw_selectable_vertices(self, vertices: List[Vertex]):
         """Draws which vertices are selectable"""
@@ -64,3 +84,25 @@ def select_blocking(view: View, draw_fn, options):
     view.canvas.clear_interactives()
 
     return selected
+
+
+def block_until_turn_finished(view: View, draw_fn, options):
+    loop = QEventLoop()
+
+    def on_selected(_):
+        loop.quit()
+
+    view.window.turnMade.connect(on_selected)
+    draw_fn(options)
+
+    loop.exec()
+
+    view.window.turnMade.disconnect(on_selected)
+
+
+def ai_time_delay(seconds: int):
+    loop = QEventLoop()
+
+    QTimer.singleShot(int(seconds * 1000), loop.quit)
+
+    loop.exec()

@@ -41,7 +41,7 @@ if __name__ == "__main__":
     # Start Qt
     app = QApplication(sys.argv)
     window = MainWindow()
-    controller.view = View(window)
+    controller.view = View(window, controller)
     window.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
     window.show()
 

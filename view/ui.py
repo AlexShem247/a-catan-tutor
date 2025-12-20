@@ -1,7 +1,7 @@
 from typing import List, Optional, Tuple
 
 from GameController import GameController
-from drawing.View import View, select_blocking
+from drawing.View import View, select_blocking, block_until_turn_finished
 from game.Edge import Edge
 from game.Game import Game
 from game.HexTile import HexTile
@@ -15,8 +15,7 @@ from view.display import display_board, clear_screen, get_player_lead_status, di
 
 def initial_settlement_placement(player: Player, controller: GameController, view: View) -> Vertex:
     """Human selects a vertex for initial settlement placement."""
-    clear_screen()
-    view.display_board(controller.get_game_state(), player, "Select a position to build your settlement")
+    view.display_board(player, "Select a position to build your settlement")
 
     vertices = controller.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
     vertex: Vertex = select_blocking(view, view.draw_selectable_vertices, vertices)
@@ -27,8 +26,7 @@ def initial_settlement_placement(player: Player, controller: GameController, vie
 def initial_road_placement(player: Player, controller: GameController, view: View,
                            settlement: Optional[Vertex] = None) -> Edge:
     """Human selects an edge for initial road placement."""
-    clear_screen()
-    view.display_board(controller.get_game_state(), player, "Select a position to build your road")
+    view.display_board(player, "Select a position to build your road")
 
     edges = controller.get_available_edges(player)
     if settlement is not None:
@@ -80,10 +78,14 @@ def play_dev_card_menu(player: Player, controller: GameController) -> bool:
 
 def make_round_move(player: Player, controller: GameController, view: View):
     """Handle a full turn for a human player, including dice roll, resource display, and building actions."""
+    d1, d2, total, _ = controller.roll_dice(player)
+    block_until_turn_finished(view, view.display_board_turn, (player, (d1, d2, total)))
 
+
+def make_round_move_old(player: Player, controller: GameController, view: View):
     # Pre-roll development cards
     clear_screen()
-    view.display_board(controller.get_game_state(), player, "")
+    view.display_board(player, "")
     print(f"\n--- {player.name}'s turn (Pre-Roll) ---\n")
     print("Your resources:")
     display_resources(player.resources)
@@ -95,7 +97,7 @@ def make_round_move(player: Player, controller: GameController, view: View):
     while True:
         clear_screen()
         display_board(controller.get_game_state())
-        view.display_board_turn(controller.get_game_state(), player, (d1, d2, total))
+        view.display_board_turn(player, (d1, d2, total))
         print(f"\n--- {player.name}'s turn ---\n")
         print(f"Dice rolled: {d1} + {d2} = {total}")
 
@@ -530,6 +532,7 @@ def place_robber(player: Player, controller: GameController, view: View) -> Tupl
 
     # Get available hex tiles (exclude current robber tile)
     available_hexes = [tile for tile in controller.get_all_hexes() if not tile.robber]
+    view.display_board(player, "Select a hex to move the robber")
     selected_hex: HexTile = select_blocking(view, view.draw_selectable_tiles, available_hexes)
 
     print(f"Hex selected at ({selected_hex.q}, {selected_hex.r})")
@@ -546,6 +549,7 @@ def place_robber(player: Player, controller: GameController, view: View) -> Tupl
         return selected_hex, None
 
     print("Select a player to steal from...")
+    view.display_board(player, "Select a player to steal from")
     selected_player_building: Vertex = select_blocking(view, view.draw_selectable_vertices, adjacent_player_buildings)
     selected_player = selected_player_building.owner
 

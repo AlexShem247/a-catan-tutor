@@ -4,11 +4,11 @@ from PyQt6.QtCore import Qt, QRect, QPointF, QSize, pyqtSignal, QTimer
 from PyQt6.QtGui import QPainter, QCursor, QPixmap
 from PyQt6.QtWidgets import QWidget
 
+from GameController import GameController
 from drawing.board_geometry import hex_center, vertex_xy
 from drawing.constants import WINDOW_HEIGHT, BOARD_BG_COLOR, HEX_TILE_RADIUS, SETTLEMENT_ICONS, hex_to_filepath, \
     EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON, HIGHLIGHT_COLOR, OUTLINE_COLOR
 from drawing.shapes import HexTileShape, VertexShape, LineShape, InteractiveShape, InteractiveCircle
-from game import Game
 from game.Edge import Edge
 from game.HexTile import HexTile
 from game.PlayerAssets import Buildable
@@ -208,15 +208,15 @@ class SquareCanvas(QWidget):
         wy = (pos.y() - self.offset.y()) / scale
         return wx, wy
 
-    def display_board(self, game: Game):
+    def display_board(self, controller: GameController):
         self.clear_shapes()
         cx = cy = self.world_size // 2
 
-        for tile in game.get_all_hexes():
+        for tile in controller.get_all_hexes():
             x, y = hex_center(tile.q, tile.r, cx, cy, HEX_TILE_RADIUS)
             self.add_shape(HexTileShape(x, y, HEX_TILE_RADIUS, tile, self.icons))
 
-        for edge in game.get_all_edges():
+        for edge in controller.get_all_edges():
             v1, v2 = edge.vertices
             x1, y1 = vertex_xy(v1, cx, cy, HEX_TILE_RADIUS)
             x2, y2 = vertex_xy(v2, cx, cy, HEX_TILE_RADIUS)
@@ -224,7 +224,7 @@ class SquareCanvas(QWidget):
             color = PLAYER_COLORS[edge.owner.playerNumber] if edge.owner else EDGE_COLOR
             self.add_shape(LineShape(x1, y1, x2, y2, ROAD_THICKNESS, color))
 
-        for vertex in game.get_all_vertices():
+        for vertex in controller.get_all_vertices():
             x, y = vertex_xy(vertex, cx, cy, HEX_TILE_RADIUS)
             self.add_shape(VertexShape(x, y, VERTEX_SIZE, vertex, self.icons))
 

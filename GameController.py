@@ -1,6 +1,5 @@
-from typing import Callable, List, Tuple, Optional
+from typing import Callable, List, Tuple, Optional, TYPE_CHECKING
 
-from drawing.View import View
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game
 from game.HexTile import HexTile
@@ -9,6 +8,9 @@ from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import ResourceCount, Resource
 from game.Vertex import Vertex, VertexDirection
 from view.display import display_results
+
+if TYPE_CHECKING:
+    from drawing.View import View
 
 
 class GameController:
@@ -20,25 +22,25 @@ class GameController:
     def __init__(
             self,
             game: Game,
-            get_settlement_choice: Callable[[Player, "GameController", View], Vertex] = None,
-            get_road_choice: Callable[[Player, "GameController", View, Optional[Vertex]], Edge] = None,
-            get_settlement_choice_ai: Callable[[Player, "GameController", View], Vertex] = None,
-            get_road_choice_ai: Callable[[Player, "GameController", View, Optional[Vertex]], Edge] = None,
-            play_round_hook: Callable[[Player, "GameController", View], None] = None,
-            play_round_ai_hook: Callable[[Player, "GameController", View], None] = None,
-            trade_manager_hook: Callable[["GameController", Player, View, ResourceCount, ResourceCount,
+            get_settlement_choice: Callable[[Player, "GameController", "View"], Vertex] = None,
+            get_road_choice: Callable[[Player, "GameController", "View", Optional[Vertex]], Edge] = None,
+            get_settlement_choice_ai: Callable[[Player, "GameController", "View"], Vertex] = None,
+            get_road_choice_ai: Callable[[Player, "GameController", "View", Optional[Vertex]], Edge] = None,
+            play_round_hook: Callable[[Player, "GameController", "View"], None] = None,
+            play_round_ai_hook: Callable[[Player, "GameController", "View"], None] = None,
+            trade_manager_hook: Callable[["GameController", Player, "View", ResourceCount, ResourceCount,
                                           Player], Tuple[bool, Optional[ResourceCount]]] = None,
             trade_manager_ai_hook: Callable[
                 [Player, ResourceCount, ResourceCount, int], Tuple[bool, Optional[ResourceCount]]] = None,
-            robber_discard_hook: Callable[[Player, "GameController", View, int, bool], ResourceCount] = None,
-            robber_discard_ai_hook: Callable[[Player, "GameController", View,
+            robber_discard_hook: Callable[[Player, "GameController", "View", int, bool], ResourceCount] = None,
+            robber_discard_ai_hook: Callable[[Player, "GameController", "View",
                                               int, bool], ResourceCount] = ResourceCount,
-            place_robber_hook: Callable[[Player, "GameController", View], Tuple[HexTile, Optional[Player]]] = None,
-            place_robber_ai_hook: Callable[[Player, "GameController", View], Tuple[HexTile, Optional[Player]]] = None,
+            place_robber_hook: Callable[[Player, "GameController", "View"], Tuple[HexTile, Optional[Player]]] = None,
+            place_robber_ai_hook: Callable[[Player, "GameController", "View"], Tuple[HexTile, Optional[Player]]] = None,
 
-            year_of_plenty_selection: Callable[["GameController", View], ResourceCount] = None,
+            year_of_plenty_selection: Callable[["GameController", "View"], ResourceCount] = None,
             year_of_plenty_selection_ai: Callable[["GameController"], ResourceCount] = None,
-            monopoly_selection: Callable[["GameController", View], Resource] = None,
+            monopoly_selection: Callable[["GameController", "View"], Resource] = None,
             monopoly_selection_ai: Callable[["GameController"], Resource] = None,
     ):
         self._game = game
@@ -116,8 +118,9 @@ class GameController:
         for player in self._game.players:
             if player != selling_player:
                 if player.is_human:
-                    interested, counter = self.trade_manager_hook(self, player, self.view,
-                                                                  selling, buying, selling_player)
+                    # interested, counter = self.trade_manager_hook(self, player, self.view,
+                    #                                               selling, buying, selling_player)
+                    interested, counter = False, None  # TODO: Add trading manager ui
                 else:
                     interested, counter = self.trade_manager_ai_hook(player, selling, buying, self.round_num)
 
@@ -346,5 +349,19 @@ class GameController:
     def get_bank_resources(self) -> ResourceCount:
         """Returns the bank's resources"""
         return self._game.bank_resources
+
+    def get_all_edges(self):
+        """Return a list of all edges on the board."""
+        return self._game.get_all_edges()
+
+    def get_all_vertices(self):
+        """Return a list of all vertices on the board."""
+        return self._game.get_all_vertices()
+
+    def get_development_deck(self):
+        return self._game.development_deck
+
+    def get_all_players(self):
+        return self._game.players
 
     # </editor-fold>

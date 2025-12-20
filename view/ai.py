@@ -23,14 +23,17 @@ ACCEPT_PROBABILITY_BY_OVERCOST = {  # Counter trades probabilities
 }
 
 
-def random_initial_settlement_placement(player: Player, controller: GameController, _: View):
+def random_initial_settlement_placement(player: Player, controller: GameController, view: View):
     """Choose a valid random vertex for settlement."""
     available_vertices = controller.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
+    view.display_board()
+    view.draw_selectable_vertices(available_vertices)
+    view.display_board_ai(player, "Select a position to build your settlement")
 
     return random.choice(available_vertices) if available_vertices else None
 
 
-def random_initial_road_placement(player: Player, controller: GameController, _: View,
+def random_initial_road_placement(player: Player, controller: GameController, view: View,
                                   settlement: Optional[Vertex] = None):
     """
     Choose a valid edge connected to the given settlement.
@@ -43,6 +46,10 @@ def random_initial_road_placement(player: Player, controller: GameController, _:
 
     if not available_edges:
         return None
+
+    view.display_board()
+    view.draw_selectable_edges(available_edges)
+    view.display_board_ai(player, "Select a position to build your road")
 
     return random.choice(available_edges)
 
@@ -288,28 +295,8 @@ def make_round_move_ai(player: Player, controller: GameController, view: View):
         card_msg = controller.play_development_card(player, card) + " (Post-roll)"
 
     # 5. Display results
-    clear_screen()
-    display_board(controller.get_game_state())
-    view.display_board(controller.get_game_state())
-
-    print(f"\n--- {player.name}'s turn (AI) ---\n")
-    print(f"{player.name} rolled {d1} + {d2} = {total}")
-
-    print(f"Longest Road: \t{player.longest_road_length} {'♕' if player.has_longest_road else ''}")
-    print(f"Victory Points: {player.calc_victory_points()[0]} {get_player_lead_status(player)}\n")
-
-    if trade_msg:
-        print(trade_msg)
-
-    print(build_msg)
-
-    if card_msg:
-        print(card_msg)
-
-    if roll_msg:
-        print(roll_msg)
-
-    input("\nPress enter to continue...")
+    msg = "\n".join(msg for msg in [trade_msg, build_msg, card_msg, roll_msg] if msg)
+    view.display_board_turn_ai(player, (d1, d2, total), msg)
 
 
 def trade_manager_ai(player: Player, selling: ResourceCount, buying: ResourceCount,
