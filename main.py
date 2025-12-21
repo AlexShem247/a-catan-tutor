@@ -1,6 +1,5 @@
 import sys
 import traceback
-import threading
 
 from drawing.View import View
 
@@ -23,8 +22,8 @@ from view.ui import initial_settlement_placement, initial_road_placement, make_r
 if __name__ == "__main__":
     controller = GameController(
         Game(),
-        get_settlement_choice=initial_settlement_placement,
-        get_road_choice=initial_road_placement,
+        get_settlement_choice=random_initial_settlement_placement,
+        get_road_choice=random_initial_road_placement,
         get_settlement_choice_ai=random_initial_settlement_placement,
         get_road_choice_ai=random_initial_road_placement,
         play_round_hook=make_round_move,
@@ -45,10 +44,8 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     window = MainWindow()
     controller.view = View(window, controller)
-    window.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
+    window.setGeometry(120, 50, WINDOW_WIDTH, WINDOW_HEIGHT)
     window.show()
-
-    # Run the game in a background thread so the GUI stays responsive
-    threading.Thread(target=controller.start_game, daemon=True).start()
+    controller.start_game()
 
     sys.exit(app.exec())

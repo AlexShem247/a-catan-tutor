@@ -1,9 +1,10 @@
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel, QToolButton
+    QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel, QToolButton, QListWidgetItem, QSpacerItem,
+    QSizePolicy
 )
 
 from GameController import GameController
@@ -13,6 +14,7 @@ from game.Player import PlayerNumber, Player
 from game.PlayerAssets import Buildable
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
+from view.display import format_counter_offer
 
 
 def get_player_lead_status(player: Player) -> str:
@@ -68,8 +70,10 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(1, 0)
 
         self.resource_selector_widget = uic.loadUi("drawing/ui/resource_selector.ui")
+        self.trade_designer_widget = uic.loadUi("drawing/ui/trade_designer.ui")
+        self.select_trade_widget = uic.loadUi("drawing/ui/select_trade.ui")
 
-        self.toggle_main_action_btns(False)
+        self.verticalSpacer = self.find_last_vertical_spacer()
 
     @staticmethod
     def word_wrap(msg: str, limit=LABEL_LINE_LENGTH) -> str:
@@ -82,6 +86,51 @@ class MainWindow(QMainWindow):
             out.append(line)
         return "\n".join(out)
 
+    def find_last_vertical_spacer(self) -> QSpacerItem | None:
+        last_spacer = None
+        layout = self.side_panel.frame.layout()
+        if layout is None:
+            return None
+
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            if item and item.spacerItem() is not None:
+                last_spacer = item.spacerItem()
+        self.verticalSpacer = last_spacer
+        return last_spacer
+
+    def minimise_spacer(self):
+        """Shrinks self.verticalSpacer to zero size, effectively hiding it."""
+        if getattr(self, "verticalSpacer", None) is None:
+            return
+
+        spacer = self.verticalSpacer
+        if not hasattr(spacer, "_original_size"):
+            spacer._original_size = (
+                spacer.geometry().width(),
+                spacer.geometry().height(),
+                spacer.sizePolicy().horizontalPolicy(),
+                spacer.sizePolicy().verticalPolicy()
+            )
+
+        spacer.changeSize(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+        if self.side_panel.frame.layout() is not None:
+            self.side_panel.frame.layout().update()
+
+    def restore_spacer(self):
+        """Restores self.verticalSpacer to its original size and size policy."""
+        if getattr(self, "verticalSpacer", None) is None:
+            return
+
+        spacer = self.verticalSpacer
+        if not hasattr(spacer, "_original_size"):
+            return
+
+        w, h, h_policy, v_policy = getattr(spacer, "_original_size")
+        spacer.changeSize(w, h, h_policy, v_policy)
+        if self.side_panel.frame.layout() is not None:
+            self.side_panel.frame.layout().update()
+
     def toggle_main_action_btns(self, show: bool):
         for i in range(self.side_panel.action_btn_layout.count()):
             widget: QWidget = self.side_panel.action_btn_layout.itemAt(i).widget()
@@ -90,6 +139,9 @@ class MainWindow(QMainWindow):
                     widget.show()
                 else:
                     widget.hide()
+
+    def closeEvent(self, _):
+        quit()
 
     def display_resources(self, controller: GameController):
         # Fill in bank labels
@@ -171,14 +223,12 @@ class MainWindow(QMainWindow):
     def display_generic_info(self, player: Player, msg: str):
         self.side_panel.turn_label.setText(f"{player.name}'s turn")
         self.side_panel.main_label.setText(msg)
-        if player.is_human:
-            self.side_panel.action_label.setText("")
-        else:
-            self.side_panel.action_label.setText(f"{player} is thinking")
+        self.side_panel.action_label.setText("" if player.is_human else f"{player} is thinking")
         self.toggle_main_action_btns(False)
 
     def display_round_info(self, controller: GameController, player: Player, dice_info: Tuple[int, int, int]):
         self.canvas.interactive_shapes.clear()
+        self.canvas.disable_interactivity = False
         self.canvas.display_board(controller)
         self.display_resources(controller)
 
@@ -216,9 +266,246 @@ class MainWindow(QMainWindow):
 
         self.side_panel.dev_btn.setEnabled(buildable[Buildable.DEVELOPMENT_CARD] or len(player.development_cards) > 0)
         self.side_panel.trade_btn.setEnabled(sum(player.resources.values()) > 0)
-        self.side_panel.trade_btn.setEnabled(False)  # TODO: Add trading
+        self.side_panel.trade_btn.clicked.connect(lambda: self.display_trade_menu(
+            controller, player, lambda: self.display_round_info(controller, player, dice_info)))
         self.side_panel.dev_btn.setEnabled(False)  # TODO: Add development cards
         self.side_panel.end_turn_btn.clicked.connect(lambda: self.turnMade.emit(True))
+
+    def display_trade_menu(self, controller: GameController, player: Player, back_action):
+        self.display_resources(controller)
+        trade_designer = self.trade_designer_widget
+        trade_designer.setParent(self.side_panel)
+
+        selling_btns: Dict[Resource, Tuple[QLabel, QToolButton, QToolButton]] = {
+            Resource.WOOD: (trade_designer.selling_wood_quantity, trade_designer.selling_wood_quantity_dec,
+                            trade_designer.selling_wood_quantity_inc),
+            Resource.BRICK: (trade_designer.selling_brick_quantity, trade_designer.selling_brick_quantity_dec,
+                             trade_designer.selling_brick_quantity_inc),
+            Resource.SHEEP: (trade_designer.selling_sheep_quantity, trade_designer.selling_sheep_quantity_dec,
+                             trade_designer.selling_sheep_quantity_inc),
+            Resource.WHEAT: (trade_designer.selling_wheat_quantity, trade_designer.selling_wheat_quantity_dec,
+                             trade_designer.selling_wheat_quantity_inc),
+            Resource.ORE: (trade_designer.selling_ore_quantity, trade_designer.selling_ore_quantity_dec,
+                           trade_designer.selling_ore_quantity_inc)
+        }
+
+        buying_btns: Dict[Resource, Tuple[QLabel, QToolButton, QToolButton]] = {
+            Resource.WOOD: (trade_designer.buying_wood_quantity, trade_designer.buying_wood_quantity_dec,
+                            trade_designer.buying_wood_quantity_inc),
+            Resource.BRICK: (trade_designer.buying_brick_quantity, trade_designer.buying_brick_quantity_dec,
+                             trade_designer.buying_brick_quantity_inc),
+            Resource.SHEEP: (trade_designer.buying_sheep_quantity, trade_designer.buying_sheep_quantity_dec,
+                             trade_designer.buying_sheep_quantity_inc),
+            Resource.WHEAT: (trade_designer.buying_wheat_quantity, trade_designer.buying_wheat_quantity_dec,
+                             trade_designer.buying_wheat_quantity_inc),
+            Resource.ORE: (trade_designer.buying_ore_quantity, trade_designer.buying_ore_quantity_dec,
+                           trade_designer.buying_ore_quantity_inc)
+        }
+
+        # UI setup
+        self.side_panel.main_label.hide()
+        self.side_panel.action_label.hide()
+        self.toggle_main_action_btns(False)
+        self.minimise_spacer()
+        self.side_panel.action_btn_layout.addWidget(trade_designer)
+
+        # Trade state
+        selling: ResourceCount = {res: 0 for res in Resource}
+        buying: ResourceCount = {res: 0 for res in Resource}
+
+        def update_quantity(label: QLabel, value: int):
+            label.setText(str(value))
+
+        def update_buttons():
+            # Selling buttons: capped by player inventory
+            for res, (_, dec_btn, inc_btn) in selling_btns.items():
+                dec_btn.setEnabled(selling[res] > 0)
+                inc_btn.setEnabled(selling[res] < player.resources[res])
+
+            # Buying buttons: no upper cap
+            for res, (_, dec_btn, inc_btn) in buying_btns.items():
+                dec_btn.setEnabled(buying[res] > 0)
+                inc_btn.setEnabled(True)
+
+            # Validate trade
+            trade_incomplete = all(v == 0 for v in selling.values()) or all(v == 0 for v in buying.values())
+            valid_bank_trade = (not trade_incomplete and
+                                controller.try_trade_with_bank(player, selling, buying, use_resources=False))
+            valid_player_trade = not trade_incomplete
+
+            trade_designer.bank_trade_btn.setEnabled(valid_bank_trade)
+            trade_designer.player_trade_btn.setEnabled(valid_player_trade)
+
+        # Selling Handlers
+
+        def increase_selling(res: Resource):
+            if selling[res] < player.resources[res]:
+                # If we start selling, zero out buying
+                if selling[res] == 0 and buying[res] > 0:
+                    buying[res] = 0
+                    update_quantity(buying_btns[res][0], 0)
+
+                selling[res] += 1
+                update_quantity(selling_btns[res][0], selling[res])
+                update_buttons()
+
+        def decrease_selling(res: Resource):
+            if selling[res] > 0:
+                selling[res] -= 1
+                update_quantity(selling_btns[res][0], selling[res])
+                update_buttons()
+
+        # Buying Handlers
+
+        def increase_buying(res: Resource):
+            # If we start buying, zero out selling
+            if buying[res] == 0 and selling[res] > 0:
+                selling[res] = 0
+                update_quantity(selling_btns[res][0], 0)
+
+            buying[res] += 1
+            update_quantity(buying_btns[res][0], buying[res])
+            update_buttons()
+
+        def decrease_buying(res: Resource):
+            if buying[res] > 0:
+                buying[res] -= 1
+                update_quantity(buying_btns[res][0], buying[res])
+                update_buttons()
+
+        # Bind buttons
+
+        for res, (_, dec, inc) in selling_btns.items():
+            inc.clicked.connect(lambda _, r=res: increase_selling(r))
+            dec.clicked.connect(lambda _, r=res: decrease_selling(r))
+
+        for res, (_, dec, inc) in buying_btns.items():
+            inc.clicked.connect(lambda _, r=res: increase_buying(r))
+            dec.clicked.connect(lambda _, r=res: decrease_buying(r))
+
+        for res in Resource:
+            update_quantity(selling_btns[res][0], 0)
+            update_quantity(buying_btns[res][0], 0)
+
+        update_buttons()
+
+        def terminate_trade():
+            # Remove added widgets
+            self.side_panel.main_label.show()
+            self.side_panel.action_label.show()
+            self.restore_spacer()
+            self.side_panel.action_btn_layout.removeWidget(trade_designer)
+            trade_designer.setParent(None)
+            back_action()
+
+        def trade_with_bank():
+            # Carry out trade
+            controller.try_trade_with_bank(player, selling, buying)
+            self.display_trade_menu(controller, player, back_action)
+
+        def trade_with_players():
+            # Trade with players
+            nonlocal selling, buying
+            willing_players = controller.trade_with_players(player, selling, buying)
+            self.side_panel.action_btn_layout.removeWidget(trade_designer)
+            trade_designer.setParent(None)
+            self.select_player_to_trade(controller, player, selling, buying, willing_players,
+                                        lambda: self.display_trade_menu(controller, player, back_action))
+
+        trade_designer.terminate_btn.clicked.connect(terminate_trade)
+        trade_designer.bank_trade_btn.clicked.connect(trade_with_bank)
+        trade_designer.player_trade_btn.clicked.connect(trade_with_players)
+
+    def select_player_to_trade(self, controller: GameController, player: Player, selling: ResourceCount,
+                               buying: ResourceCount, willing_players: List[Tuple[Player, ResourceCount | None]],
+                               back_action):
+        self.display_resources(controller)
+        select_trade = self.select_trade_widget
+        select_trade.setParent(self.side_panel)
+
+        # Disable main action buttons and show the trade selector
+        self.side_panel.action_btn_layout.addWidget(select_trade)
+        select_trade.trade_list.clear()
+        self.side_panel.action_label.show()
+
+        # Case 1: no players are willing to trade
+        if not willing_players:
+            self.side_panel.action_label.setText(
+                self.word_wrap("No players are willing to trade with you right now.")
+            )
+            select_trade.submit_btn.setText("Go back")
+            select_trade.trade_list.hide()
+
+            def back():
+                self.side_panel.action_btn_layout.removeWidget(select_trade)
+                select_trade.setParent(None)
+                back_action()
+
+            select_trade.submit_btn.clicked.connect(back)
+            return
+
+        # Case 2: show available trade offers
+        self.side_panel.action_label.setText(self.word_wrap(
+            f"Available Trades for {format_counter_offer(buying, buying)}:"
+        ))
+        select_trade.submit_btn.setText("Cancel")
+        select_trade.trade_list.show()
+
+        # Populate the list with trade offers
+        for p, counter in willing_players:
+            if counter is None:
+                can_afford = True
+                trade_str = format_counter_offer(selling, selling)
+            else:
+                can_afford = all(
+                    player.resources.get(res, 0) >= amt
+                    for res, amt in counter.items()
+                )
+                trade_str = format_counter_offer(selling, counter)
+
+            item = QListWidgetItem(f"Trade {p.name}: {trade_str}")
+
+            # Disable trades the player cannot afford
+            if not can_afford:
+                item.setText(item.text() + " (CANNOT AFFORD)")
+                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+
+            # Store the trade data on the item
+            item.setData(Qt.ItemDataRole.UserRole, (p, counter) if can_afford else None)
+            select_trade.trade_list.addItem(item)
+
+        # Automatically select the first affordable trade
+        for i in range(select_trade.trade_list.count()):
+            if select_trade.trade_list.item(i).flags() & Qt.ItemFlag.ItemIsEnabled:
+                select_trade.trade_list.setCurrentRow(i)
+                break
+
+        # Accept a trade when the user double-clicks an item
+        def accept_trade(trade: QListWidgetItem):
+            nonlocal selling
+            deal = trade.data(Qt.ItemDataRole.UserRole)
+            if not deal:
+                return
+
+            self.side_panel.action_btn_layout.removeWidget(select_trade)
+            select_trade.setParent(None)
+
+            buying_player, counter_offer = deal
+            if counter_offer is not None:
+                selling = counter_offer  # Player accepted counteroffer
+
+            controller.trade_between_players(player, selling, buying_player, buying)
+            back_action()
+
+        select_trade.trade_list.itemDoubleClicked.connect(accept_trade)
+
+        # Cancel and return to the previous action
+        def cancel():
+            self.side_panel.action_btn_layout.removeWidget(select_trade)
+            select_trade.setParent(None)
+            back_action()
+
+        select_trade.submit_btn.clicked.connect(cancel)
 
     def display_round_info_ai_start(self, player: Player, dice_info: Tuple[int, int, int], msg: str):
         d1, d2, total = dice_info
@@ -231,6 +518,7 @@ class MainWindow(QMainWindow):
                               resource_caps: ResourceCount | None = None):
 
         selection_widget = self.resource_selector_widget
+        selection_widget.setParent(self.side_panel)
         quantity_btns: Dict[Resource, Tuple[QLabel, QToolButton, QToolButton]] = {
             Resource.WOOD: (selection_widget.wood_quantity, selection_widget.wood_quantity_dec,
                             selection_widget.wood_quantity_inc),
