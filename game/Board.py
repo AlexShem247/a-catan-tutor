@@ -129,20 +129,28 @@ class Board:
 
         # Assign ports
         water_edges = self._get_water_edges()
+        num_edges = len(water_edges)
+        available_edges = set(range(num_edges))
         ports = PORT_TYPES[:]
         random.shuffle(ports)
-        i = 0
+        blocked_edges = set()
 
         for port in ports:
-            # Pick the next edge
-            edge = water_edges[i]
+            # Pick a random available edge that isn't blocked
+            candidates = [i for i in available_edges if i not in blocked_edges]
+            if not candidates:
+                # If no candidates, relax the rule slightly
+                candidates = list(available_edges)
+            i = random.choice(candidates)
 
-            v1, v2 = edge.vertices[0], edge.vertices[1]
+            edge = water_edges[i]
+            v1, v2 = edge.vertices
             v1.port = v2.port = port
             self.port_vertices.append((port, v1, v2))
 
-            # Move to next port
-            i += random.choice([3, 4]) if i < 20 else 3
+            # Block this edge and its immediate neighbors
+            blocked_edges.update({i, (i - 1) % num_edges, (i + 1) % num_edges})
+            available_edges.remove(i)
 
     def assign_neighbors(self) -> None:
         directions: List[Tuple[int, int]] = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]

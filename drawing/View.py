@@ -1,6 +1,6 @@
 from typing import List, Dict, Optional, Tuple
 
-from PyQt6.QtCore import QEventLoop, QTimer
+from PyQt6.QtCore import QEventLoop, QTimer, pyqtBoundSignal
 
 from GameController import GameController
 from drawing.MainWindow import MainWindow
@@ -19,6 +19,10 @@ class View:
         self.window = window
         self.canvas = window.canvas
         self.controller = controller
+        self.canvasSelection = self.canvas.selectionMade
+        self.turnMade = self.window.turnMade
+        self.tradeDecisionMade = self.window.tradeDecisionMade
+        self.resourcesPicked = self.window.resourcesPicked
 
     def display_board(self, player: Optional[Player] = None, msg: Optional[str] = None):
         """Hook to display the board in the Qt window."""
@@ -67,8 +71,14 @@ class View:
                               resource_caps: ResourceCount | None = None):
         self.window.show_resource_chooser(player, num_resources, title, resource_caps)
 
+    def display_trade_manager(self, player: Player, selling: ResourceCount,
+                              buying: ResourceCount, selling_player: Player):
+        """Displays trade and allows the option to accept, cancel or propose counter-offer"""
+        self.window.display_trade_manager(player, selling, buying, selling_player)
 
-def select_blocking(view: View, draw_fn, *args, **kwargs):
+
+def select_blocking(view: View, signal: pyqtBoundSignal, draw_fn, *args, **kwargs):
+    """Block execution until the signal emits a value, then return that value."""
     loop = QEventLoop()
     selected = None
 
@@ -77,31 +87,16 @@ def select_blocking(view: View, draw_fn, *args, **kwargs):
         selected = obj
         loop.quit()
 
-    view.canvas.selectionMade.connect(on_selected)
+    signal.connect(on_selected)
 
     draw_fn(*args, **kwargs)
 
     loop.exec()
 
-    view.canvas.selectionMade.disconnect(on_selected)
+    signal.disconnect(on_selected)
     view.canvas.clear_interactives()
 
     return selected
-
-
-def block_until_turn_finished(view: View, draw_fn, *args, **kwargs):
-    loop = QEventLoop()
-
-    def on_selected(_):
-        loop.quit()
-
-    view.window.turnMade.connect(on_selected)
-
-    draw_fn(*args, **kwargs)
-
-    loop.exec()
-
-    view.window.turnMade.disconnect(on_selected)
 
 
 def ai_time_delay(seconds: int):

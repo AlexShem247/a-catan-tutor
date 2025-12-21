@@ -1,7 +1,7 @@
 from typing import List, Optional, Tuple
 
 from GameController import GameController
-from drawing.View import View, select_blocking, block_until_turn_finished
+from drawing.View import View, select_blocking
 from game.Edge import Edge
 from game.Game import Game
 from game.HexTile import HexTile
@@ -9,8 +9,7 @@ from game.Player import Player
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
-from view.display import display_board, clear_screen, get_player_lead_status, display_resources, display_trade_offer, \
-    format_counter_offer
+from view.display import display_board, clear_screen, get_player_lead_status, display_resources, format_counter_offer
 
 
 def initial_settlement_placement(player: Player, controller: GameController, view: View) -> Vertex:
@@ -18,7 +17,7 @@ def initial_settlement_placement(player: Player, controller: GameController, vie
     view.display_board(player, "Select a position to build your settlement")
 
     vertices = controller.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
-    vertex: Vertex = select_blocking(view, view.draw_selectable_vertices, vertices)
+    vertex: Vertex = select_blocking(view, view.canvasSelection, view.draw_selectable_vertices, vertices)
 
     return vertex
 
@@ -33,7 +32,7 @@ def initial_road_placement(player: Player, controller: GameController, view: Vie
         # Restrict edges to be directly connected to settlement
         edges = [edge for edge in edges if settlement in edge.vertices]
 
-    edge: Edge = select_blocking(view, view.draw_selectable_edges, edges)
+    edge: Edge = select_blocking(view, view.canvasSelection, view.draw_selectable_edges, edges)
 
     return edge
 
@@ -79,7 +78,7 @@ def play_dev_card_menu(player: Player, controller: GameController) -> bool:
 def make_round_move(player: Player, controller: GameController, view: View):
     """Handle a full turn for a human player, including dice roll, resource display, and building actions."""
     d1, d2, total, _ = controller.roll_dice(player)
-    block_until_turn_finished(view, view.display_board_turn, player, (d1, d2, total))
+    select_blocking(view, view.turnMade, view.display_board_turn, player, (d1, d2, total))
 
 
 def make_round_move_old(player: Player, controller: GameController, view: View):
@@ -165,7 +164,8 @@ def make_round_move_old(player: Player, controller: GameController, view: View):
 
         # Build / Place interactive
         elif build_option_index is not None and choice == str(build_option_index):
-            selected_buildable: Vertex | Edge = select_blocking(view, view.draw_buildables, buildable)
+            selected_buildable: Vertex | Edge = select_blocking(view, view.canvasSelection, view.draw_buildables,
+                                                                buildable)
 
             match selected_buildable:
                 case Edge():
@@ -358,76 +358,14 @@ def trading_menu(player: Player, controller: GameController, view: View):
             input()
 
 
-def trade_manager(controller: GameController, player: Player, view: View, selling: ResourceCount,
+def trade_manager(_: GameController, player: Player, view: View, selling: ResourceCount,
                   buying: ResourceCount, selling_player: Player) -> Tuple[bool, Optional[ResourceCount]]:
     """Display AI trade and give options to accept or reject, only if player can afford it."""
+    trade: Tuple[bool, Optional[ResourceCount]] = select_blocking(
+        view, view.tradeDecisionMade, view.display_trade_manager, player, selling, buying, selling_player
+    )
 
-    # Auto-decline if player cannot afford the trade
-    if not all(player.resources.get(res, 0) >= amt for res, amt in buying.items()):
-        clear_screen()
-        display_board(controller.get_game_state())
-        view.display_board(controller.get_game_state())
-        display_trade_offer(controller.get_game_state(), selling_player, selling, buying, player)
-        print("\nYou do not have the required resources for this trade.")
-        input("Press enter to continue...")
-        return False, None
-
-    original_selling, counter_offer = selling.copy(), selling.copy()
-
-    while True:
-        clear_screen()
-        display_board(controller.get_game_state())
-        view.display_board(controller.get_game_state())
-        display_trade_offer(controller.get_game_state(), selling_player, counter_offer, buying, player)
-
-        print("\nOptions:")
-        label = "Accept" if counter_offer == original_selling else "Propose Counteroffer"
-        print(f"  1. {label}")
-        print("  2. Decline")
-        print("  3. [RESOURCE] [AMOUNT] - Modify Buying Resource")
-
-        user_input = input("Enter option: ").strip().split()
-
-        # Default: decline
-        if not user_input:
-            return False, None
-
-        option = user_input[0]
-
-        # Accept or propose counteroffer
-        if option == "1":
-            if counter_offer == original_selling:
-                return True, None
-            else:
-                return True, counter_offer
-
-        # Decline
-        elif option == "2":
-            return False, None
-
-        # Modify buying only
-        elif option == "3":
-            if len(user_input) != 3:
-                print("Invalid input. Usage: 3 [RESOURCE] [AMOUNT]")
-                input("Press enter to continue...")
-                continue
-
-            res_str = user_input[1].upper()
-            amt_str = user_input[2]
-
-            try:
-                res = Resource[res_str]
-                amt = max(0, int(amt_str))
-            except (KeyError, ValueError):
-                print("Invalid resource or amount.")
-                input("Press enter to continue...")
-                continue
-
-            counter_offer[res] = amt
-
-        else:
-            print("Invalid option.")
-            input("Press enter to continue...")
+    return trade
 
 
 def choose_resources(
@@ -442,8 +380,8 @@ def choose_resources(
     Generic resource selection helper.
     Allows choosing exactly `num_resources` resources, optionally capped per resource.
     """
-    chosen: ResourceCount = select_blocking(view, view.show_resource_chooser, controller.get_all_players()[0],
-                                            num_resources, title, resource_caps)
+    chosen: ResourceCount = select_blocking(view, view.resourcesPicked, view.show_resource_chooser,
+                                            controller.get_all_players()[0], num_resources, title, resource_caps)
     return chosen
 
 
@@ -497,7 +435,7 @@ def place_robber(player: Player, controller: GameController, view: View) -> Tupl
     # Get available hex tiles (exclude current robber tile)
     available_hexes = [tile for tile in controller.get_all_hexes() if not tile.robber]
     view.display_board(player, "Select a hex to move the robber")
-    selected_hex: HexTile = select_blocking(view, view.draw_selectable_tiles, available_hexes)
+    selected_hex: HexTile = select_blocking(view, view.canvasSelection, view.draw_selectable_tiles, available_hexes)
 
     # Check for stealable players on adjacent vertices
     adjacent_player_buildings: List[Vertex] = [
@@ -511,7 +449,8 @@ def place_robber(player: Player, controller: GameController, view: View) -> Tupl
         return selected_hex, None
 
     view.display_board(player, "Select a player to steal from")
-    selected_player_building: Vertex = select_blocking(view, view.draw_selectable_vertices, adjacent_player_buildings)
+    selected_player_building: Vertex = select_blocking(view, view.canvasSelection, view.draw_selectable_vertices,
+                                                       adjacent_player_buildings)
     selected_player = selected_player_building.owner
 
     return selected_hex, selected_player

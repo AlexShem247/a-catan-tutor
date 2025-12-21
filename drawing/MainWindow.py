@@ -34,6 +34,8 @@ class MainWindow(QMainWindow):
     SIDE_PANEL_WIDTH = 320
     LABEL_LINE_LENGTH = 38
     turnMade = pyqtSignal(object)
+    tradeDecisionMade = pyqtSignal(object)
+    resourcesPicked = pyqtSignal(object)
 
     def __init__(self):
         super().__init__()
@@ -72,8 +74,10 @@ class MainWindow(QMainWindow):
         self.resource_selector_widget = uic.loadUi("drawing/ui/resource_selector.ui")
         self.trade_designer_widget = uic.loadUi("drawing/ui/trade_designer.ui")
         self.select_trade_widget = uic.loadUi("drawing/ui/select_trade.ui")
+        self.trade_manager_widget = uic.loadUi("drawing/ui/trade_manager.ui")
 
         self.verticalSpacer = self.find_last_vertical_spacer()
+        self.side_panel.end_turn_btn.clicked.connect(lambda: self.turnMade.emit(True))
 
     @staticmethod
     def word_wrap(msg: str, limit=LABEL_LINE_LENGTH) -> str:
@@ -269,7 +273,6 @@ class MainWindow(QMainWindow):
         self.side_panel.trade_btn.clicked.connect(lambda: self.display_trade_menu(
             controller, player, lambda: self.display_round_info(controller, player, dice_info)))
         self.side_panel.dev_btn.setEnabled(False)  # TODO: Add development cards
-        self.side_panel.end_turn_btn.clicked.connect(lambda: self.turnMade.emit(True))
 
     def display_trade_menu(self, controller: GameController, player: Player, back_action):
         self.display_resources(controller)
@@ -579,7 +582,7 @@ class MainWindow(QMainWindow):
             quantity_btns[res][0].setText(str(chosen[res]))
 
         def submit():
-            self.canvas.selectionMade.emit(chosen)
+            self.resourcesPicked.emit(chosen)
             self.side_panel.action_btn_layout.removeWidget(selection_widget)
             selection_widget.setParent(None)
 
@@ -589,3 +592,109 @@ class MainWindow(QMainWindow):
 
         for res in Resource:
             update_quantity_display(res)
+
+    def display_trade_manager(self, player: Player, selling: ResourceCount,
+                              buying: ResourceCount, selling_player: Player):
+        trade_manager = self.trade_manager_widget
+        trade_manager.setParent(self.side_panel)
+
+        # Map each resource to its quantity label and +/- buttons
+        selling_btns: Dict[Resource, Tuple[QLabel, QToolButton, QToolButton]] = {
+            Resource.WOOD: (trade_manager.wood_quantity, trade_manager.wood_quantity_dec,
+                            trade_manager.wood_quantity_inc),
+            Resource.BRICK: (trade_manager.brick_quantity, trade_manager.brick_quantity_dec,
+                             trade_manager.brick_quantity_inc),
+            Resource.SHEEP: (trade_manager.sheep_quantity, trade_manager.sheep_quantity_dec,
+                             trade_manager.sheep_quantity_inc),
+            Resource.WHEAT: (trade_manager.wheat_quantity, trade_manager.wheat_quantity_dec,
+                             trade_manager.wheat_quantity_inc),
+            Resource.ORE: (trade_manager.ore_quantity, trade_manager.ore_quantity_dec,
+                           trade_manager.ore_quantity_inc)
+        }
+
+        # Initialize UI
+        self.toggle_main_action_btns(False)
+        self.minimise_spacer()
+        self.side_panel.action_btn_layout.addWidget(trade_manager)
+        self.side_panel.main_label.setText(f"Trade Offer from {selling_player.name}")
+        self.side_panel.action_label.setText(
+            self.word_wrap(f"{selling_player.name} is buying {format_counter_offer(buying, buying)} for:")
+        )
+
+        # Copy of selling quantities for adjustments
+        selling_full = {res: selling.get(res, 0) for res in Resource}
+        counter_offer = selling_full.copy()
+
+        # Helper: update the quantity labels
+        def update_quantity_display(res: Resource):
+            selling_btns[res][0].setText(str(counter_offer[res]))
+
+        # Helper: update buttons and accept/decline state
+        def update_buttons():
+            # Check if player can afford this counter-offer
+            can_afford = all(player.resources.get(res, 0) >= amt for res, amt in buying.items())
+
+            # Determine if counter-offer differs from original
+            modified = any(counter_offer[res] != selling_full[res] for res in Resource)
+
+            # Check if all selling quantities are zero
+            all_zero = all(v == 0 for v in counter_offer.values())
+
+            # Accept button: disabled if player cannot afford or all selling quantities are zero
+            trade_manager.accept_btn.setEnabled(can_afford and not all_zero)
+            trade_manager.accept_btn.setText("Propose Counteroffer" if modified else "Accept")
+
+            # Update +/- buttons
+            for res, (_, dec_btn, inc_btn) in selling_btns.items():
+                dec_btn.setEnabled(counter_offer[res] > 0 and can_afford)
+                inc_btn.setEnabled(can_afford)
+
+            # Decline is always enabled
+            trade_manager.decline_btn.setEnabled(True)
+
+            # Update action label if player cannot afford
+            txt = f"{selling_player.name} is buying {format_counter_offer(buying, buying)} for:"
+            if not can_afford:
+                txt += "\nYou do not have the required resources for this trade."
+            self.side_panel.action_label.setText(self.word_wrap(txt))
+
+        # Increment/decrement handlers
+        def increase(res: Resource):
+            counter_offer[res] += 1
+            update_quantity_display(res)
+            update_buttons()
+
+        def decrease(res: Resource):
+            if counter_offer[res] > 0:
+                counter_offer[res] -= 1
+                update_quantity_display(res)
+                update_buttons()
+
+        # Connect buttons
+        for res, (_, dec, inc) in selling_btns.items():
+            inc.clicked.connect(lambda _, r=res: increase(r))
+            dec.clicked.connect(lambda _, r=res: decrease(r))
+
+        # Initialise labels and buttons
+        for res in Resource:
+            update_quantity_display(res)
+        update_buttons()
+
+        # Accept button handler
+        def accept():
+            trade_manager.accept_btn.setEnabled(False)
+            trade_manager.decline_btn.setEnabled(False)
+            self.tradeDecisionMade.emit((True, counter_offer))
+            self.side_panel.action_btn_layout.removeWidget(trade_manager)
+            trade_manager.setParent(None)
+            self.restore_spacer()
+
+        # Decline button handler
+        def decline():
+            self.tradeDecisionMade.emit((False, None))
+            self.side_panel.action_btn_layout.removeWidget(trade_manager)
+            trade_manager.setParent(None)
+            self.restore_spacer()
+
+        trade_manager.accept_btn.clicked.connect(accept)
+        trade_manager.decline_btn.clicked.connect(decline)

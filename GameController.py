@@ -118,9 +118,8 @@ class GameController:
         for player in self._game.players:
             if player != selling_player:
                 if player.is_human:
-                    # interested, counter = self.trade_manager_hook(self, player, self.view,
-                    #                                               selling, buying, selling_player)
-                    interested, counter = False, None  # TODO: Add trading manager ui
+                    interested, counter = self.trade_manager_hook(self, player, self.view,
+                                                                  selling, buying, selling_player)
                 else:
                     interested, counter = self.trade_manager_ai_hook(player, selling, buying, self.round_num)
 
