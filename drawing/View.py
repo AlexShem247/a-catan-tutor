@@ -37,9 +37,9 @@ class View:
         self.window.display_generic_info(player, msg)
         ai_time_delay(AI_DECISION_ANIMATION_DELAY * 1)
 
-    def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int]):
+    def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int], played_dev_card: bool = False):
         """Hook to display the board in the Qt window."""
-        self.window.display_round_info(self.controller, player, dice_info)
+        self.window.display_round_info(self.controller, player, dice_info, played_dev_card)
 
     def display_board_turn_ai(self, player: Player, dice_info: Tuple[int, int, int], msg: str):
         """Hook to display the board in the Qt window."""
@@ -76,6 +76,12 @@ class View:
         """Displays trade and allows the option to accept, cancel or propose counter-offer"""
         self.window.display_trade_manager(player, selling, buying, selling_player)
 
+    def pre_roll(self, player: Player):
+        """Allows user to play development card before rolling dice"""
+        self.window.show_development_menu(
+            self.controller, player, False, lambda card: self.turnMade.emit(card), pre_roll_mode=True
+        )
+
 
 def select_blocking(view: View, signal: pyqtBoundSignal, draw_fn, *args, **kwargs):
     """Block execution until the signal emits a value, then return that value."""
@@ -87,21 +93,34 @@ def select_blocking(view: View, signal: pyqtBoundSignal, draw_fn, *args, **kwarg
         selected = obj
         loop.quit()
 
+    # Disconnect all previous handlers safely
+    try:
+        signal.disconnect()
+    except TypeError:
+        pass
+
+    # Connect the new handler
     signal.connect(on_selected)
 
     draw_fn(*args, **kwargs)
 
     loop.exec()
 
-    signal.disconnect(on_selected)
+    # Clean up
+    try:
+        signal.disconnect(on_selected)
+    except TypeError:
+        pass
+
     view.canvas.clear_interactives()
 
     return selected
 
 
 def ai_time_delay(seconds: int):
-    loop = QEventLoop()
+    if seconds > 0:
+        loop = QEventLoop()
 
-    QTimer.singleShot(int(seconds * 1000), loop.quit)
+        QTimer.singleShot(int(seconds * 1000), loop.quit)
 
-    loop.exec()
+        loop.exec()

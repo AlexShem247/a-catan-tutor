@@ -37,9 +37,6 @@ class Game:
         self.development_deck = DevelopmentDeck()
         self.game_over = False
 
-        for res in Resource:
-            self.players[0].add_resource(res, 5)
-
     def can_afford(self, player: Player, building_type: Buildable) -> bool:
         """Check if the player has enough resources to build the given type."""
         cost = self.BUILDING_COST[building_type]
@@ -48,8 +45,6 @@ class Game:
     def roll_dice(self) -> tuple[int, int, int]:
         """Roll two dice and distribute resources to players."""
         d1, d2 = randint(1, 6), randint(1, 6)
-        while d1 + d2 == 7:
-            d1, d2 = randint(1, 6), randint(1, 6)
         total = d1 + d2
 
         # 1. Aggregate production demands per player per resource

@@ -1,3 +1,4 @@
+from itertools import groupby
 from typing import Dict, Tuple, List, Callable
 
 from PyQt6 import uic
@@ -12,7 +13,7 @@ from drawing.SquareCanvas import SquareCanvas
 from drawing.constants import CROWN_SYM
 from game.Edge import Edge
 from game.Player import PlayerNumber, Player
-from game.PlayerAssets import Buildable
+from game.PlayerAssets import Buildable, DevelopmentCardType, DevelopmentCard
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
 from view.display import format_counter_offer, get_player_lead_status
@@ -63,6 +64,7 @@ class MainWindow(QMainWindow):
         self.trade_designer_widget = uic.loadUi("drawing/ui/trade_designer.ui")
         self.select_trade_widget = uic.loadUi("drawing/ui/select_trade.ui")
         self.trade_manager_widget = uic.loadUi("drawing/ui/trade_manager.ui")
+        self.development_manager_widget = uic.loadUi("drawing/ui/development_manager.ui")
 
         self.verticalSpacer = self.find_last_vertical_spacer()
         self.safe_connect(self.side_panel.end_turn_btn, lambda: self.turnMade.emit(True))
@@ -81,7 +83,7 @@ class MainWindow(QMainWindow):
     @staticmethod
     def safe_connect(button: QToolButton | QPushButton, slot: Callable):
         try:
-            button.clicked.disconnect()   # type: ignore[attr-defined]
+            button.clicked.disconnect()  # type: ignore[attr-defined]
         except TypeError:
             pass
         button.clicked.connect(slot)
@@ -161,7 +163,7 @@ class MainWindow(QMainWindow):
 
         opponent_labels: Dict[PlayerNumber, Dict[str, QLabel]] = {
             pn: {
-                stat: getattr(self.side_panel, f"p{pn.value+1}_{suffix}_label")
+                stat: getattr(self.side_panel, f"p{pn.value + 1}_{suffix}_label")
                 for stat, suffix in stat_suffixes.items()
             }
             for pn in (PlayerNumber.P2, PlayerNumber.P3, PlayerNumber.P4)
@@ -203,11 +205,14 @@ class MainWindow(QMainWindow):
 
     def display_generic_info(self, player: Player, msg: str):
         self.side_panel.turn_label.setText(f"{player.name}'s turn")
+        self.side_panel.main_label.show()
         self.side_panel.main_label.setText(msg)
+        self.side_panel.action_label.show()
         self.side_panel.action_label.setText("" if player.is_human else f"{player} is thinking")
         self.toggle_main_action_btns(False)
 
-    def display_round_info(self, controller: GameController, player: Player, dice_info: Tuple[int, int, int]):
+    def display_round_info(self, controller: GameController, player: Player, dice_info: Tuple[int, int, int],
+                           played_dev_card: bool = False):
         self.canvas.interactive_shapes.clear()
         self.canvas.disable_interactivity = False
         self.canvas.display_board(controller)
@@ -249,7 +254,9 @@ class MainWindow(QMainWindow):
         self.side_panel.trade_btn.setEnabled(sum(player.resources.values()) > 0)
         self.safe_connect(self.side_panel.trade_btn, lambda: self.display_trade_menu(
             controller, player, lambda: self.display_round_info(controller, player, dice_info)))
-        self.side_panel.dev_btn.setEnabled(False)  # TODO: Add development cards
+        self.safe_connect(self.side_panel.dev_btn, lambda: self.show_development_menu(
+            controller, player, played_dev_card,
+            lambda played: self.display_round_info(controller, player, dice_info, played)))
 
     @staticmethod
     def create_quantity_handlers(
@@ -609,3 +616,93 @@ class MainWindow(QMainWindow):
         self.safe_connect(trade_manager.accept_btn, accept)
         self.safe_connect(trade_manager.decline_btn, decline)
         update_buttons()
+
+    def show_development_menu(self, controller: GameController, player: Player, played_dev_card: bool, back_action,
+                              pre_roll_mode: bool = False):
+        development_manager = self.development_manager_widget
+        development_manager.setParent(self.side_panel)
+
+        self.toggle_main_action_btns(False)
+        self.minimise_spacer()
+        self.side_panel.action_btn_layout.addWidget(development_manager)
+        self.side_panel.main_label.hide()
+        self.side_panel.action_label.setText(
+            "You already played a card this turn." if played_dev_card else "Available Cards:"
+        )
+        self.side_panel.turn_label.setText(f"{player.name}'s turn")
+
+        def back():
+            self.side_panel.action_btn_layout.removeWidget(development_manager)
+            development_manager.setParent(None)
+            self.restore_spacer()
+            self.side_panel.main_label.show()
+            back_action(played_dev_card)
+
+        # Show playable cards
+        development_manager.card_list.clear()
+        cards_by_type = {k: list(g) for k, g in groupby(
+            sorted(player.development_cards, key=lambda c: c.card_type.value, reverse=True),
+            key=lambda c: c.card_type
+        )}
+
+        for card_type, cards in cards_by_type.items():
+            for card in cards:
+                name = card.card_type.name.title().replace("_", " ")
+
+                item = QListWidgetItem()
+                item.setData(Qt.ItemDataRole.UserRole, card)
+
+                if card.card_type == DevelopmentCardType.VICTORY_POINT:
+                    item.setText(f"{name} - Used Automatically")
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+                else:
+                    if card.playable:
+                        item.setText(f"{name} - Playable")
+                    else:
+                        item.setText(f"{name} - Just bought")
+                        item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+
+                development_manager.card_list.addItem(item)
+                if played_dev_card:
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+
+        def card_double_clicked(card_item: QListWidgetItem):
+            selected_card: DevelopmentCard = card_item.data(Qt.ItemDataRole.UserRole)
+            if not pre_roll_mode:
+                back()
+            controller.play_development_card(player, selected_card.card_type)
+
+            if pre_roll_mode:
+                self.side_panel.action_btn_layout.removeWidget(development_manager)
+                development_manager.setParent(None)
+                self.restore_spacer()
+                self.side_panel.main_label.show()
+                back_action(selected_card.card_type)
+                return
+
+            self.display_resources(controller)
+            self.show_development_menu(controller, player, True, back_action)
+
+        def buy_card():
+            controller.try_buy_development_card(player)
+            self.display_resources(controller)
+            self.show_development_menu(controller, player, played_dev_card, back_action)
+
+        can_afford_card = controller.get_buildable_options(player)[Buildable.DEVELOPMENT_CARD]
+
+        try:
+            development_manager.card_list.itemDoubleClicked.disconnect()
+        except TypeError:
+            pass
+        development_manager.card_list.itemDoubleClicked.connect(card_double_clicked)
+
+        if pre_roll_mode:
+            development_manager.back_btn.setText("Roll Dice")
+            development_manager.buy_btn.hide()
+        else:
+            development_manager.back_btn.setText("Go Back")
+            development_manager.buy_btn.show()
+
+        self.safe_connect(development_manager.back_btn, back)
+        development_manager.buy_btn.setEnabled(can_afford_card)
+        self.safe_connect(development_manager.buy_btn, buy_card)

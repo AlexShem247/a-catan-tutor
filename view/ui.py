@@ -77,8 +77,15 @@ def play_dev_card_menu(player: Player, controller: GameController) -> bool:
 
 def make_round_move(player: Player, controller: GameController, view: View):
     """Handle a full turn for a human player, including dice roll, resource display, and building actions."""
+    playable_cards = [card for card in player.development_cards if card.playable]
+    played_dev_card = False
+    if playable_cards:
+        # Player can play card before rolling dice
+        played_card: DevelopmentCardType | bool = select_blocking(view, view.turnMade, view.pre_roll, player)
+        played_dev_card = played_card is not False
+
     d1, d2, total, _ = controller.roll_dice(player)
-    select_blocking(view, view.turnMade, view.display_board_turn, player, (d1, d2, total))
+    select_blocking(view, view.turnMade, view.display_board_turn, player, (d1, d2, total), played_dev_card)
 
 
 def make_round_move_old(player: Player, controller: GameController, view: View):
@@ -411,7 +418,7 @@ def year_of_plenty_selection(controller: GameController, view: View, ) -> Resour
         controller=controller,
         view=view,
         num_resources=2,
-        title="Year of Plenty: choose any two resources from the bank.",
+        title="Year of Plenty: choose two resources from the bank.",
         resource_caps=controller.get_bank_resources()
     )
 
