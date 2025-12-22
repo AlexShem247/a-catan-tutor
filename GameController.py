@@ -1,6 +1,7 @@
-from typing import Callable, List, Tuple, Optional, TYPE_CHECKING
+from typing import Callable, List, Tuple, Optional, TYPE_CHECKING, Dict
 
 from drawing.constants import AI_DECISION_ANIMATION_DELAY, AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE
+from drawing.view_utils import select_blocking
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game
 from game.HexTile import HexTile
@@ -23,51 +24,27 @@ class GameController:
 
     def __init__(
             self,
-            get_game_type: Callable[["View"], bool] = None,
-            get_settlement_choice: Callable[[Player, "GameController", "View"], Vertex] = None,
-            get_road_choice: Callable[[Player, "GameController", "View", Optional[Vertex]], Edge] = None,
             get_settlement_choice_ai: Callable[[Player, "GameController", "View"], Vertex] = None,
             get_road_choice_ai: Callable[[Player, "GameController", "View", Optional[Vertex]], Edge] = None,
-            play_round_hook: Callable[[Player, "GameController", "View"], None] = None,
             play_round_ai_hook: Callable[[Player, "GameController", "View"], None] = None,
-            trade_manager_hook: Callable[["GameController", Player, "View", ResourceCount, ResourceCount,
-                                          Player], Tuple[bool, Optional[ResourceCount]]] = None,
             trade_manager_ai_hook: Callable[
                 [Player, ResourceCount, ResourceCount, int], Tuple[bool, Optional[ResourceCount]]] = None,
-            robber_discard_hook: Callable[[Player, "GameController", "View", int, bool], ResourceCount] = None,
             robber_discard_ai_hook: Callable[[Player, "GameController", "View",
                                               int, bool], ResourceCount] = ResourceCount,
-            place_robber_hook: Callable[[Player, "GameController", "View"], Tuple[HexTile, Optional[Player]]] = None,
             place_robber_ai_hook: Callable[[Player, "GameController", "View"], Tuple[HexTile, Optional[Player]]] = None,
 
-            year_of_plenty_selection: Callable[["GameController", "View"], ResourceCount] = None,
             year_of_plenty_selection_ai: Callable[["GameController"], ResourceCount] = None,
-            monopoly_selection: Callable[["GameController", "View"], Resource] = None,
             monopoly_selection_ai: Callable[["GameController"], Resource] = None,
     ):
-        self.get_game_type = get_game_type
-
-        self.get_settlement_choice = get_settlement_choice
-        self.get_road_choice = get_road_choice
-        self.play_round_hook = play_round_hook
-
         self.get_settlement_choice_ai = get_settlement_choice_ai
         self.get_road_choice_ai = get_road_choice_ai
         self.play_round_ai_hook = play_round_ai_hook
-
-        self.trade_manager_hook = trade_manager_hook
         self.trade_manager_ai_hook = trade_manager_ai_hook
-
-        self.robber_discard_hook = robber_discard_hook
         self.robber_discard_ai_hook = robber_discard_ai_hook
-        self.place_robber_hook = place_robber_hook
         self.place_robber_ai_hook = place_robber_ai_hook
-
-        self.year_of_plenty_selection = year_of_plenty_selection
         self.year_of_plenty_selection_ai = year_of_plenty_selection_ai
-
-        self.monopoly_selection = monopoly_selection
         self.monopoly_selection_ai = monopoly_selection_ai
+
         self.view: View | None = None
 
         self.reset_game(True)
@@ -82,14 +59,25 @@ class GameController:
 
     def start_game(self):
         """Run initial placement, then loop turns until game over."""
-        human_player_one: bool = self.get_game_type(self.view)
+        human_player_one: bool = select_blocking(self.view, self.view.startGame, self.view.display_start_screen)
         self.reset_game(human_player_one)
 
         self.run_initial_placement()
         while not self._game.game_over:
             for player in self._game.players:
                 if player.is_human:
-                    self.play_round_hook(player, self, self.view)
+                    # Human Turn
+                    playable_cards = [card for card in player.development_cards if card.playable]
+                    played_dev_card = False
+                    if playable_cards:
+                        # Player can play card before rolling dice
+                        played_card: DevelopmentCardType | bool = select_blocking(self.view, self.view.turnMade,
+                                                                                  self.view.pre_roll, player)
+                        played_dev_card = played_card is not False
+
+                    d1, d2, total, _ = self.roll_dice(player)
+                    select_blocking(self.view, self.view.turnMade, self.view.display_board_turn, player,
+                                    (d1, d2, total), played_dev_card)
                 else:
                     self.play_round_ai_hook(player, self, self.view)
 
@@ -112,19 +100,38 @@ class GameController:
         players_order = [(p, False) for p in self._game.players] + [(p, True) for p in reversed(self._game.players)]
         for player, gain_resource in players_order:
             # Settlement
-            if player.is_human and self.get_settlement_choice:
-                vertex = self.get_settlement_choice(player, self, self.view)
+            if player.is_human:
+                # Let human select position
+                self.view.display_board(player, "Select a position to build your settlement")
+
+                vertices = self.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
+                vertex: Vertex = select_blocking(self.view, self.view.canvasSelection,
+                                                 self.view.draw_selectable_vertices, vertices)
+                self.view.display_board()
             else:
                 vertex = self.get_settlement_choice_ai(player, self, self.view)
             self._game.try_build_settlement(player, vertex, use_resources=False,
                                             road_restriction=False, gain_resources=gain_resource)
 
             # Road
-            if player.is_human and self.get_road_choice:
-                edge = self.get_road_choice(player, self, self.view, vertex)
+            if player.is_human:
+                edge = self.get_road_choice(player, vertex)
             else:
                 edge = self.get_road_choice_ai(player, self, self.view, vertex)
             self._game.try_build_road(player, edge, use_resources=False)
+
+    def get_road_choice(self, player: Player, settlement: Optional[Vertex] = None) -> Edge:
+        """Human selects an edge for initial road placement."""
+        self.view.display_board(player, "Select a position to build your road")
+
+        edges = self.get_available_edges(player)
+        if settlement is not None:
+            # Restrict edges to be directly connected to settlement
+            edges = [edge for edge in edges if settlement in edge.vertices]
+
+        edge: Edge = select_blocking(self.view, self.view.canvasSelection, self.view.draw_selectable_edges, edges)
+
+        return edge
 
     def trade_with_players(self, selling_player, selling, buying) -> List[Tuple[Player, Optional[ResourceCount]]]:
         """Sees which players are willing to trade"""
@@ -132,8 +139,10 @@ class GameController:
         for player in self._game.players:
             if player != selling_player:
                 if player.is_human:
-                    interested, counter = self.trade_manager_hook(self, player, self.view,
-                                                                  selling, buying, selling_player)
+                    interested, counter = select_blocking(
+                        self.view, self.view.tradeDecisionMade, self.view.display_trade_manager, player, selling,
+                        buying, selling_player
+                    )
                 else:
                     interested, counter = self.trade_manager_ai_hook(player, selling, buying, self.round_num)
 
@@ -141,6 +150,16 @@ class GameController:
                     results.append((player, counter))
 
         return results
+
+    def choose_resources(self, num_resources: int, title: str,
+                         resource_caps: Dict[Resource, int] | None = None) -> ResourceCount:
+        """
+        Generic resource selection helper.
+        Allows choosing exactly `num_resources` resources, optionally capped per resource.
+        """
+        chosen: ResourceCount = select_blocking(self.view, self.view.resourcesPicked, self.view.show_resource_chooser,
+                                                self._game.players[0], num_resources, title, resource_caps)
+        return chosen
 
     def get_game_state(self):
         """Returns the internal game state"""
@@ -158,7 +177,11 @@ class GameController:
                 discard_count = p.calculate_discard_count()
                 if discard_count > 0:
                     if p.is_human:
-                        resources_to_discard = self.robber_discard_hook(p, self, self.view, discard_count, False)
+                        resources_to_discard = self.choose_resources(
+                            num_resources=discard_count,
+                            title="The robber has been rolled!",
+                            resource_caps=player.resources
+                        )
                     else:
                         resources_to_discard = self.robber_discard_ai_hook(p, self, self.view, discard_count, False)
                     p.remove_resources(resources_to_discard)
@@ -177,7 +200,31 @@ class GameController:
         """
         # Choose the robber placement and target player
         if player.is_human:
-            tile, steal_from = self.place_robber_hook(player, self, self.view)
+            # Get available hex tiles (exclude current robber tile)
+            available_hexes = [tile for tile in self.get_all_hexes() if not tile.robber]
+            self.view.display_board(player, "Select a hex to move the robber")
+            selected_hex: HexTile = select_blocking(self.view, self.view.canvasSelection,
+                                                    self.view.draw_selectable_tiles, available_hexes)
+
+            # Check for stealable players on adjacent vertices
+            adjacent_player_buildings: List[Vertex] = [
+                v for v in selected_hex.vertices
+                if v.owner is not None  # Has a building
+                and v.owner != player  # Not the active player
+                and any(v.owner.resources.values())  # Owner has at least one resource
+            ]
+
+            if not adjacent_player_buildings:
+                tile, steal_from = selected_hex, None
+            else:
+                self.view.display_board(player, "Select a player to steal from")
+                selected_player_building: Vertex = select_blocking(self.view, self.view.canvasSelection,
+                                                                   self.view.draw_selectable_vertices,
+                                                                   adjacent_player_buildings)
+                selected_player = selected_player_building.owner
+
+                tile, steal_from = selected_hex, selected_player
+
         else:
             tile, steal_from = self.place_robber_ai_hook(player, self, self.view)
 
@@ -221,7 +268,7 @@ class GameController:
             for _ in range(2):
                 if self.get_available_edges(player):
                     if player.is_human:
-                        edge = self.get_road_choice(player, self, self.view, None)
+                        edge = self.get_road_choice(player, None)
                     else:
                         edge = self.get_road_choice_ai(player, self, self.view, None)
                     self._game.try_build_road(player, edge, use_resources=False)
@@ -231,7 +278,11 @@ class GameController:
         elif card_type == DevelopmentCardType.YEAR_OF_PLENTY:
             # YEAR OF PLENTY: Player chooses two resources from the bank to add to their hand
             if player.is_human:
-                resources = self.year_of_plenty_selection(self, self.view)
+                resources = self.choose_resources(
+                    num_resources=2,
+                    title="Year of Plenty: choose any two resources from the bank.",
+                    resource_caps=self.get_bank_resources()
+                )
             else:
                 resources = self.year_of_plenty_selection_ai(self)
             player.add_resources(resources)
@@ -242,7 +293,13 @@ class GameController:
         elif card_type == DevelopmentCardType.MONOPOLY:
             # MONOPOLY: Player chooses a single resource type; all other players give all of that resource to the player
             if player.is_human:
-                resource = self.monopoly_selection(self, self.view)
+                chosen = self.choose_resources(
+                    num_resources=1,
+                    title="Monopoly: choose a resource to get from the other players.",
+                    resource_caps={res: 1 for res in Resource}
+                )
+                # Extract the single Resource enum
+                resource = next(iter(chosen.keys()))
             else:
                 resource = self.monopoly_selection_ai(self)
             total_taken = 0

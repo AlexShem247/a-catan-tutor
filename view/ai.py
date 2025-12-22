@@ -5,13 +5,14 @@ from typing import Optional, List, Tuple
 from GameController import GameController
 from drawing.View import View
 from drawing.constants import SHOW_AI_BUILT_LOCATIONS
+from game.Edge import Edge
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
-from view.display import clear_screen, display_board, get_player_lead_status, resource_dict_to_str
+from view.display import resource_dict_to_str
 
 TOTAL_ROUNDS = 20  # Estimated total rounds in the game
 MAX_RATIO = 4  # Maximum resources AI will ask for 1 resource late game
@@ -24,7 +25,7 @@ ACCEPT_PROBABILITY_BY_OVERCOST = {  # Counter trades probabilities
 }
 
 
-def random_initial_settlement_placement(player: Player, controller: GameController, view: View):
+def random_initial_settlement_placement(player: Player, controller: GameController, view: View) -> Optional[Vertex]:
     """Choose a valid random vertex for settlement."""
     available_vertices = controller.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
     view.display_board()
@@ -35,7 +36,7 @@ def random_initial_settlement_placement(player: Player, controller: GameControll
 
 
 def random_initial_road_placement(player: Player, controller: GameController, view: View,
-                                  settlement: Optional[Vertex] = None):
+                                  settlement: Optional[Vertex] = None) -> Optional[Edge]:
     """
     Choose a valid edge connected to the given settlement.
     Picks a random edge adjacent to the settlement where a road can be built.
@@ -55,12 +56,12 @@ def random_initial_road_placement(player: Player, controller: GameController, vi
     return random.choice(available_edges)
 
 
-def get_required_trade_ratio(round_num: int):
+def get_required_trade_ratio(round_num: int) -> int:
     """Return the AI's required trade ratio for the current round."""
     return ceil(1 + (round_num - 1) / TOTAL_ROUNDS * (MAX_RATIO - 1))
 
 
-def ai_choose_build_action():
+def ai_choose_build_action() -> Optional[Buildable]:
     """
     Choose a desired build action for the AI based on weighted preferences,
     ignoring whether the AI can currently afford it.
@@ -70,7 +71,7 @@ def ai_choose_build_action():
         Buildable.SETTLEMENT: 8,
         Buildable.DEVELOPMENT_CARD: 6,
         Buildable.ROAD: 3,
-        "NOTHING": 4,
+        None: 4,
     }
 
     weighted_actions = []
@@ -80,7 +81,7 @@ def ai_choose_build_action():
         weighted_actions.extend([action] * action_weights[action])
 
     # Always allow doing nothing
-    weighted_actions.extend(["NOTHING"] * action_weights["NOTHING"])
+    weighted_actions.extend([None] * action_weights[None])
 
     return random.choice(weighted_actions)
 

@@ -1,21 +1,22 @@
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, TYPE_CHECKING
 
-from PyQt6.QtCore import QEventLoop, QTimer, pyqtBoundSignal
-
-from GameController import GameController
 from drawing.MainWindow import MainWindow
 from drawing.constants import AI_DECISION_ANIMATION_DELAY
+from drawing.view_utils import ai_time_delay
 from game.Edge import Edge
 from game.HexTile import HexTile
 from game.Player import Player
 from game.Resources import ResourceCount
 from game.Vertex import Vertex
 
+if TYPE_CHECKING:
+    from GameController import GameController
+
 
 class View:
     """Provides hook functions that interact with Qt for the controller."""
 
-    def __init__(self, window: MainWindow, controller: GameController):
+    def __init__(self, window: MainWindow, controller: "GameController"):
         self.window = window
         self.canvas = window.canvas
         self.controller = controller
@@ -91,46 +92,3 @@ class View:
     def display_start_screen(self):
         """Display game results"""
         self.window.display_start_screen()
-
-
-def select_blocking(view: View, signal: pyqtBoundSignal, draw_fn, *args, **kwargs):
-    """Block execution until the signal emits a value, then return that value."""
-    loop = QEventLoop()
-    selected = None
-
-    def on_selected(obj):
-        nonlocal selected
-        selected = obj
-        loop.quit()
-
-    # Disconnect all previous handlers safely
-    try:
-        signal.disconnect()
-    except TypeError:
-        pass
-
-    # Connect the new handler
-    signal.connect(on_selected)
-
-    draw_fn(*args, **kwargs)
-
-    loop.exec()
-
-    # Clean up
-    try:
-        signal.disconnect(on_selected)
-    except TypeError:
-        pass
-
-    view.canvas.clear_interactives()
-
-    return selected
-
-
-def ai_time_delay(seconds: int):
-    if seconds > 0:
-        loop = QEventLoop()
-
-        QTimer.singleShot(int(seconds * 1000), loop.quit)
-
-        loop.exec()
