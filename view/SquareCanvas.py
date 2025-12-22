@@ -262,6 +262,8 @@ class SquareCanvas(QWidget):
             x, y = vertex_xy(vertex, cx, cy, HEX_TILE_RADIUS)
             self.add_shape(VertexShape(x, y, VERTEX_SIZE, vertex, self.icons))
 
+        self.add_shape(TextShape(1000, 980, "Use the scrollbar to zoom in", BOARD_BG_COLOR.lighter(200), font_size=16))
+
     def draw_selectable_vertices(self, vertices):
         self.interactive_shapes.clear()
         cx, cy = self.get_world_centre()
