@@ -158,12 +158,12 @@ class MainWindow(QMainWindow):
         self.side_panel.bank_dev_label.setText(str(controller.get_development_deck().size()))
 
         # Fill in opponent labels
-        stat_suffixes = {"victory_points": "vic", "num_resources": "res", "development_cards": "dev",
-                         "army_size": "army", "longest_road": "road"}
+        stat_suffixes = {"name": "", "victory_points": "vic_", "num_resources": "res_",
+                         "development_cards": "dev_", "army_size": "army_", "longest_road": "road_"}
 
         opponent_labels: Dict[PlayerNumber, Dict[str, QLabel]] = {
             pn: {
-                stat: getattr(self.side_panel, f"p{pn.value + 1}_{suffix}_label")
+                stat: getattr(self.side_panel, f"p{pn.value + 1}_{suffix}label")
                 for stat, suffix in stat_suffixes.items()
             }
             for pn in (PlayerNumber.P2, PlayerNumber.P3, PlayerNumber.P4)
@@ -197,6 +197,13 @@ class MainWindow(QMainWindow):
                 )
             else:
                 labels = opponent_labels[num]
+                status = get_player_lead_status(player)
+                if status:
+                    labels["name"].setText(f"{player.name} {status}")
+                    labels["name"].setToolTip(f"{player.name} is currently in the lead")
+                else:
+                    labels["name"].setText(player.name)
+                    labels["name"].setToolTip(None)
                 labels["victory_points"].setText(str(player.calc_victory_points()[0]))
                 labels["num_resources"].setText(str(sum(player.resources.values())))
                 labels["development_cards"].setText(str(len(player.development_cards)))
@@ -628,12 +635,25 @@ class MainWindow(QMainWindow):
             key=lambda c: c.card_type
         )}
 
+        # Define tooltips for each card type
+        card_tooltips = {
+            DevelopmentCardType.KNIGHT: "Play to move the robber and increase your army size",
+            DevelopmentCardType.VICTORY_POINT: "Adds 1 hidden victory point to your total automatically",
+            DevelopmentCardType.ROAD_BUILDING: "Play to build up to 2 free roads anywhere on the board",
+            DevelopmentCardType.YEAR_OF_PLENTY: "Play to take any 2 resources from the bank",
+            DevelopmentCardType.MONOPOLY: "Play to claim all cards of one resource type from all players"
+        }
+
         for card_type, cards in cards_by_type.items():
             for card in cards:
                 name = card.card_type.name.title().replace("_", " ")
 
                 item = QListWidgetItem()
                 item.setData(Qt.ItemDataRole.UserRole, card)
+
+                # Set tooltip based on card type
+                tooltip = card_tooltips.get(card.card_type, "")
+                item.setToolTip(tooltip)
 
                 if card.card_type == DevelopmentCardType.VICTORY_POINT:
                     item.setText(f"{name} - Used Automatically")
@@ -646,6 +666,7 @@ class MainWindow(QMainWindow):
                         item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
 
                 development_manager.card_list.addItem(item)
+
                 if played_dev_card:
                     item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
 

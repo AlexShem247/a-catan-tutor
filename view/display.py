@@ -202,7 +202,10 @@ def display_board(game: Game) -> None:
 
 def get_player_lead_status(player: Player) -> str:
     """Return lead status."""
-    player_vp = player.calc_victory_points()[1]
+    if player.is_human:
+        player_vp = player.calc_victory_points()[1]
+    else:
+        player_vp = player.calc_victory_points()[0]
     best_opponent_vp = player.best_opponents_victory_point
 
     if player_vp > best_opponent_vp:

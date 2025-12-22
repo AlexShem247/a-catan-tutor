@@ -26,6 +26,9 @@
       <layout class="QVBoxLayout" name="verticalLayout_31">
        <item>
         <widget class="QLabel" name="label_49">
+         <property name="toolTip">
+          <string>Wood amount to receive</string>
+         </property>
          <property name="text">
           <string>Wood</string>
          </property>
@@ -48,6 +51,9 @@
         <layout class="QHBoxLayout" name="horizontalLayout_6">
          <item>
           <widget class="QToolButton" name="wood_quantity_dec">
+           <property name="toolTip">
+            <string>Decrease Wood amount to receive</string>
+           </property>
            <property name="text">
             <string>-</string>
            </property>
@@ -55,6 +61,9 @@
          </item>
          <item>
           <widget class="QToolButton" name="wood_quantity_inc">
+           <property name="toolTip">
+            <string>Increase Wood amount to receive</string>
+           </property>
            <property name="text">
             <string>+</string>
            </property>
@@ -68,6 +77,9 @@
       <layout class="QVBoxLayout" name="verticalLayout_32">
        <item>
         <widget class="QLabel" name="label_50">
+         <property name="toolTip">
+          <string>Brick amount to receive</string>
+         </property>
          <property name="text">
           <string>Brick</string>
          </property>
@@ -90,6 +102,9 @@
         <layout class="QHBoxLayout" name="horizontalLayout_7">
          <item>
           <widget class="QToolButton" name="brick_quantity_dec">
+           <property name="toolTip">
+            <string>Decrease Brick amount to receive</string>
+           </property>
            <property name="text">
             <string>-</string>
            </property>
@@ -97,6 +112,9 @@
          </item>
          <item>
           <widget class="QToolButton" name="brick_quantity_inc">
+           <property name="toolTip">
+            <string>Increase Brick amount to receive</string>
+           </property>
            <property name="text">
             <string>+</string>
            </property>
@@ -110,6 +128,9 @@
       <layout class="QVBoxLayout" name="verticalLayout_33">
        <item>
         <widget class="QLabel" name="label_51">
+         <property name="toolTip">
+          <string>Sheep amount to receive</string>
+         </property>
          <property name="text">
           <string>Sheep</string>
          </property>
@@ -132,6 +153,9 @@
         <layout class="QHBoxLayout" name="horizontalLayout_8">
          <item>
           <widget class="QToolButton" name="sheep_quantity_dec">
+           <property name="toolTip">
+            <string>Decrease Sheep amount to receive</string>
+           </property>
            <property name="text">
             <string>-</string>
            </property>
@@ -139,6 +163,9 @@
          </item>
          <item>
           <widget class="QToolButton" name="sheep_quantity_inc">
+           <property name="toolTip">
+            <string>Increase Sheep amount to receive</string>
+           </property>
            <property name="text">
             <string>+</string>
            </property>
@@ -152,6 +179,9 @@
       <layout class="QVBoxLayout" name="verticalLayout_35">
        <item>
         <widget class="QLabel" name="label_53">
+         <property name="toolTip">
+          <string>Wheat amount to receive</string>
+         </property>
          <property name="text">
           <string>Wheat</string>
          </property>
@@ -174,6 +204,9 @@
         <layout class="QHBoxLayout" name="horizontalLayout_10">
          <item>
           <widget class="QToolButton" name="wheat_quantity_dec">
+           <property name="toolTip">
+            <string>Decrease Wheat amount to receive</string>
+           </property>
            <property name="text">
             <string>-</string>
            </property>
@@ -181,6 +214,9 @@
          </item>
          <item>
           <widget class="QToolButton" name="wheat_quantity_inc">
+           <property name="toolTip">
+            <string>Increase Wheat amount to receive</string>
+           </property>
            <property name="text">
             <string>+</string>
            </property>
@@ -194,6 +230,9 @@
       <layout class="QVBoxLayout" name="verticalLayout_36">
        <item>
         <widget class="QLabel" name="label_54">
+         <property name="toolTip">
+          <string>Ore amount to receive</string>
+         </property>
          <property name="text">
           <string>Ore</string>
          </property>
@@ -216,6 +255,9 @@
         <layout class="QHBoxLayout" name="horizontalLayout_11">
          <item>
           <widget class="QToolButton" name="ore_quantity_dec">
+           <property name="toolTip">
+            <string>Decrease Ore amount to receive</string>
+           </property>
            <property name="text">
             <string>-</string>
            </property>
@@ -223,6 +265,9 @@
          </item>
          <item>
           <widget class="QToolButton" name="ore_quantity_inc">
+           <property name="toolTip">
+            <string>Increase Ore amount to receive</string>
+           </property>
            <property name="text">
             <string>+</string>
            </property>

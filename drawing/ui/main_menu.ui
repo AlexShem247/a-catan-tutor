@@ -77,6 +77,9 @@
                <layout class="QVBoxLayout" name="verticalLayout_7">
                 <item>
                  <widget class="QLabel" name="label_11">
+                  <property name="toolTip">
+                   <string>Wood remaining in the bank</string>
+                  </property>
                   <property name="text">
                    <string>Wood</string>
                   </property>
@@ -101,6 +104,9 @@
                <layout class="QVBoxLayout" name="verticalLayout_6">
                 <item>
                  <widget class="QLabel" name="label_8">
+                  <property name="toolTip">
+                   <string>Brick remaining in the bank</string>
+                  </property>
                   <property name="text">
                    <string>Brick</string>
                   </property>
@@ -125,6 +131,9 @@
                <layout class="QVBoxLayout" name="verticalLayout_8">
                 <item>
                  <widget class="QLabel" name="label_10">
+                  <property name="toolTip">
+                   <string>Sheep remaining in the bank</string>
+                  </property>
                   <property name="text">
                    <string>Sheep</string>
                   </property>
@@ -149,6 +158,9 @@
                <layout class="QVBoxLayout" name="verticalLayout_9">
                 <item>
                  <widget class="QLabel" name="label_9">
+                  <property name="toolTip">
+                   <string>Wheat remaining in the bank</string>
+                  </property>
                   <property name="text">
                    <string>Wheat</string>
                   </property>
@@ -173,6 +185,9 @@
                <layout class="QVBoxLayout" name="verticalLayout_10">
                 <item>
                  <widget class="QLabel" name="label_7">
+                  <property name="toolTip">
+                   <string>Ore remaining in the bank</string>
+                  </property>
                   <property name="text">
                    <string>Ore</string>
                   </property>
@@ -197,6 +212,9 @@
                <layout class="QVBoxLayout" name="verticalLayout_25">
                 <item>
                  <widget class="QLabel" name="label_46">
+                  <property name="toolTip">
+                   <string>Development cards remaining in the bank</string>
+                  </property>
                   <property name="text">
                    <string>Dev</string>
                   </property>
@@ -271,6 +289,9 @@
                  <layout class="QVBoxLayout" name="verticalLayout_22">
                   <item>
                    <widget class="QLabel" name="label_39">
+                    <property name="toolTip">
+                     <string>Visible victory points</string>
+                    </property>
                     <property name="text">
                      <string>Vic</string>
                     </property>
@@ -295,6 +316,9 @@
                  <layout class="QVBoxLayout" name="verticalLayout_11">
                   <item>
                    <widget class="QLabel" name="label_16">
+                    <property name="toolTip">
+                     <string>Resource cards in hand</string>
+                    </property>
                     <property name="text">
                      <string>Res</string>
                     </property>
@@ -319,6 +343,9 @@
                  <layout class="QVBoxLayout" name="verticalLayout_13">
                   <item>
                    <widget class="QLabel" name="label_24">
+                    <property name="toolTip">
+                     <string>Development cards owned</string>
+                    </property>
                     <property name="text">
                      <string>Dev</string>
                     </property>
@@ -343,6 +370,9 @@
                  <layout class="QVBoxLayout" name="verticalLayout_14">
                   <item>
                    <widget class="QLabel" name="label_26">
+                    <property name="toolTip">
+                     <string>Played Knight cards</string>
+                    </property>
                     <property name="text">
                      <string>Army</string>
                     </property>
@@ -367,6 +397,9 @@
                  <layout class="QVBoxLayout" name="verticalLayout_15">
                   <item>
                    <widget class="QLabel" name="label_28">
+                    <property name="toolTip">
+                     <string>Longest continuous road</string>
+                    </property>
                     <property name="text">
                      <string>Road</string>
                     </property>
@@ -420,6 +453,9 @@
                  <layout class="QVBoxLayout" name="verticalLayout_23">
                   <item>
                    <widget class="QLabel" name="label_41">
+                    <property name="toolTip">
+                     <string>Visible victory points</string>
+                    </property>
                     <property name="text">
                      <string>Vic</string>
                     </property>
@@ -444,6 +480,9 @@
                  <layout class="QVBoxLayout" name="verticalLayout_16">
                   <item>
                    <widget class="QLabel" name="label_31">
+                    <property name="toolTip">
+                     <string>Resource cards in hand</string>
+                    </property>
                     <property name="text">
                      <string>Res</string>
                     </property>
@@ -468,6 +507,9 @@
                  <layout class="QVBoxLayout" name="verticalLayout_17">
                   <item>
                    <widget class="QLabel" name="label_33">
+                    <property name="toolTip">
+                     <string>Development cards owned</string>
+                    </property>
                     <property name="text">
                      <string>Dev</string>
                     </property>
@@ -492,6 +534,9 @@
                  <layout class="QVBoxLayout" name="verticalLayout_18">
                   <item>
                    <widget class="QLabel" name="label_35">
+                    <property name="toolTip">
+                     <string>Played Knight cards</string>
+                    </property>
                     <property name="text">
                      <string>Army</string>
                     </property>
@@ -516,6 +561,9 @@
                  <layout class="QVBoxLayout" name="verticalLayout_19">
                   <item>
                    <widget class="QLabel" name="label_37">
+                    <property name="toolTip">
+                     <string>Longest continuous road</string>
+                    </property>
                     <property name="text">
                      <string>Road</string>
                     </property>
@@ -557,7 +605,7 @@
                 <item>
                  <layout class="QHBoxLayout" name="horizontalLayout_4">
                   <item>
-                   <widget class="QLabel" name="p3_label_2">
+                   <widget class="QLabel" name="p4_label">
                     <property name="text">
                      <string>P4</string>
                     </property>
@@ -569,6 +617,9 @@
                  <layout class="QVBoxLayout" name="verticalLayout_24">
                   <item>
                    <widget class="QLabel" name="label_43">
+                    <property name="toolTip">
+                     <string>Visible victory points</string>
+                    </property>
                     <property name="text">
                      <string>Vic</string>
                     </property>
@@ -593,6 +644,9 @@
                  <layout class="QVBoxLayout" name="verticalLayout_12">
                   <item>
                    <widget class="QLabel" name="label_13">
+                    <property name="toolTip">
+                     <string>Resource cards in hand</string>
+                    </property>
                     <property name="text">
                      <string>Res</string>
                     </property>
@@ -617,6 +671,9 @@
                  <layout class="QVBoxLayout" name="verticalLayout_20">
                   <item>
                    <widget class="QLabel" name="label_17">
+                    <property name="toolTip">
+                     <string>Development cards owned</string>
+                    </property>
                     <property name="text">
                      <string>Dev</string>
                     </property>
@@ -641,6 +698,9 @@
                  <layout class="QVBoxLayout" name="verticalLayout_21">
                   <item>
                    <widget class="QLabel" name="label_19">
+                    <property name="toolTip">
+                     <string>Played Knight cards</string>
+                    </property>
                     <property name="text">
                      <string>Army</string>
                     </property>
@@ -665,6 +725,9 @@
                  <layout class="QVBoxLayout" name="verticalLayout_31">
                   <item>
                    <widget class="QLabel" name="label_21">
+                    <property name="toolTip">
+                     <string>Longest continuous road</string>
+                    </property>
                     <property name="text">
                      <string>Road</string>
                     </property>
@@ -731,6 +794,9 @@
             <layout class="QVBoxLayout" name="verticalLayout_26">
              <item>
               <widget class="QLabel" name="label_48">
+               <property name="toolTip">
+                <string>Wood you currently have</string>
+               </property>
                <property name="text">
                 <string>Wood</string>
                </property>
@@ -755,6 +821,9 @@
             <layout class="QVBoxLayout" name="verticalLayout_27">
              <item>
               <widget class="QLabel" name="label_50">
+               <property name="toolTip">
+                <string>Brick you currently have</string>
+               </property>
                <property name="text">
                 <string>Brick</string>
                </property>
@@ -779,6 +848,9 @@
             <layout class="QVBoxLayout" name="verticalLayout_28">
              <item>
               <widget class="QLabel" name="label_52">
+               <property name="toolTip">
+                <string>Sheep you currently have</string>
+               </property>
                <property name="text">
                 <string>Sheep</string>
                </property>
@@ -803,6 +875,9 @@
             <layout class="QVBoxLayout" name="verticalLayout_29">
              <item>
               <widget class="QLabel" name="label_54">
+               <property name="toolTip">
+                <string>Wheat you currently have</string>
+               </property>
                <property name="text">
                 <string>Wheat</string>
                </property>
@@ -827,6 +902,9 @@
             <layout class="QVBoxLayout" name="verticalLayout_30">
              <item>
               <widget class="QLabel" name="label_56">
+               <property name="toolTip">
+                <string>Ore you currently have</string>
+               </property>
                <property name="text">
                 <string>Ore</string>
                </property>
@@ -862,6 +940,9 @@
               <bold>true</bold>
              </font>
             </property>
+            <property name="toolTip">
+             <string>Your victory points: visible total/with hidden VP cards included</string>
+            </property>
             <property name="styleSheet">
              <string notr="true">font-weight: bold;</string>
             </property>
@@ -882,6 +963,9 @@
                 <pointsize>9</pointsize>
                </font>
               </property>
+              <property name="toolTip">
+               <string>Length of your longest continuous road</string>
+              </property>
               <property name="text">
                <string>Longest Road: 4</string>
               </property>
@@ -896,6 +980,9 @@
                <font>
                 <pointsize>9</pointsize>
                </font>
+              </property>
+              <property name="toolTip">
+               <string>Number of Knight cards you have played toward Largest Army.</string>
               </property>
               <property name="text">
                <string>Army Size: 4</string>
@@ -986,6 +1073,13 @@
               <height>80</height>
              </size>
             </property>
+            <property name="toolTip">
+             <string>Open the trade menu to offer trades with other players or the bank.
+Building costs:
+- Road: 1 Brick, 1 Wood
+- Settlement: 1 Brick, 1 Wood, 1 Wheat, 1 Sheep
+- City: 2 Wheat, 3 Ore</string>
+            </property>
             <property name="text">
              <string>Trade</string>
             </property>
@@ -1004,6 +1098,10 @@
               <pointsize>9</pointsize>
              </font>
             </property>
+            <property name="toolTip">
+             <string>View and play your development cards.
+- Development Card: 1 Wheat, 1 Sheep, 1 Ore</string>
+            </property>
             <property name="text">
              <string>Development</string>
             </property>
@@ -1016,6 +1114,9 @@
               <width>0</width>
               <height>80</height>
              </size>
+            </property>
+            <property name="toolTip">
+             <string>Finish your turn</string>
             </property>
             <property name="text">
              <string>End Turn</string>

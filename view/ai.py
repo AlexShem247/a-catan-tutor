@@ -4,6 +4,7 @@ from typing import Optional, List, Tuple
 
 from GameController import GameController
 from drawing.View import View
+from drawing.constants import SHOW_AI_BUILT_LOCATIONS
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
@@ -262,6 +263,9 @@ def ai_attempt_build(player: Player, controller: GameController, action: Buildab
         msg = f"{player.name} bought a development card."
     else:
         msg = "AI attempted unknown action"
+
+    if not SHOW_AI_BUILT_LOCATIONS:
+        msg = msg.partition("built")[0] + f"built by {player.name}"
 
     return msg
 

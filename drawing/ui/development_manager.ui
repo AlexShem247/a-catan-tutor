@@ -68,6 +68,12 @@
          <height>40</height>
         </size>
        </property>
+       <property name="toolTip">
+        <string>Buy a Development Card for:
+- 1 Ore
+- 1 Wheat
+- 1 Sheep</string>
+       </property>
        <property name="text">
         <string>Buy Development Card</string>
        </property>
