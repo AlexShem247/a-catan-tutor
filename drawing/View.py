@@ -23,6 +23,8 @@ class View:
         self.turnMade = self.window.turnMade
         self.tradeDecisionMade = self.window.tradeDecisionMade
         self.resourcesPicked = self.window.resourcesPicked
+        self.startGame = self.window.startGame
+        self.ai_decision_animation_delay = AI_DECISION_ANIMATION_DELAY
 
     def display_board(self, player: Optional[Player] = None, msg: Optional[str] = None):
         """Hook to display the board in the Qt window."""
@@ -35,7 +37,7 @@ class View:
         """Hook to display the board in the Qt window."""
         self.window.display_resources(self.controller)
         self.window.display_generic_info(player, msg)
-        ai_time_delay(AI_DECISION_ANIMATION_DELAY * 1)
+        ai_time_delay(self.ai_decision_animation_delay * 1)
 
     def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int], played_dev_card: bool = False):
         """Hook to display the board in the Qt window."""
@@ -46,7 +48,7 @@ class View:
         self.canvas.display_board(self.controller)
         self.window.display_resources(self.controller)
         self.window.display_round_info_ai_start(player, dice_info, msg)
-        delay = (3 if "\n" in msg else 1) * AI_DECISION_ANIMATION_DELAY
+        delay = (3 if "\n" in msg else 1) * self.ai_decision_animation_delay
         ai_time_delay(delay)
 
     def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False):
@@ -85,6 +87,10 @@ class View:
     def display_results(self):
         """Display game results"""
         self.window.display_results(self.controller)
+
+    def display_start_screen(self):
+        """Display game results"""
+        self.window.display_start_screen()
 
 
 def select_blocking(view: View, signal: pyqtBoundSignal, draw_fn, *args, **kwargs):

@@ -9,7 +9,8 @@ from game.Resources import HexType, Resource, HEX_TO_RESOURCE
 from game.Vertex import Port
 
 WINDOW_WIDTH, WINDOW_HEIGHT = 1280, 730
-BOARD_BG_COLOR = QColor(10, 140, 200)
+TITLE_COLOR = QColor(250, 200, 60)
+BOARD_BG_COLOR = QColor(15, 112, 183)
 HEX_TILE_RADIUS = 100
 EDGE_COLOR = QColor(240, 220, 170)
 PORT_EDGE_COLOR = QColor(220, 150, 50)
@@ -20,7 +21,8 @@ CROWN_SYM = "♛"
 SHOW_AI_BUILT_LOCATIONS = False
 
 HIGHLIGHT_ANIMATION = True
-AI_DECISION_ANIMATION_DELAY = 0.0  # Seconds
+AI_DECISION_ANIMATION_DELAY = 1.0  # Seconds
+AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE = 0.05  # Seconds
 
 OUTLINE_COLOR = QColor(Qt.GlobalColor.black)
 HIGHLIGHT_COLOR = QColor(Qt.GlobalColor.yellow)
@@ -48,6 +50,7 @@ RESOURCE_ICONS: Dict[Resource, str] = {
 
 DESERT_ICON = "assets/cactus.png"
 ROBBER_ICON = "assets/robber.png"
+SEA_BACKGROUND = "assets/sea_background.png"
 
 PORT_ICONS: Dict[Port, str] = {
     Port.THREE_TO_ONE: "assets/port_generic.png",

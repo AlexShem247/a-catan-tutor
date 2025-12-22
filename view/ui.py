@@ -10,6 +10,11 @@ from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
 
 
+def get_game_type(view: View) -> bool:
+    human_player_one: bool = select_blocking(view, view.startGame, view.display_start_screen)
+    return human_player_one
+
+
 def initial_settlement_placement(player: Player, controller: GameController, view: View) -> Vertex:
     """Human selects a vertex for initial settlement placement."""
     view.display_board(player, "Select a position to build your settlement")

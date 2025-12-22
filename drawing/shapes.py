@@ -3,8 +3,8 @@ import time
 from collections import Counter
 from typing import Dict
 
-from PyQt6.QtCore import QPointF, Qt, QRect
-from PyQt6.QtGui import QPolygonF, QPixmap, QPen, QColor
+from PyQt6.QtCore import QPointF, Qt, QRect, QPoint
+from PyQt6.QtGui import QPolygonF, QPixmap, QPen, QColor, QFontMetrics
 
 from drawing.constants import TERRAIN_COLORS, TOKEN_COMMON_COLOR, TOKEN_COLOR, TOKEN_OUTLINE_COLOR, EDGE_COLOR, \
     hex_to_filepath, SETTLEMENT_ICONS, PLAYER_COLORS, ROBBER_ICON, HIGHLIGHT_ANIMATION
@@ -90,27 +90,49 @@ class Rectangle(Shape):
 
 
 class TextShape(Shape):
-    def __init__(self, x: float, y: float, text: str, color: QColor, font_size=20):
+    def __init__(self, x: float, y: float, text: str, color: QColor, font_size=20,
+                 outline_color=QColor("black"), outline_width=0, bold=False):
         self.x = int(x)
         self.y = int(y)
         self.text = text
         self.color = color
         self.font_size = font_size
+        self.outline_color = outline_color
+        self.outline_width = outline_width
+        self.bold = bold
 
     def draw(self, painter, scale, offset):
-        painter.setPen(self.color)
         font = painter.font()
         font.setPointSizeF(self.font_size * scale)
+        font.setBold(self.bold)
         painter.setFont(font)
 
         px = self.x * scale + offset.x()
         py = self.y * scale + offset.y()
 
-        # Create a square QRect around the position
-        size = self.font_size * 2 * scale  # approximate bounding box
-        rect = QRect(int(px - size / 2), int(py - size / 2), int(size), int(size))
+        # Get bounding rect for the text
+        fm = QFontMetrics(font)
+        text_rect = fm.boundingRect(self.text)
 
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, self.text)
+        # Always add a minimum padding to avoid clipping
+        min_padding = 2  # pixels
+        outline_padding = max(self.outline_width * 2, min_padding)
+        text_rect.adjust(-outline_padding, -outline_padding, outline_padding, outline_padding)
+
+        # Center rect at (px, py)
+        text_rect.moveCenter(QPoint(int(px), int(py)))
+
+        # Draw outline if requested
+        if self.outline_width > 0:
+            painter.setPen(QPen(self.outline_color, self.outline_width))
+            for dx in (-self.outline_width, 0, self.outline_width):
+                for dy in (-self.outline_width, 0, self.outline_width):
+                    if dx != 0 or dy != 0:
+                        painter.drawText(text_rect.translated(dx, dy), Qt.AlignmentFlag.AlignCenter, self.text)
+
+        # Draw main text on top
+        painter.setPen(self.color)
+        painter.drawText(text_rect, Qt.AlignmentFlag.AlignCenter, self.text)
 
 
 class Hexagon(Shape):

@@ -1,5 +1,6 @@
 from typing import Callable, List, Tuple, Optional, TYPE_CHECKING
 
+from drawing.constants import AI_DECISION_ANIMATION_DELAY, AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game
 from game.HexTile import HexTile
@@ -17,9 +18,12 @@ class GameController:
     Controls the flow of a Catan game using a pure Game model.
     Handles turns, building actions, and dice rolls via hooks.
     """
+    _game: Game
+    round_num: int
 
     def __init__(
             self,
+            get_game_type: Callable[["View"], bool] = None,
             get_settlement_choice: Callable[[Player, "GameController", "View"], Vertex] = None,
             get_road_choice: Callable[[Player, "GameController", "View", Optional[Vertex]], Edge] = None,
             get_settlement_choice_ai: Callable[[Player, "GameController", "View"], Vertex] = None,
@@ -41,8 +45,7 @@ class GameController:
             monopoly_selection: Callable[["GameController", "View"], Resource] = None,
             monopoly_selection_ai: Callable[["GameController"], Resource] = None,
     ):
-        self._game = Game(human_player_one=False)
-        self.round_num = 1
+        self.get_game_type = get_game_type
 
         self.get_settlement_choice = get_settlement_choice
         self.get_road_choice = get_road_choice
@@ -67,6 +70,40 @@ class GameController:
         self.monopoly_selection_ai = monopoly_selection_ai
         self.view: View | None = None
 
+        self.reset_game(True)
+
+    def reset_game(self, human_player_one: bool):
+        """Reset the game to a fresh state and reset round counter."""
+        self._game = Game(human_player_one=human_player_one)
+        self.round_num = 1
+        if self.view is not None:
+            self.view.ai_decision_animation_delay = (AI_DECISION_ANIMATION_DELAY if human_player_one
+                                                     else AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE)
+
+    def start_game(self):
+        """Run initial placement, then loop turns until game over."""
+        human_player_one: bool = self.get_game_type(self.view)
+        self.reset_game(human_player_one)
+
+        self.run_initial_placement()
+        while not self._game.game_over:
+            for player in self._game.players:
+                if player.is_human:
+                    self.play_round_hook(player, self, self.view)
+                else:
+                    self.play_round_ai_hook(player, self, self.view)
+
+                # Set development cards to playable
+                for card in player.development_cards:
+                    card.playable = card.card_type != DevelopmentCardType.VICTORY_POINT  # You cannot play VP cards
+
+                if self._game.game_over:
+                    break
+
+            self.round_num += 1
+
+        self.view.display_results()
+
     def run_initial_placement(self):
         """
         Each player places two settlements and two roads in order:
@@ -88,30 +125,6 @@ class GameController:
             else:
                 edge = self.get_road_choice_ai(player, self, self.view, vertex)
             self._game.try_build_road(player, edge, use_resources=False)
-
-    def start_game(self):
-        """Run initial placement, then loop turns until game over."""
-        self._game = Game(human_player_one=False)
-        self.round_num = 1
-
-        self.run_initial_placement()
-        while not self._game.game_over:
-            for player in self._game.players:
-                if player.is_human:
-                    self.play_round_hook(player, self, self.view)
-                else:
-                    self.play_round_ai_hook(player, self, self.view)
-
-                # Set development cards to playable
-                for card in player.development_cards:
-                    card.playable = card.card_type != DevelopmentCardType.VICTORY_POINT  # You cannot play VP cards
-
-                if self._game.game_over:
-                    break
-
-            self.round_num += 1
-
-        self.view.display_results()
 
     def trade_with_players(self, selling_player, selling, buying) -> List[Tuple[Player, Optional[ResourceCount]]]:
         """Sees which players are willing to trade"""

@@ -9,8 +9,9 @@ from GameController import GameController
 from drawing.board_geometry import hex_center, vertex_xy
 from drawing.constants import WINDOW_HEIGHT, BOARD_BG_COLOR, HEX_TILE_RADIUS, SETTLEMENT_ICONS, hex_to_filepath, \
     EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON, HIGHLIGHT_COLOR, OUTLINE_COLOR, \
-    PORT_EDGE_COLOR, PORT_ICONS
-from drawing.shapes import HexTileShape, VertexShape, LineShape, InteractiveShape, InteractiveCircle, PixmapShape
+    PORT_EDGE_COLOR, PORT_ICONS, TITLE_COLOR, SEA_BACKGROUND
+from drawing.shapes import HexTileShape, VertexShape, LineShape, InteractiveShape, InteractiveCircle, PixmapShape, \
+    TextShape
 from game.Edge import Edge
 from game.HexTile import HexTile
 from game.PlayerAssets import Buildable
@@ -26,6 +27,7 @@ class SquareCanvas(QWidget):
         self.base_scale = None
         self.setMinimumSize(WINDOW_HEIGHT // 2, WINDOW_HEIGHT // 2)
         self.world_size = 1000
+        self.background_image = None
 
         self.zoom = 1.0
         self.min_zoom = 1.0
@@ -58,6 +60,7 @@ class SquareCanvas(QWidget):
             self.icons[path] = QPixmap(path)
 
         self.icons[ROBBER_ICON] = QPixmap(ROBBER_ICON)
+        self.icons[SEA_BACKGROUND] = QPixmap(SEA_BACKGROUND)
 
         for key, path in PORT_ICONS.items():
             self.icons[path] = QPixmap(path)
@@ -181,7 +184,10 @@ class SquareCanvas(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         # Background
-        painter.fillRect(self.rect(), BOARD_BG_COLOR)
+        if self.background_image:
+            painter.drawPixmap(self.rect(), self.background_image)
+        else:
+            painter.fillRect(self.rect(), BOARD_BG_COLOR)
 
         # Largest square inside widget
         side = min(self.width(), self.height())
@@ -216,6 +222,7 @@ class SquareCanvas(QWidget):
     def display_board(self, controller: GameController):
         self.clear_shapes()
         cx, cy = self.get_world_centre()
+        self.background_image = None
 
         for tile in controller.get_all_hexes():
             x, y = hex_center(tile.q, tile.r, cx, cy, HEX_TILE_RADIUS)
@@ -315,3 +322,19 @@ class SquareCanvas(QWidget):
 
     def get_world_centre(self) -> Tuple[int, int]:
         return int(self.world_size * 0.5), int(self.world_size * (21/40))
+
+    def display_start_screen(self):
+        self.shapes.clear()
+        w, h = self.world_size, self.world_size
+
+        self.background_image = self.icons[SEA_BACKGROUND]
+
+        self.add_shape(TextShape(w * 0.5, h * 0.35, "Catan",
+                                 TITLE_COLOR, 200, outline_width=2, bold=True))
+
+        self.add_shape(TextShape(w * 0.5, h * 0.55, "Adaptable Explainable AI Tutor",
+                                 TITLE_COLOR.lighter(150), 40, outline_width=1, bold=True))
+
+        self.add_shape(TextShape(w * 0.5, h * 0.65,
+                                 "Your AI guide to smart moves and strategic insights in Catan.",
+                                 TITLE_COLOR.lighter(150), 25, bold=True))

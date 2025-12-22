@@ -23,6 +23,7 @@ from view.display import format_counter_offer, get_player_lead_status
 class MainWindow(QMainWindow):
     SIDE_PANEL_WIDTH = 320
     LABEL_LINE_LENGTH = 38
+    startGame = pyqtSignal(object)
     turnMade = pyqtSignal(object)
     tradeDecisionMade = pyqtSignal(object)
     resourcesPicked = pyqtSignal(object)
@@ -68,6 +69,11 @@ class MainWindow(QMainWindow):
         self.development_manager_widget = uic.loadUi("drawing/ui/development_manager.ui")
         self.development_manager_widget = uic.loadUi("drawing/ui/development_manager.ui")
         self.results_menu = uic.loadUi("drawing/ui/results_menu.ui")
+        self.start_menu = uic.loadUi("drawing/ui/start_menu.ui")
+
+        self.rule_window = uic.loadUi("drawing/ui/rules_window.ui")
+        self.safe_connect(self.start_menu.help_btn, self.show_rules)
+        self.safe_connect(self.main_menu.help_btn, self.show_rules)
 
         self.verticalSpacer = self.find_last_vertical_spacer()
         self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(True))
@@ -90,6 +96,12 @@ class MainWindow(QMainWindow):
         except TypeError:
             pass
         button.clicked.connect(slot)
+
+    def show_rules(self):
+        # Show the rule window
+        self.rule_window.show()
+        self.rule_window.raise_()  # Bring it to the front
+        self.rule_window.activateWindow()  # Focus it
 
     def find_last_vertical_spacer(self) -> QSpacerItem | None:
         last_spacer = None
@@ -770,6 +782,8 @@ class MainWindow(QMainWindow):
         # Sort players by victory points (descending)
         sorted_players = sorted(controller.get_all_players(), key=lambda p: p.calc_victory_points()[1], reverse=True)
 
+        self.results_menu.winner_label.setText(sorted_players[0].name + "!")
+
         # Fill in results for each ranking
         for rank, player in enumerate(sorted_players, start=1):
             labels = all_labels[rank]
@@ -807,6 +821,44 @@ class MainWindow(QMainWindow):
                 labels["victory_cards"].setText(f"Victory Card Points: {num_vp_cards}")
                 labels["victory_cards"].show()
 
+        def return_to_main_menu():
+            # Remove results panel
+            layout_sizes = self.splitter_layout.sizes()
+            self.results_menu.setParent(None)
+
+            # Restore main menu
+            self.splitter_layout.addWidget(self.main_menu)
+            self.splitter_layout.setSizes(layout_sizes)
+            self.main_menu.show()
+
+            # Reset the game controller and game state
+            controller.start_game()
+
         # Bind buttons
-        self.safe_connect(self.results_menu.main_menu_btn, lambda: controller.start_game())
+        self.safe_connect(self.results_menu.main_menu_btn, return_to_main_menu)
         self.safe_connect(self.results_menu.quit_btn, lambda: self.closeEvent(QCloseEvent()))
+
+    def display_start_screen(self):
+        self.canvas.interactive_shapes.clear()
+        self.canvas.display_start_screen()
+
+        # Add the new results menu
+        sizes = self.splitter_layout.sizes()
+        self.main_menu.setParent(None)
+        self.splitter_layout.addWidget(self.start_menu)
+        self.splitter_layout.setSizes([sizes[0], sizes[1]])
+
+        def play(human_player_one: bool):
+            # Remove results panel
+            layout_sizes = self.splitter_layout.sizes()
+            self.start_menu.setParent(None)
+
+            # Restore main menu
+            self.splitter_layout.addWidget(self.main_menu)
+            self.splitter_layout.setSizes(layout_sizes)
+            self.main_menu.show()
+
+            self.startGame.emit(human_player_one)
+
+        self.safe_connect(self.start_menu.play_game_btn, lambda: play(True))
+        self.safe_connect(self.start_menu.run_simulation_btn, lambda: play(False))
