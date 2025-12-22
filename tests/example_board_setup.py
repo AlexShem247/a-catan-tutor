@@ -3,7 +3,7 @@ import unittest
 from game.Edge import EdgeDirection
 from game.Game import Game
 from game.Vertex import VertexDirection
-from view.display import display_board
+from view.display_utils import display_board
 
 
 class ExampleBoardSetup(unittest.TestCase):

@@ -1,13 +1,11 @@
 import random
 from collections import defaultdict
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Set
 
 from game.Edge import Edge, EdgeDirection
 from game.HexTile import HexTile, HexType
 from game.Player import Player
 from game.Vertex import Vertex, VertexDirection, Building, Port
-
-HEX_TYPES: list[HexType] = ["forest", "hills", "pasture", "fields", "mountains", "desert"]
 
 PRODUCTION_NUMBERS = [2, 3, 3, 4, 4, 5, 5, 6, 6,
                       8, 8, 9, 9, 10, 10, 11, 11, 12]
@@ -34,11 +32,12 @@ class Board:
         self.hexes: List[HexTile] = []
         self.vertices: List[Vertex] = []
         self.edges: List[Edge] = []
+        self.port_vertices: List[Tuple[Port, Vertex, Vertex]] = []
         self.hex_map: Dict[Tuple[int, int], HexTile] = {}
         self.production_to_hex: Dict[int, List[HexTile]] = defaultdict(list)
         self.vertex_map: Dict[Tuple[int, int, VertexDirection], Vertex] = {}
         self.edge_map: Dict[Tuple[int, int, EdgeDirection], Edge] = {}
-        self.robber_position: HexTile = HexTile(0, 0, "desert")
+        self.robber_position: HexTile = HexTile(0, 0, HexType.DESERT)
 
         self.create_hexes()
         self.create_vertices()
@@ -47,12 +46,12 @@ class Board:
 
     def create_hexes(self) -> None:
         hex_types_sequence: List[HexType] = [
-            "forest", "forest", "forest", "forest",
-            "hills", "hills", "hills",
-            "pasture", "pasture", "pasture", "pasture",
-            "fields", "fields", "fields", "fields",
-            "mountains", "mountains", "mountains",
-            "desert"
+            HexType.FOREST, HexType.FOREST, HexType.FOREST, HexType.FOREST,
+            HexType.HILLS, HexType.HILLS, HexType.HILLS,
+            HexType.PASTURE, HexType.PASTURE, HexType.PASTURE, HexType.PASTURE,
+            HexType.FIELDS, HexType.FIELDS, HexType.FIELDS, HexType.FIELDS,
+            HexType.MOUNTAINS, HexType.MOUNTAINS, HexType.MOUNTAINS,
+            HexType.DESERT
         ]
 
         random.shuffle(hex_types_sequence)
@@ -61,12 +60,12 @@ class Board:
         for i, (q, r) in enumerate(self.HEX_COORDS):
             hex_type = hex_types_sequence[i]
             production_number: Optional[int] = None
-            if hex_type != "desert":
+            if hex_type != HexType.DESERT:
                 production_number = prod_numbers.pop(0)
             hex_tile = HexTile(q, r, hex_type, production_number)
             self.hexes.append(hex_tile)
             self.hex_map[(q, r)] = hex_tile
-            if hex_type == "desert":
+            if hex_type == HexType.DESERT:
                 hex_tile.robber = True
                 self.robber_position = hex_tile
             else:
@@ -130,22 +129,33 @@ class Board:
 
         # Assign ports
         water_edges = self._get_water_edges()
+        num_edges = len(water_edges)
+
+        available_edges = set(range(num_edges))
+        blocked_edges = set()
+
         ports = PORT_TYPES[:]
         random.shuffle(ports)
-        i = 0
 
         for port in ports:
-            # Pick the next edge
+            candidates = [i for i in available_edges if i not in blocked_edges]
+
+            if not candidates:
+                # No legal placement left
+                break
+
+            i = random.choice(candidates)
+
             edge = water_edges[i]
-            for vertex in edge.vertices:
-                vertex.port = port
+            v1, v2 = edge.vertices
+            v1.port = v2.port = port
+            self.port_vertices.append((port, v1, v2))
 
-            # Move to next port
-            i += random.choice([3, 4])
+            # Block this edge ±2 to enforce 2-edge spacing
+            blocked_edges.update({i, (i - 1) % num_edges, (i + 1) % num_edges,
+                                  (i - 2) % num_edges, (i + 2) % num_edges,})
 
-            # Wrap around if needed
-            if i >= len(water_edges):
-                i %= len(water_edges)
+            available_edges.remove(i)
 
     def assign_neighbors(self) -> None:
         directions: List[Tuple[int, int]] = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]
@@ -201,7 +211,7 @@ class Board:
 
     @staticmethod
     def _dfs_longest_path(current_road: Edge, current_vertex: Vertex,
-                          road_graph: dict, visited_roads: set) -> int:
+                          road_graph: Dict, visited_roads: Set) -> int:
         """DFS to find the longest path from current position."""
         visited_roads.add(current_road)
         max_length = 1  # Current road counts as 1

@@ -63,3 +63,6 @@ class DevelopmentDeck:
         if self.empty():
             raise RuntimeError("Development deck is empty")
         return self._deck.pop()
+
+    def size(self) -> int:
+        return len(self._deck)

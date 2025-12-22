@@ -1,30 +1,29 @@
+import sys
+import argparse
+from PyQt6.QtWidgets import QApplication
+
 from GameController import GameController
-from game.Game import Game
-from view.ai import random_initial_settlement_placement, random_initial_road_placement, make_round_move_ai, \
-    trade_manager_ai, robber_discard_ai, place_robber_ai, year_of_plenty_selection_ai, monopoly_selection_ai
-from view.ui import initial_settlement_placement, initial_road_placement, make_round_move, trade_manager, \
-    place_robber, robber_discard, year_of_plenty_selection, monopoly_selection
+from view.CLIView import CLIView
+from view.MainWindow import MainWindow
+from view.QtView import QtView
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Run Catan game.")
+    parser.add_argument("--cli", action="store_true", help="Run the CLI version of the game")
+    args = parser.parse_args()
+
+    controller = GameController()
+
+    if args.cli:
+        controller.view = CLIView(controller)
+        controller.start_game()
+    else:
+        app = QApplication(sys.argv)
+        controller.view = QtView(MainWindow(), controller)
+        controller.start_game()
+        sys.exit(app.exec())
+
 
 if __name__ == "__main__":
-    game = Game()
-
-    controller = GameController(
-        game,
-        get_settlement_choice=initial_settlement_placement,
-        get_road_choice=initial_road_placement,
-        get_settlement_choice_ai=random_initial_settlement_placement,
-        get_road_choice_ai=random_initial_road_placement,
-        play_round_hook=make_round_move,
-        play_round_ai_hook=make_round_move_ai,
-        trade_manager_hook=trade_manager,
-        trade_manager_ai_hook=trade_manager_ai,
-        robber_discard_hook=robber_discard,
-        robber_discard_ai_hook=robber_discard_ai,
-        place_robber_hook=place_robber,
-        place_robber_ai_hook=place_robber_ai,
-        year_of_plenty_selection=year_of_plenty_selection,
-        year_of_plenty_selection_ai=year_of_plenty_selection_ai,
-        monopoly_selection=monopoly_selection,
-        monopoly_selection_ai=monopoly_selection_ai,
-    )
-    controller.start_game()
+    main()

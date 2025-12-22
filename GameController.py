@@ -1,99 +1,48 @@
-from typing import Callable, List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 
+from AI import AI
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import ResourceCount, Resource
-from game.Vertex import Vertex, VertexDirection
-from view.display import display_results
+from game.Vertex import Vertex, Port, VertexDirection
+from view.View import View
+from view.constants import AI_DECISION_ANIMATION_DELAY, AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE, \
+    SHOW_AI_BUILT_LOCATIONS
+from view.display_utils import resource_dict_to_str
 
 
 class GameController:
-    """
-    Controls the flow of a Catan game using a pure Game model.
-    Handles turns, building actions, and dice rolls via hooks.
-    """
+    """Controls the flow of a Catan game using a pure Game model."""
+    _game: Game
+    round_num: int
 
-    def __init__(
-            self,
-            game: Game,
-            get_settlement_choice: Callable[[Player, "GameController"], Vertex] = None,
-            get_road_choice: Callable[[Player, "GameController", Optional[Vertex]], Edge] = None,
-            get_settlement_choice_ai: Callable[[Player, "GameController"], Vertex] = None,
-            get_road_choice_ai: Callable[[Player, "GameController", Optional[Vertex]], Edge] = None,
-            play_round_hook: Callable[[Player, "GameController"], None] = None,
-            play_round_ai_hook: Callable[[Player, "GameController"], None] = None,
-            trade_manager_hook: Callable[["GameController", Player, ResourceCount, ResourceCount,
-                                          Player], Tuple[bool, Optional[ResourceCount]]] = None,
-            trade_manager_ai_hook: Callable[
-                [Player, ResourceCount, ResourceCount, int], Tuple[bool, Optional[ResourceCount]]] = None,
-            robber_discard_hook: Callable[[Player, "GameController", int, bool], ResourceCount] = None,
-            robber_discard_ai_hook: Callable[[Player, "GameController", int, bool], ResourceCount] = ResourceCount,
-            place_robber_hook: Callable[[Player, "GameController"], Tuple[HexTile, Optional[Player]]] = None,
-            place_robber_ai_hook: Callable[[Player, "GameController"], Tuple[HexTile, Optional[Player]]] = None,
+    def __init__(self):
+        self.view: View | None = None
+        self.reset_game(True)
 
-            year_of_plenty_selection: Callable[["GameController"], ResourceCount] = None,
-            year_of_plenty_selection_ai: Callable[["GameController"], ResourceCount] = None,
-            monopoly_selection: Callable[["GameController"], Resource] = None,
-            monopoly_selection_ai: Callable[["GameController"], Resource] = None,
-    ):
-        self._game = game
+    def reset_game(self, human_player_one: bool):
+        """Reset the game to a fresh state and reset round counter."""
+        self._game = Game(human_player_one=human_player_one)
         self.round_num = 1
-
-        self.get_settlement_choice = get_settlement_choice
-        self.get_road_choice = get_road_choice
-        self.play_round_hook = play_round_hook
-
-        self.get_settlement_choice_ai = get_settlement_choice_ai
-        self.get_road_choice_ai = get_road_choice_ai
-        self.play_round_ai_hook = play_round_ai_hook
-
-        self.trade_manager_hook = trade_manager_hook
-        self.trade_manager_ai_hook = trade_manager_ai_hook
-
-        self.robber_discard_hook = robber_discard_hook
-        self.robber_discard_ai_hook = robber_discard_ai_hook
-        self.place_robber_hook = place_robber_hook
-        self.place_robber_ai_hook = place_robber_ai_hook
-
-        self.year_of_plenty_selection = year_of_plenty_selection
-        self.year_of_plenty_selection_ai = year_of_plenty_selection_ai
-
-        self.monopoly_selection = monopoly_selection
-        self.monopoly_selection_ai = monopoly_selection_ai
-
-    def run_initial_placement(self):
-        """
-        Each player places two settlements and two roads in order:
-        forward + reverse order for second placement.
-        """
-        players_order = self._game.players + list(reversed(self._game.players))
-        for player in players_order:
-            # Settlement
-            if player.is_human and self.get_settlement_choice:
-                vertex = self.get_settlement_choice(player, self)
-            else:
-                vertex = self.get_settlement_choice_ai(player, self)
-            self._game.try_build_settlement(player, vertex, use_resources=False, road_restriction=False)
-
-            # Road
-            if player.is_human and self.get_road_choice:
-                edge = self.get_road_choice(player, self, vertex)
-            else:
-                edge = self.get_road_choice_ai(player, self, vertex)
-            self._game.try_build_road(player, edge, use_resources=False)
+        if self.view is not None:
+            self.view.ai_decision_animation_delay = (AI_DECISION_ANIMATION_DELAY if human_player_one
+                                                     else AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE)
 
     def start_game(self):
         """Run initial placement, then loop turns until game over."""
+        human_player_one = self.view.display_start_screen()
+        self.reset_game(human_player_one)
+
         self.run_initial_placement()
         while not self._game.game_over:
             for player in self._game.players:
                 if player.is_human:
-                    self.play_round_hook(player, self)
+                    self.make_round_move(player)
                 else:
-                    self.play_round_ai_hook(player, self)
+                    self.make_round_move_ai(player)
 
                 # Set development cards to playable
                 for card in player.development_cards:
@@ -104,7 +53,67 @@ class GameController:
 
             self.round_num += 1
 
-        display_results(self._game)
+        self.view.display_results()
+
+    def run_initial_placement(self):
+        """
+        Each player places two settlements and two roads in order:
+        forward + reverse order for second placement.
+        """
+        players_order = [(p, False) for p in self._game.players] + [(p, True) for p in reversed(self._game.players)]
+        for player, gain_resource in players_order:
+            # Settlement
+            if player.is_human:
+                # Let human select position
+                self.view.display_board(player, "Select a position to build your settlement")
+
+                vertices = self._game.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
+                vertex: Vertex = self.view.draw_selectable_vertices(vertices)
+                self.view.display_board()
+            else:
+                available_vertices = self._game.get_available_vertices(player, Buildable.SETTLEMENT,
+                                                                       road_restriction=False)
+                self.view.display_board()
+                self.view.draw_selectable_vertices(available_vertices, disable_interactivity=True)
+                self.view.display_board_ai(player, "Select a position to build your settlement")
+                vertex = AI.choose_random_settlement(available_vertices)
+            self._game.try_build_settlement(player, vertex, use_resources=False,
+                                            road_restriction=False, gain_resources=gain_resource)
+
+            # Road
+            if player.is_human:
+                edge = self.get_road_choice(player, vertex)
+            else:
+                edge = self.get_road_choice_ai(player, vertex)
+            self._game.try_build_road(player, edge, use_resources=False)
+
+    def get_road_choice(self, player: Player, settlement: Optional[Vertex] = None) -> Edge:
+        """Human selects an edge for initial road placement."""
+        self.view.display_board(player, "Select a position to build your road")
+
+        edges = self._game.get_available_edges(player)
+        if settlement is not None:
+            # Restrict edges to be directly connected to settlement
+            edges = [edge for edge in edges if settlement in edge.vertices]
+
+        edge: Edge = self.view.draw_selectable_edges(edges)
+
+        return edge
+
+    def get_road_choice_ai(self, player: Player, settlement: Optional[Vertex] = None) -> Optional[Edge]:
+        if settlement is None:
+            available_edges = self._game.get_available_edges(player)
+        else:
+            available_edges = self._game.get_buildable_edges_for_vertex(settlement)
+
+        if not available_edges:
+            return None
+
+        self.view.display_board()
+        self.view.draw_selectable_edges(available_edges, disable_interactivity=True)
+        self.view.display_board_ai(player, "Select a position to build your road")
+
+        return AI.choose_random_road(available_edges)
 
     def trade_with_players(self, selling_player, selling, buying) -> List[Tuple[Player, Optional[ResourceCount]]]:
         """Sees which players are willing to trade"""
@@ -112,9 +121,9 @@ class GameController:
         for player in self._game.players:
             if player != selling_player:
                 if player.is_human:
-                    interested, counter = self.trade_manager_hook(self, player, selling, buying, selling_player)
+                    interested, counter = self.view.display_trade_manager(player, selling, buying, selling_player)
                 else:
-                    interested, counter = self.trade_manager_ai_hook(player, selling, buying, self.round_num)
+                    interested, counter = AI.trade_manager_ai_logic(player.resources, selling, buying, self.round_num)
 
                 if interested:
                     results.append((player, counter))
@@ -127,6 +136,7 @@ class GameController:
 
     def roll_dice(self, player: Player) -> Tuple[int, int, int, Optional[str]]:
         """Roll two dice and distribute resources to players."""
+        self.view.display_board()
         d1, d2, total = self._game.roll_dice()
         msg = None
         if total == Game.ROBBER_DICE_NUM:
@@ -136,9 +146,10 @@ class GameController:
                 discard_count = p.calculate_discard_count()
                 if discard_count > 0:
                     if p.is_human:
-                        resources_to_discard = self.robber_discard_hook(p, self, discard_count, False)
+                        resources_to_discard = self.view.show_resource_chooser(
+                            p, discard_count, "The robber has been rolled!", p.resources)
                     else:
-                        resources_to_discard = self.robber_discard_ai_hook(p, self, discard_count, False)
+                        resources_to_discard = AI.decide_robber_discard(player.resources, discard_count)
                     p.remove_resources(resources_to_discard)
 
             # 2. Player who rolled dice can move robber and collect resources
@@ -155,9 +166,37 @@ class GameController:
         """
         # Choose the robber placement and target player
         if player.is_human:
-            tile, steal_from = self.place_robber_hook(player, self)
+            # Get available hex tiles (exclude current robber tile)
+            available_hexes = [tile for tile in self._game.get_all_hexes() if not tile.robber]
+            self.view.display_board(player, "Select a hex to move the robber")
+            selected_hex: HexTile = self.view.draw_selectable_tiles(available_hexes)
+
+            # Check for stealable players on adjacent vertices
+            adjacent_player_buildings: List[Vertex] = [
+                v for v in selected_hex.vertices
+                if v.owner is not None and v.owner != player and any(v.owner.resources.values())
+            ]
+
+            if not adjacent_player_buildings:
+                tile, steal_from = selected_hex, None
+            else:
+                self.view.display_board(player, "Select a player to steal from")
+                selected_player_building: Vertex = self.view.draw_selectable_vertices(adjacent_player_buildings)
+                selected_player = selected_player_building.owner
+
+                tile, steal_from = selected_hex, selected_player
+
         else:
-            tile, steal_from = self.place_robber_ai_hook(player, self)
+            valid_hexes = [
+                hex_tile for hex_tile in self._game.get_all_hexes()
+                if not hex_tile.robber
+            ]
+            tile, steal_from = AI.decide_robber_placement(
+                valid_hexes,
+                player,
+                lambda h: self._game.get_players_on_hex(h),
+                lambda p: any(v > 0 for v in p.resources.values())
+            )
 
         # Move the robber
         self._game.set_robber(tile)
@@ -197,11 +236,11 @@ class GameController:
             # ROAD BUILDING: Allows player to place two roads for free
             built_edges = []
             for _ in range(2):
-                if self.get_available_edges(player):
+                if self._game.get_available_edges(player):
                     if player.is_human:
-                        edge = self.get_road_choice(player, self, None)
+                        edge = self.get_road_choice(player, None)
                     else:
-                        edge = self.get_road_choice_ai(player, self, None)
+                        edge = self.get_road_choice_ai(player, None)
                     self._game.try_build_road(player, edge, use_resources=False)
                     built_edges.append(edge)
             msg += f" Built {len(built_edges)} road(s)."
@@ -209,9 +248,10 @@ class GameController:
         elif card_type == DevelopmentCardType.YEAR_OF_PLENTY:
             # YEAR OF PLENTY: Player chooses two resources from the bank to add to their hand
             if player.is_human:
-                resources = self.year_of_plenty_selection(self)
+                resources = self.view.show_resource_chooser(
+                    player, 2, "Year of Plenty: choose any two resources from the bank.", self._game.bank_resources)
             else:
-                resources = self.year_of_plenty_selection_ai(self)
+                resources = AI.decide_year_of_plenty_resources(self._game.bank_resources)
             player.add_resources(resources)
             resource_list = ", ".join(
                 f"{amt} {res.name.replace('_', ' ').title()}" for res, amt in resources.items() if amt > 0)
@@ -220,15 +260,19 @@ class GameController:
         elif card_type == DevelopmentCardType.MONOPOLY:
             # MONOPOLY: Player chooses a single resource type; all other players give all of that resource to the player
             if player.is_human:
-                resource = self.monopoly_selection(self)
+                chosen = self.view.show_resource_chooser(
+                    player, 1, "Monopoly: choose a resource to get from the other players.",
+                    {res: 1 for res in Resource})
+                # Extract the single Resource enum
+                resource = next(iter(chosen.keys()))
             else:
-                resource = self.monopoly_selection_ai(self)
+                resource = AI.decide_monopoly_resource(self._game.bank_resources)
             total_taken = 0
             for p in self._game.players:
                 if p == player:
                     continue
                 amount = p.resources[resource]
-                self.trade_between_players(player, {}, p, {resource: amount})
+                self._game.trade_between_players(player, {}, p, {resource: amount})
                 total_taken += amount
             msg += f" Monopolised {total_taken} {resource.name.replace('_', ' ').title()} from other players."
 
@@ -240,7 +284,144 @@ class GameController:
 
         return msg
 
-    # <editor-fold desc="Controller wrapper methods for model">
+    def make_round_move(self, player: Player):
+        playable_cards = [card for card in player.development_cards if card.playable]
+        played_dev_card = False
+        if playable_cards:
+            # Player can play card before rolling dice
+            played_card = self.view.pre_roll(player)
+            played_dev_card = played_card is not False
+
+        d1, d2, total, _ = self.roll_dice(player)
+        self.view.display_board_turn(player, (d1, d2, total), played_dev_card)
+
+    def make_round_move_ai(self, player: Player):
+        """AI turn: decides what to build, trades if helpful, then attempts the build."""
+        used_dev_card = False
+        card_msg = ""
+        playable_cards = [c.card_type for c in player.development_cards if c.playable]
+
+        # Decide whether to play a development card
+        card_to_play = AI.decide_dev_card_usage(playable_cards, used_dev_card)
+        if card_to_play:
+            card_msg = self.play_development_card(player, card_to_play) + " (Pre-roll)"
+            used_dev_card = True
+
+        d1, d2, total, roll_msg = self.roll_dice(player)
+
+        # 1. AI chooses what it wants to build
+        chosen_action = AI.choose_build_action()
+
+        # 2. Try a bank trade if needed
+        trade_msg = None
+        if chosen_action != "NOTHING":
+            trade_msg = self.ai_attempt_trade(player, chosen_action)
+
+        # 3. Attempt the build
+        build_msg = self.ai_attempt_build(player, chosen_action)
+
+        # 4. Use playable development card if AI has one and hasn't used it
+        card_to_play = AI.decide_post_roll_dev_card_usage(playable_cards, used_dev_card)
+        if card_to_play:
+            card_msg = self.play_development_card(player, card_to_play) + " (Post-roll)"
+
+        # 5. Display results
+        msg = "\n".join(msg for msg in [trade_msg, build_msg, card_msg, roll_msg] if msg)
+        self.view.display_board_turn_ai(player, (d1, d2, total), msg)
+
+    def ai_attempt_trade(self, player: Player, desired_build: Buildable):
+        """Try one bank trade to help the AI reach the resources needed for a desired build."""
+        cost = Game.BUILDING_COST[desired_build]
+
+        # Use pure logic to decide trade strategy
+        buying_resource, selling_resource, bank_rate, ai_buying_rate = AI.decide_trade_strategy(
+            player.resources,
+            cost,
+            self.round_num,
+            bank_rate=4  # Default bank rate
+        )
+
+        if buying_resource is None or selling_resource is None:
+            return None
+
+        buying = {r: 0 for r in Resource}
+        buying[buying_resource] = 1
+
+        # Case 1: Prefer player trade if better rate
+        if AI.should_trade_with_player(ai_buying_rate, bank_rate):
+            selling = AI.pick_random_resources(
+                {selling_resource: player.resources.get(selling_resource, 0)},
+                ai_buying_rate
+            )
+            if selling is None:
+                return None
+
+            willing_players = self.trade_with_players(player, selling, buying)
+            deal = AI.pick_trade_partner(willing_players, ai_buying_rate)
+            if deal is not None:
+                buying_player, counter = deal
+
+                if counter is not None:
+                    selling = counter
+
+                self._game.trade_between_players(player, selling, buying_player, buying)
+                return (
+                    f"{player.name} trades {resource_dict_to_str(selling)} with "
+                    f"{buying_player.name} for {resource_dict_to_str(buying)} "
+                    f"to work towards a {desired_build.name.replace('_', ' ').lower()}."
+                )
+
+        # Case 2: Bank trade
+        selling = {r: 0 for r in Resource}
+        selling[selling_resource] = bank_rate
+
+        success = self._game.try_trade_with_bank(player, selling, buying)
+        if not success:
+            return None
+
+        return (
+            f"{player.name} trades {resource_dict_to_str(selling)} with the bank "
+            f"for {resource_dict_to_str(buying)} to work towards a {desired_build.name.replace('_', ' ').lower()}."
+        )
+
+    def ai_attempt_build(self, player: Player, action: Buildable):
+        """Attempt a build action and return the resulting message."""
+        buildable = self._game.get_buildable_options(player)
+
+        # Special handling for development card
+        if action == Buildable.DEVELOPMENT_CARD:
+            if AI.can_build_development_card(buildable):
+                success, _ = self._game.try_buy_development_card(player)
+                msg = f"{player.name} bought a development card."
+                return msg
+            else:
+                return f"{player.name} chooses to do nothing."
+
+        # For other actions, get location
+        location = AI.choose_random_build_location(buildable, action)
+
+        if action not in buildable or location is None:
+            return f"{player.name} chooses to do nothing."
+
+        if action == Buildable.ROAD:
+            success, msg = self._game.try_build_road(player, location)
+        elif action == Buildable.SETTLEMENT:
+            success, msg = self._game.try_build_settlement(player, location)
+        elif action == Buildable.CITY:
+            success, msg = self._game.try_build_city(player, location)
+        else:
+            msg = "AI attempted unknown action"
+
+        if not SHOW_AI_BUILT_LOCATIONS:
+            msg = msg.partition("built")[0] + f"built by {player.name}"
+
+        return msg
+
+# <editor-fold desc="Controller wrapper methods for model">
+
+    def get_ports(self) -> List[Tuple[Port, Vertex, Vertex]]:
+        """Returns the list of ports and their position"""
+        return self._game.get_ports()
 
     def get_vertex(self, q: int, r: int, corner_index: VertexDirection) -> Optional[Vertex]:
         """Return the Vertex object for hex (q,r) at corner_index 0-5."""
@@ -272,7 +453,7 @@ class GameController:
         """Attempt to build a road with rules enforced."""
         return self._game.try_build_road(player, edge, on_vertex, build, use_resources)
 
-    def get_buildable_options(self, player: Player) -> dict:
+    def get_buildable_options(self, player: Player) -> Dict:
         """
         Returns dict of possible Buildable actions and valid board locations.
         Empty list if player cannot afford or no legal space.
@@ -341,5 +522,19 @@ class GameController:
     def get_bank_resources(self) -> ResourceCount:
         """Returns the bank's resources"""
         return self._game.bank_resources
+
+    def get_all_edges(self):
+        """Return a list of all edges on the board."""
+        return self._game.get_all_edges()
+
+    def get_all_vertices(self):
+        """Return a list of all vertices on the board."""
+        return self._game.get_all_vertices()
+
+    def get_development_deck(self):
+        return self._game.development_deck
+
+    def get_all_players(self):
+        return self._game.players
 
     # </editor-fold>

@@ -1,7 +1,14 @@
 from enum import Enum
 from typing import Literal, Dict, TypeAlias
 
-HexType = Literal["forest", "hills", "pasture", "fields", "mountains", "desert"]
+
+class HexType(Enum):
+    FOREST = 0
+    HILLS = 1
+    PASTURE = 2
+    FIELDS = 3
+    MOUNTAINS = 4
+    DESERT = 5
 
 
 class Resource(Enum):
@@ -15,9 +22,9 @@ class Resource(Enum):
 ResourceCount: TypeAlias = Dict[Resource, int]
 
 HEX_TO_RESOURCE: Dict[HexType, Resource] = {
-    "forest": Resource.WOOD,
-    "hills": Resource.BRICK,
-    "pasture": Resource.SHEEP,
-    "fields": Resource.WHEAT,
-    "mountains": Resource.ORE,
+    HexType.FOREST: Resource.WOOD,
+    HexType.HILLS: Resource.BRICK,
+    HexType.PASTURE: Resource.SHEEP,
+    HexType.FIELDS: Resource.WHEAT,
+    HexType.MOUNTAINS: Resource.ORE,
 }

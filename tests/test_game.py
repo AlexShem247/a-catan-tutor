@@ -61,7 +61,7 @@ class TestGame(unittest.TestCase):
         self.assertEqual(self.game.get_trade_rate(self.player, Resource.WOOD), 2)
 
     def test_try_trade_with_bank_success(self):
-        selling = {Resource.WOOD: 1}
+        selling = {Resource.WOOD: 4}
         buying = {Resource.BRICK: 1}
         self.player.resources[Resource.WOOD] = 4
         self.player.bank_resources[Resource.BRICK] += 1
