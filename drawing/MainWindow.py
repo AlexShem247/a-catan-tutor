@@ -224,36 +224,13 @@ class MainWindow(QMainWindow):
 
         # Actions
         self.toggle_main_action_btns(True)
-        buildable = controller.get_buildable_options(player)
-        can_build = buildable[Buildable.ROAD] or buildable[Buildable.SETTLEMENT] or buildable[Buildable.CITY]
 
-        def build(selected_buildable: Vertex | Edge):
-            match selected_buildable:
-                case Edge():
-                    controller.try_build_road(player, selected_buildable)
-                case Vertex():
-                    if selected_buildable.building is None:
-                        controller.try_build_settlement(player, selected_buildable)
-                    else:
-                        controller.try_build_city(player, selected_buildable)
-
-            self.display_round_info(controller, player, dice_info)
-
-        if can_build:
-            self.canvas.draw_buildables(buildable)
-            try:
-                self.canvas.selectionMade.disconnect()
-            except TypeError:
-                pass
-            self.canvas.selectionMade.connect(build)
-            self.side_panel.action_label.setText("Click on the board to build")
-        else:
-            self.side_panel.action_label.setText("")
-
-        self.side_panel.dev_btn.setEnabled(buildable[Buildable.DEVELOPMENT_CARD] or len(player.development_cards) > 0)
+        self.draw_buildables_if_can_build(controller, player)
+        can_afford_card = controller.get_buildable_options(player)[Buildable.DEVELOPMENT_CARD]
+        self.side_panel.dev_btn.setEnabled(can_afford_card or len(player.development_cards) > 0)
         self.side_panel.trade_btn.setEnabled(sum(player.resources.values()) > 0)
         self.safe_connect(self.side_panel.trade_btn, lambda: self.display_trade_menu(
-            controller, player, lambda: self.display_round_info(controller, player, dice_info)))
+            controller, player, lambda: self.display_round_info(controller, player, dice_info, played_dev_card)))
         self.safe_connect(self.side_panel.dev_btn, lambda: self.show_development_menu(
             controller, player, played_dev_card,
             lambda played: self.display_round_info(controller, player, dice_info, played)))
@@ -381,6 +358,7 @@ class MainWindow(QMainWindow):
         def trade_with_bank():
             controller.try_trade_with_bank(player, selling, buying)
             self.display_trade_menu(controller, player, back_action)
+            self.draw_buildables_if_can_build(controller, player)
 
         def trade_with_players():
             willing_players = controller.trade_with_players(player, selling, buying)
@@ -472,6 +450,7 @@ class MainWindow(QMainWindow):
                 selling = counter_offer  # Player accepted counteroffer
 
             controller.trade_between_players(player, selling, buying_player, buying)
+            self.draw_buildables_if_can_build(controller, player)
             back_action()
 
         try:
@@ -515,7 +494,7 @@ class MainWindow(QMainWindow):
             resource_caps = {res: num_resources for res in Resource}
 
         self.side_panel.turn_label.setText(f"{player.name}'s turn")
-        self.side_panel.main_label.setText(title)
+        self.side_panel.main_label.setText(self.word_wrap(title))
         self.side_panel.action_label.setText(
             f"You need to select {num_resources} more resource{'s' if num_resources != 1 else ''}."
         )
@@ -619,6 +598,7 @@ class MainWindow(QMainWindow):
 
     def show_development_menu(self, controller: GameController, player: Player, played_dev_card: bool, back_action,
                               pre_roll_mode: bool = False):
+        self.canvas.display_board(controller)
         development_manager = self.development_manager_widget
         development_manager.setParent(self.side_panel)
 
@@ -631,11 +611,14 @@ class MainWindow(QMainWindow):
         )
         self.side_panel.turn_label.setText(f"{player.name}'s turn")
 
-        def back():
+        def clean_up():
             self.side_panel.action_btn_layout.removeWidget(development_manager)
             development_manager.setParent(None)
             self.restore_spacer()
             self.side_panel.main_label.show()
+
+        def back():
+            clean_up()
             back_action(played_dev_card)
 
         # Show playable cards
@@ -668,20 +651,15 @@ class MainWindow(QMainWindow):
 
         def card_double_clicked(card_item: QListWidgetItem):
             selected_card: DevelopmentCard = card_item.data(Qt.ItemDataRole.UserRole)
-            if not pre_roll_mode:
+            if pre_roll_mode:
+                clean_up()
+                back_action(selected_card.card_type)
+            else:
                 back()
             controller.play_development_card(player, selected_card.card_type)
-
-            if pre_roll_mode:
-                self.side_panel.action_btn_layout.removeWidget(development_manager)
-                development_manager.setParent(None)
-                self.restore_spacer()
-                self.side_panel.main_label.show()
-                back_action(selected_card.card_type)
-                return
-
-            self.display_resources(controller)
-            self.show_development_menu(controller, player, True, back_action)
+            if not pre_roll_mode:
+                self.display_resources(controller)
+                self.show_development_menu(controller, player, True, back_action)
 
         def buy_card():
             controller.try_buy_development_card(player)
@@ -706,3 +684,32 @@ class MainWindow(QMainWindow):
         self.safe_connect(development_manager.back_btn, back)
         development_manager.buy_btn.setEnabled(can_afford_card)
         self.safe_connect(development_manager.buy_btn, buy_card)
+
+    def draw_buildables_if_can_build(self, controller, player):
+        def build(selected_buildable: Vertex | Edge):
+            match selected_buildable:
+                case Edge():
+                    controller.try_build_road(player, selected_buildable)
+                case Vertex():
+                    if selected_buildable.building is None:
+                        controller.try_build_settlement(player, selected_buildable)
+                    else:
+                        controller.try_build_city(player, selected_buildable)
+
+            self.canvas.interactive_shapes.clear()
+            self.canvas.display_board(controller)
+            self.display_resources(controller)
+            self.draw_buildables_if_can_build(controller, player)
+
+        buildable = controller.get_buildable_options(player)
+        can_build = buildable[Buildable.ROAD] or buildable[Buildable.SETTLEMENT] or buildable[Buildable.CITY]
+        if can_build:
+            self.canvas.draw_buildables(buildable)
+            try:
+                self.canvas.selectionMade.disconnect()
+            except TypeError:
+                pass
+            self.canvas.selectionMade.connect(build)
+            self.side_panel.action_label.setText("Click on the board to build")
+        else:
+            self.side_panel.action_label.setText("")

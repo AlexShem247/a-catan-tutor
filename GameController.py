@@ -134,6 +134,7 @@ class GameController:
 
     def roll_dice(self, player: Player) -> Tuple[int, int, int, Optional[str]]:
         """Roll two dice and distribute resources to players."""
+        self.view.display_board()
         d1, d2, total = self._game.roll_dice()
         msg = None
         if total == Game.ROBBER_DICE_NUM:

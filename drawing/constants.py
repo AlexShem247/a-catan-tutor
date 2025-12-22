@@ -19,7 +19,7 @@ VERTEX_SIZE = 15
 CROWN_SYM = "♕"
 
 HIGHLIGHT_ANIMATION = True
-AI_DECISION_ANIMATION_DELAY = 0.0  # Seconds
+AI_DECISION_ANIMATION_DELAY = 0.5  # Seconds
 
 OUTLINE_COLOR = QColor(Qt.GlobalColor.black)
 HIGHLIGHT_COLOR = QColor(Qt.GlobalColor.yellow)

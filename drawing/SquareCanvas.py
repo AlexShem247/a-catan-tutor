@@ -300,6 +300,9 @@ class SquareCanvas(QWidget):
             self.add_shape(shape)
 
     def draw_buildables(self, buildables: Dict):
+        # Clear interactive shapes
+        self.shapes = [s for s in self.shapes if not isinstance(s, InteractiveShape)]
+
         # Roads (edges)
         self.draw_selectable_edges(buildables[Buildable.ROAD])
 
