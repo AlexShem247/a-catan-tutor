@@ -1,21 +1,29 @@
 import sys
-
-from view.View import View
+import argparse
 from PyQt6.QtWidgets import QApplication
 
 from GameController import GameController
+from view.CLIView import CLIView
 from view.MainWindow import MainWindow
-from view.constants import WINDOW_WIDTH, WINDOW_HEIGHT
+from view.QtView import QtView
 
-if __name__ == "__main__":
+
+def main():
+    parser = argparse.ArgumentParser(description="Run Catan game.")
+    parser.add_argument("--cli", action="store_true", help="Run the CLI version of the game")
+    args = parser.parse_args()
+
     controller = GameController()
 
-    # Start Qt
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    controller.view = View(window, controller)
-    window.setGeometry(120, 50, WINDOW_WIDTH, WINDOW_HEIGHT)
-    window.show()
-    controller.start_game()
+    if args.cli:
+        controller.view = CLIView(controller)
+        controller.start_game()
+    else:
+        app = QApplication(sys.argv)
+        controller.view = QtView(MainWindow(), controller)
+        controller.start_game()
+        sys.exit(app.exec())
 
-    sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()

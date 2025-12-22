@@ -1,4 +1,4 @@
-from typing import List, Tuple, Optional, TYPE_CHECKING, Dict
+from typing import List, Tuple, Optional, Dict
 
 from AI import AI
 from game.Edge import Edge, EdgeDirection
@@ -8,12 +8,10 @@ from game.Player import Player
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import ResourceCount, Resource
 from game.Vertex import Vertex, Port, VertexDirection
+from view.View import View
 from view.constants import AI_DECISION_ANIMATION_DELAY, AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE, \
     SHOW_AI_BUILT_LOCATIONS
 from view.display_utils import resource_dict_to_str
-
-if TYPE_CHECKING:
-    from view.View import View
 
 
 class GameController:

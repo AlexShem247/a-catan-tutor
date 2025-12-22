@@ -1,5 +1,5 @@
 from itertools import groupby
-from typing import Dict, Tuple, List, Callable, TYPE_CHECKING
+from typing import Dict, Tuple, List, Callable
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -9,17 +9,15 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QPushButton
 )
 
-from view.SquareCanvas import SquareCanvas
-from view.constants import CROWN_SYM
+from GameController import GameController
 from game.Edge import Edge
 from game.Player import PlayerNumber, Player
 from game.PlayerAssets import Buildable, DevelopmentCardType, DevelopmentCard
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
+from view.SquareCanvas import SquareCanvas
+from view.constants import CROWN_SYM
 from view.display_utils import format_counter_offer, get_player_lead_status
-
-if TYPE_CHECKING:
-    from GameController import GameController
 
 
 class MainWindow(QMainWindow):
@@ -162,7 +160,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, _):
         quit()
 
-    def display_resources(self, controller: "GameController"):
+    def display_resources(self, controller: GameController):
         # Fill in bank labels
         bank_labels: Dict[Resource, QLabel] = {
             res: getattr(self.main_menu, f"bank_{res.name.lower()}_label")
@@ -235,7 +233,7 @@ class MainWindow(QMainWindow):
         self.main_menu.action_label.setText("" if player.is_human else f"{player} is thinking")
         self.toggle_main_action_btns(False)
 
-    def display_round_info(self, controller: "GameController", player: Player, dice_info: Tuple[int, int, int],
+    def display_round_info(self, controller: GameController, player: Player, dice_info: Tuple[int, int, int],
                            played_dev_card: bool = False):
         self.canvas.interactive_shapes.clear()
         self.canvas.disable_interactivity = False
@@ -302,7 +300,7 @@ class MainWindow(QMainWindow):
         for res in current_counts:
             update_label(res)
 
-    def display_trade_menu(self, controller: "GameController", player: Player, back_action):
+    def display_trade_menu(self, controller: GameController, player: Player, back_action):
         self.display_resources(controller)
         trade_designer = self.trade_designer_widget
         trade_designer.setParent(self.main_menu)
@@ -395,7 +393,7 @@ class MainWindow(QMainWindow):
         self.safe_connect(trade_designer.bank_trade_btn, trade_with_bank)
         self.safe_connect(trade_designer.player_trade_btn, trade_with_players)
 
-    def select_player_to_trade(self, controller: "GameController", player: Player, selling: ResourceCount,
+    def select_player_to_trade(self, controller: GameController, player: Player, selling: ResourceCount,
                                buying: ResourceCount, willing_players: List[Tuple[Player, ResourceCount | None]],
                                back_action):
         self.display_resources(controller)
@@ -620,7 +618,7 @@ class MainWindow(QMainWindow):
         self.safe_connect(trade_manager.decline_btn, decline)
         update_buttons()
 
-    def show_development_menu(self, controller: "GameController", player: Player, played_dev_card: bool, back_action,
+    def show_development_menu(self, controller: GameController, player: Player, played_dev_card: bool, back_action,
                               pre_roll_mode: bool = False):
         self.canvas.display_board(controller)
         development_manager = self.development_manager_widget
@@ -752,7 +750,7 @@ class MainWindow(QMainWindow):
         else:
             self.main_menu.action_label.setText("")
 
-    def display_results(self, controller: "GameController"):
+    def display_results(self, controller: GameController):
         self.canvas.interactive_shapes.clear()
         self.canvas.display_board(controller)
         self.display_resources(controller)

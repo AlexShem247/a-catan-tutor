@@ -1,23 +1,21 @@
 import math
-from typing import Dict, List, Tuple, TYPE_CHECKING
+from typing import Dict, List, Tuple
 
 from PyQt6.QtCore import Qt, QRect, QPointF, QSize, pyqtSignal, QTimer
 from PyQt6.QtGui import QPainter, QCursor, QPixmap
 from PyQt6.QtWidgets import QWidget
 
+from GameController import GameController
+from game.Edge import Edge
+from game.HexTile import HexTile
+from game.PlayerAssets import Buildable
+from game.Resources import HexType
 from view.board_geometry import hex_center, vertex_xy
 from view.constants import WINDOW_HEIGHT, BOARD_BG_COLOR, HEX_TILE_RADIUS, SETTLEMENT_ICONS, hex_to_filepath, \
     EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON, HIGHLIGHT_COLOR, OUTLINE_COLOR, \
     PORT_EDGE_COLOR, PORT_ICONS, TITLE_COLOR, SEA_BACKGROUND
 from view.shapes import HexTileShape, VertexShape, LineShape, InteractiveShape, InteractiveCircle, PixmapShape, \
     TextShape
-from game.Edge import Edge
-from game.HexTile import HexTile
-from game.PlayerAssets import Buildable
-from game.Resources import HexType
-
-if TYPE_CHECKING:
-    from GameController import GameController
 
 
 class SquareCanvas(QWidget):
@@ -221,7 +219,7 @@ class SquareCanvas(QWidget):
         wy = (pos.y() - self.offset.y()) / scale
         return wx, wy
 
-    def display_board(self, controller: "GameController"):
+    def display_board(self, controller: GameController):
         self.clear_shapes()
         cx, cy = self.get_world_centre()
         self.background_image = None
