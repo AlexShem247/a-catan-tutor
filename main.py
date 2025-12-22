@@ -21,7 +21,6 @@ from view.ui import initial_settlement_placement, initial_road_placement, make_r
 
 if __name__ == "__main__":
     controller = GameController(
-        Game(),
         get_settlement_choice=random_initial_settlement_placement,
         get_road_choice=random_initial_road_placement,
         get_settlement_choice_ai=random_initial_settlement_placement,

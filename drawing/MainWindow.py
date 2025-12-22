@@ -3,6 +3,7 @@ from typing import Dict, Tuple, List, Callable
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel, QToolButton, QListWidgetItem, QSpacerItem,
     QSizePolicy, QPushButton
@@ -38,36 +39,38 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
 
         # Splitter
-        splitter = QSplitter(Qt.Orientation.Horizontal, self)
-        layout.addWidget(splitter)
+        self.splitter_layout = QSplitter(Qt.Orientation.Horizontal, self)
+        layout.addWidget(self.splitter_layout)
 
         # Canvas
         self.canvas = SquareCanvas()
-        splitter.addWidget(self.canvas)
+        self.splitter_layout.addWidget(self.canvas)
 
         # Side panel
-        self.side_panel = uic.loadUi("drawing/ui/main_menu.ui")
-        self.side_panel.setMinimumWidth(0)
-        self.side_panel.setMaximumWidth(self.SIDE_PANEL_WIDTH * 2)
-        splitter.addWidget(self.side_panel)
+        self.main_menu = uic.loadUi("drawing/ui/main_menu.ui")
+        self.main_menu.setMinimumWidth(0)
+        self.main_menu.setMaximumWidth(self.SIDE_PANEL_WIDTH * 2)
+        self.splitter_layout.addWidget(self.main_menu)
 
-        splitter.setSizes([
+        self.splitter_layout.setSizes([
             1000,
             self.SIDE_PANEL_WIDTH
         ])
 
         # Prevent canvas from being squashed too much
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 0)
+        self.splitter_layout.setStretchFactor(0, 1)
+        self.splitter_layout.setStretchFactor(1, 0)
 
         self.resource_selector_widget = uic.loadUi("drawing/ui/resource_selector.ui")
         self.trade_designer_widget = uic.loadUi("drawing/ui/trade_designer.ui")
         self.select_trade_widget = uic.loadUi("drawing/ui/select_trade.ui")
         self.trade_manager_widget = uic.loadUi("drawing/ui/trade_manager.ui")
         self.development_manager_widget = uic.loadUi("drawing/ui/development_manager.ui")
+        self.development_manager_widget = uic.loadUi("drawing/ui/development_manager.ui")
+        self.results_menu = uic.loadUi("drawing/ui/results_menu.ui")
 
         self.verticalSpacer = self.find_last_vertical_spacer()
-        self.safe_connect(self.side_panel.end_turn_btn, lambda: self.turnMade.emit(True))
+        self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(True))
 
     @staticmethod
     def word_wrap(msg: str, limit=LABEL_LINE_LENGTH) -> str:
@@ -90,7 +93,7 @@ class MainWindow(QMainWindow):
 
     def find_last_vertical_spacer(self) -> QSpacerItem | None:
         last_spacer = None
-        layout = self.side_panel.frame.layout()
+        layout = self.main_menu.frame.layout()
         if layout is None:
             return None
 
@@ -116,8 +119,8 @@ class MainWindow(QMainWindow):
             )
 
         spacer.changeSize(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-        if self.side_panel.frame.layout() is not None:
-            self.side_panel.frame.layout().update()
+        if self.main_menu.frame.layout() is not None:
+            self.main_menu.frame.layout().update()
 
     def restore_spacer(self):
         """Restores self.verticalSpacer to its original size and size policy."""
@@ -130,12 +133,12 @@ class MainWindow(QMainWindow):
 
         w, h, h_policy, v_policy = getattr(spacer, "_original_size")
         spacer.changeSize(w, h, h_policy, v_policy)
-        if self.side_panel.frame.layout() is not None:
-            self.side_panel.frame.layout().update()
+        if self.main_menu.frame.layout() is not None:
+            self.main_menu.frame.layout().update()
 
     def toggle_main_action_btns(self, show: bool):
-        for i in range(self.side_panel.action_btn_layout.count()):
-            widget: QWidget = self.side_panel.action_btn_layout.itemAt(i).widget()
+        for i in range(self.main_menu.action_btn_layout.count()):
+            widget: QWidget = self.main_menu.action_btn_layout.itemAt(i).widget()
             if widget:
                 if show:
                     widget.show()
@@ -148,14 +151,14 @@ class MainWindow(QMainWindow):
     def display_resources(self, controller: GameController):
         # Fill in bank labels
         bank_labels: Dict[Resource, QLabel] = {
-            res: getattr(self.side_panel, f"bank_{res.name.lower()}_label")
+            res: getattr(self.main_menu, f"bank_{res.name.lower()}_label")
             for res in Resource
         }
 
         for res, label in bank_labels.items():
             label.setText(str(controller.get_bank_resources()[res]))
 
-        self.side_panel.bank_dev_label.setText(str(controller.get_development_deck().size()))
+        self.main_menu.bank_dev_label.setText(str(controller.get_development_deck().size()))
 
         # Fill in opponent labels
         stat_suffixes = {"name": "", "victory_points": "vic_", "num_resources": "res_",
@@ -163,14 +166,14 @@ class MainWindow(QMainWindow):
 
         opponent_labels: Dict[PlayerNumber, Dict[str, QLabel]] = {
             pn: {
-                stat: getattr(self.side_panel, f"p{pn.value + 1}_{suffix}label")
+                stat: getattr(self.main_menu, f"p{pn.value + 1}_{suffix}label")
                 for stat, suffix in stat_suffixes.items()
             }
             for pn in (PlayerNumber.P2, PlayerNumber.P3, PlayerNumber.P4)
         }
 
         player_labels: Dict[Resource, QLabel] = {
-            res: getattr(self.side_panel, f"{res.name.lower()}_label")
+            res: getattr(self.main_menu, f"{res.name.lower()}_label")
             for res in Resource
         }
 
@@ -186,13 +189,13 @@ class MainWindow(QMainWindow):
                 army_crown = CROWN_SYM if player.has_largest_army else ""
                 lead_status = get_player_lead_status(player)
 
-                self.side_panel.longest_road_label.setText(
+                self.main_menu.longest_road_label.setText(
                     f"Longest Road:\t{player.longest_road_length} {longest_road_crown}"
                 )
-                self.side_panel.army_size_label.setText(
+                self.main_menu.army_size_label.setText(
                     f"Army Size:\t{player.army_size} {army_crown}"
                 )
-                self.side_panel.victory_points_label.setText(
+                self.main_menu.victory_points_label.setText(
                     f"Victory Points:\t{visible_vp}{true_vp_str} {lead_status}"
                 )
             else:
@@ -211,11 +214,11 @@ class MainWindow(QMainWindow):
                 labels["longest_road"].setText(str(player.longest_road_length))
 
     def display_generic_info(self, player: Player, msg: str):
-        self.side_panel.turn_label.setText(f"{player.name}'s turn")
-        self.side_panel.main_label.show()
-        self.side_panel.main_label.setText(msg)
-        self.side_panel.action_label.show()
-        self.side_panel.action_label.setText("" if player.is_human else f"{player} is thinking")
+        self.main_menu.turn_label.setText(f"{player.name}'s turn")
+        self.main_menu.main_label.show()
+        self.main_menu.main_label.setText(msg)
+        self.main_menu.action_label.show()
+        self.main_menu.action_label.setText("" if player.is_human else f"{player} is thinking")
         self.toggle_main_action_btns(False)
 
     def display_round_info(self, controller: GameController, player: Player, dice_info: Tuple[int, int, int],
@@ -226,19 +229,19 @@ class MainWindow(QMainWindow):
         self.display_resources(controller)
 
         d1, d2, total = dice_info
-        self.side_panel.turn_label.setText(f"{player.name}'s turn")
-        self.side_panel.main_label.setText(f"Dice rolled: {d1} + {d2} = {total}\nWhat would you like to do?")
+        self.main_menu.turn_label.setText(f"{player.name}'s turn")
+        self.main_menu.main_label.setText(f"Dice rolled: {d1} + {d2} = {total}\nWhat would you like to do?")
 
         # Actions
         self.toggle_main_action_btns(True)
 
         self.draw_buildables_if_can_build(controller, player)
         can_afford_card = controller.get_buildable_options(player)[Buildable.DEVELOPMENT_CARD]
-        self.side_panel.dev_btn.setEnabled(can_afford_card or len(player.development_cards) > 0)
-        self.side_panel.trade_btn.setEnabled(sum(player.resources.values()) > 0)
-        self.safe_connect(self.side_panel.trade_btn, lambda: self.display_trade_menu(
+        self.main_menu.dev_btn.setEnabled(can_afford_card or len(player.development_cards) > 0)
+        self.main_menu.trade_btn.setEnabled(sum(player.resources.values()) > 0)
+        self.safe_connect(self.main_menu.trade_btn, lambda: self.display_trade_menu(
             controller, player, lambda: self.display_round_info(controller, player, dice_info, played_dev_card)))
-        self.safe_connect(self.side_panel.dev_btn, lambda: self.show_development_menu(
+        self.safe_connect(self.main_menu.dev_btn, lambda: self.show_development_menu(
             controller, player, played_dev_card,
             lambda played: self.display_round_info(controller, player, dice_info, played)))
 
@@ -288,7 +291,7 @@ class MainWindow(QMainWindow):
     def display_trade_menu(self, controller: GameController, player: Player, back_action):
         self.display_resources(controller)
         trade_designer = self.trade_designer_widget
-        trade_designer.setParent(self.side_panel)
+        trade_designer.setParent(self.main_menu)
 
         # Map resources to labels/buttons
         def make_btns(prefix: str):
@@ -305,11 +308,11 @@ class MainWindow(QMainWindow):
         buying_btns = make_btns("buying")
 
         # UI setup
-        self.side_panel.main_label.hide()
-        self.side_panel.action_label.hide()
+        self.main_menu.main_label.hide()
+        self.main_menu.action_label.hide()
         self.toggle_main_action_btns(False)
         self.minimise_spacer()
-        self.side_panel.action_btn_layout.addWidget(trade_designer)
+        self.main_menu.action_btn_layout.addWidget(trade_designer)
 
         # Trade state
         selling: ResourceCount = {res: 0 for res in Resource}
@@ -355,10 +358,10 @@ class MainWindow(QMainWindow):
 
         # Button actions
         def terminate_trade():
-            self.side_panel.main_label.show()
-            self.side_panel.action_label.show()
+            self.main_menu.main_label.show()
+            self.main_menu.action_label.show()
             self.restore_spacer()
-            self.side_panel.action_btn_layout.removeWidget(trade_designer)
+            self.main_menu.action_btn_layout.removeWidget(trade_designer)
             trade_designer.setParent(None)
             back_action()
 
@@ -369,7 +372,7 @@ class MainWindow(QMainWindow):
 
         def trade_with_players():
             willing_players = controller.trade_with_players(player, selling, buying)
-            self.side_panel.action_btn_layout.removeWidget(trade_designer)
+            self.main_menu.action_btn_layout.removeWidget(trade_designer)
             trade_designer.setParent(None)
             self.select_player_to_trade(controller, player, selling, buying, willing_players,
                                         lambda: self.display_trade_menu(controller, player, back_action))
@@ -383,23 +386,23 @@ class MainWindow(QMainWindow):
                                back_action):
         self.display_resources(controller)
         select_trade = self.select_trade_widget
-        select_trade.setParent(self.side_panel)
+        select_trade.setParent(self.main_menu)
 
         # Disable main action buttons and show the trade selector
-        self.side_panel.action_btn_layout.addWidget(select_trade)
+        self.main_menu.action_btn_layout.addWidget(select_trade)
         select_trade.trade_list.clear()
-        self.side_panel.action_label.show()
+        self.main_menu.action_label.show()
 
         # Case 1: no players are willing to trade
         if not willing_players:
-            self.side_panel.action_label.setText(
+            self.main_menu.action_label.setText(
                 self.word_wrap("No players are willing to trade with you right now.")
             )
             select_trade.submit_btn.setText("Go back")
             select_trade.trade_list.hide()
 
             def back():
-                self.side_panel.action_btn_layout.removeWidget(select_trade)
+                self.main_menu.action_btn_layout.removeWidget(select_trade)
                 select_trade.setParent(None)
                 back_action()
 
@@ -407,7 +410,7 @@ class MainWindow(QMainWindow):
             return
 
         # Case 2: show available trade offers
-        self.side_panel.action_label.setText(self.word_wrap(
+        self.main_menu.action_label.setText(self.word_wrap(
             f"Available Trades for {format_counter_offer(buying, buying)}:"
         ))
         select_trade.submit_btn.setText("Cancel")
@@ -449,7 +452,7 @@ class MainWindow(QMainWindow):
             if not deal:
                 return
 
-            self.side_panel.action_btn_layout.removeWidget(select_trade)
+            self.main_menu.action_btn_layout.removeWidget(select_trade)
             select_trade.setParent(None)
 
             buying_player, counter_offer = deal
@@ -468,7 +471,7 @@ class MainWindow(QMainWindow):
 
         # Cancel and return to the previous action
         def cancel():
-            self.side_panel.action_btn_layout.removeWidget(select_trade)
+            self.main_menu.action_btn_layout.removeWidget(select_trade)
             select_trade.setParent(None)
             back_action()
 
@@ -476,16 +479,16 @@ class MainWindow(QMainWindow):
 
     def display_round_info_ai_start(self, player: Player, dice_info: Tuple[int, int, int], msg: str):
         d1, d2, total = dice_info
-        self.side_panel.turn_label.setText(f"{player.name}'s turn")
-        self.side_panel.main_label.setText(f"Dice rolled: {d1} + {d2} = {total}")
-        self.side_panel.action_label.setText(self.word_wrap(msg))
+        self.main_menu.turn_label.setText(f"{player.name}'s turn")
+        self.main_menu.main_label.setText(f"Dice rolled: {d1} + {d2} = {total}")
+        self.main_menu.action_label.setText(self.word_wrap(msg))
         self.toggle_main_action_btns(False)
 
     def show_resource_chooser(self, player, num_resources: int, title: str,
                               resource_caps: ResourceCount | None = None):
 
         selection_widget = self.resource_selector_widget
-        selection_widget.setParent(self.side_panel)
+        selection_widget.setParent(self.main_menu)
 
         quantity_btns = {
             res: (
@@ -500,18 +503,18 @@ class MainWindow(QMainWindow):
         if resource_caps is None:
             resource_caps = {res: num_resources for res in Resource}
 
-        self.side_panel.turn_label.setText(f"{player.name}'s turn")
-        self.side_panel.main_label.setText(self.word_wrap(title))
-        self.side_panel.action_label.setText(
+        self.main_menu.turn_label.setText(f"{player.name}'s turn")
+        self.main_menu.main_label.setText(self.word_wrap(title))
+        self.main_menu.action_label.setText(
             f"You need to select {num_resources} more resource{'s' if num_resources != 1 else ''}."
         )
 
         self.toggle_main_action_btns(False)
-        self.side_panel.action_btn_layout.addWidget(selection_widget)
+        self.main_menu.action_btn_layout.addWidget(selection_widget)
 
         def update_labels():
             total_remaining = num_resources - sum(chosen.values())
-            self.side_panel.action_label.setText(
+            self.main_menu.action_label.setText(
                 f"You need to select {total_remaining} more resource{'s' if total_remaining != 1 else ''}."
             )
             for res, (_, dec, inc) in quantity_btns.items():
@@ -528,7 +531,7 @@ class MainWindow(QMainWindow):
 
         def submit():
             self.resourcesPicked.emit(chosen)
-            self.side_panel.action_btn_layout.removeWidget(selection_widget)
+            self.main_menu.action_btn_layout.removeWidget(selection_widget)
             selection_widget.setParent(None)
 
         self.safe_connect(selection_widget.submit_btn, submit)
@@ -538,7 +541,7 @@ class MainWindow(QMainWindow):
                               buying: ResourceCount, selling_player: Player):
 
         trade_manager = self.trade_manager_widget
-        trade_manager.setParent(self.side_panel)
+        trade_manager.setParent(self.main_menu)
 
         selling_btns = {
             res: (
@@ -551,9 +554,9 @@ class MainWindow(QMainWindow):
 
         self.toggle_main_action_btns(False)
         self.minimise_spacer()
-        self.side_panel.action_btn_layout.addWidget(trade_manager)
-        self.side_panel.main_label.setText(f"Trade Offer from {selling_player.name}")
-        self.side_panel.action_label.setText(
+        self.main_menu.action_btn_layout.addWidget(trade_manager)
+        self.main_menu.main_label.setText(f"Trade Offer from {selling_player.name}")
+        self.main_menu.action_label.setText(
             self.word_wrap(f"{selling_player.name} is buying {format_counter_offer(buying, buying)} for:")
         )
 
@@ -576,7 +579,7 @@ class MainWindow(QMainWindow):
             txt = f"{selling_player.name} is buying {format_counter_offer(buying, buying)} for:"
             if not can_afford:
                 txt += "\nYou do not have the required resources for this trade."
-            self.side_panel.action_label.setText(self.word_wrap(txt))
+            self.main_menu.action_label.setText(self.word_wrap(txt))
 
         self.create_quantity_handlers(
             current_counts=counter_offer,
@@ -589,13 +592,13 @@ class MainWindow(QMainWindow):
             trade_manager.decline_btn.setEnabled(False)
             modified = any(counter_offer[res] != selling.get(res, 0) for res in Resource)
             self.tradeDecisionMade.emit((True, counter_offer if modified else None))
-            self.side_panel.action_btn_layout.removeWidget(trade_manager)
+            self.main_menu.action_btn_layout.removeWidget(trade_manager)
             trade_manager.setParent(None)
             self.restore_spacer()
 
         def decline():
             self.tradeDecisionMade.emit((False, None))
-            self.side_panel.action_btn_layout.removeWidget(trade_manager)
+            self.main_menu.action_btn_layout.removeWidget(trade_manager)
             trade_manager.setParent(None)
             self.restore_spacer()
 
@@ -607,22 +610,22 @@ class MainWindow(QMainWindow):
                               pre_roll_mode: bool = False):
         self.canvas.display_board(controller)
         development_manager = self.development_manager_widget
-        development_manager.setParent(self.side_panel)
+        development_manager.setParent(self.main_menu)
 
         self.toggle_main_action_btns(False)
         self.minimise_spacer()
-        self.side_panel.action_btn_layout.addWidget(development_manager)
-        self.side_panel.main_label.hide()
-        self.side_panel.action_label.setText(
+        self.main_menu.action_btn_layout.addWidget(development_manager)
+        self.main_menu.main_label.hide()
+        self.main_menu.action_label.setText(
             "You already played a card this turn." if played_dev_card else "Available Cards:"
         )
-        self.side_panel.turn_label.setText(f"{player.name}'s turn")
+        self.main_menu.turn_label.setText(f"{player.name}'s turn")
 
         def clean_up():
-            self.side_panel.action_btn_layout.removeWidget(development_manager)
+            self.main_menu.action_btn_layout.removeWidget(development_manager)
             development_manager.setParent(None)
             self.restore_spacer()
-            self.side_panel.main_label.show()
+            self.main_menu.main_label.show()
 
         def back():
             clean_up()
@@ -731,6 +734,79 @@ class MainWindow(QMainWindow):
             except TypeError:
                 pass
             self.canvas.selectionMade.connect(build)
-            self.side_panel.action_label.setText("Click on the board to build")
+            self.main_menu.action_label.setText("Click on the board to build")
         else:
-            self.side_panel.action_label.setText("")
+            self.main_menu.action_label.setText("")
+
+    def display_results(self, controller: GameController):
+        self.canvas.interactive_shapes.clear()
+        self.canvas.display_board(controller)
+        self.display_resources(controller)
+
+        # Add the new results menu
+        sizes = self.splitter_layout.sizes()
+        self.main_menu.setParent(None)
+        self.splitter_layout.addWidget(self.results_menu)
+        self.splitter_layout.setSizes([sizes[0], sizes[1]])
+
+        # Map all labels into dictionaries by rank
+        all_labels = {}
+        for i in range(1, 5):
+            all_labels[i] = {
+                "score": getattr(self.results_menu, f"score_{i}"),
+                "player": getattr(self.results_menu, f"player_label_{i}"),
+                "settlements": getattr(self.results_menu, f"settlements_{i}"),
+                "cities": getattr(self.results_menu, f"cities_{i}"),
+                "longest_road": getattr(self.results_menu, f"longest_road_{i}"),
+                "largest_army": getattr(self.results_menu, f"largest_army_{i}"),
+                "victory_cards": getattr(self.results_menu, f"victory_cards_{i}")
+            }
+
+            # Clear previous values
+            for label in all_labels[i].values():
+                label.setText("")
+                label.hide()
+
+        # Sort players by victory points (descending)
+        sorted_players = sorted(controller.get_all_players(), key=lambda p: p.calc_victory_points()[1], reverse=True)
+
+        # Fill in results for each ranking
+        for rank, player in enumerate(sorted_players, start=1):
+            labels = all_labels[rank]
+
+            # Score and player name
+            labels["score"].setText(f"{rank}. {player.name}: {player.calc_victory_points()[1]} pts")
+            labels["score"].show()
+            labels["player"].setText(f"{player.name}: {player.calc_victory_points()[1]} pts")
+            labels["player"].show()
+
+            # Settlements
+            if player.settlements:
+                labels["settlements"].setText(f"Settlements: {len(player.settlements)}")
+                labels["settlements"].show()
+
+            # Cities
+            if player.cities:
+                labels["cities"].setText(f"Cities: {len(player.cities)}")
+                labels["cities"].show()
+
+            # Longest Road
+            if player.has_longest_road:
+                labels["longest_road"].setText(f"Longest Road: {player.longest_road_length}")
+                labels["longest_road"].show()
+
+            # Largest Army
+            if player.has_largest_army:
+                labels["largest_army"].setText(f"Largest Army: {player.army_size}")
+                labels["largest_army"].show()
+
+            # Victory Point Cards
+            num_vp_cards = len(
+                [c for c in player.development_cards if c.card_type == DevelopmentCardType.VICTORY_POINT])
+            if num_vp_cards > 0:
+                labels["victory_cards"].setText(f"Victory Card Points: {num_vp_cards}")
+                labels["victory_cards"].show()
+
+        # Bind buttons
+        self.safe_connect(self.results_menu.main_menu_btn, lambda: controller.start_game())
+        self.safe_connect(self.results_menu.quit_btn, lambda: self.closeEvent(QCloseEvent()))

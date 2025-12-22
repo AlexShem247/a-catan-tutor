@@ -82,6 +82,10 @@ class View:
             self.controller, player, False, lambda card: self.turnMade.emit(card), pre_roll_mode=True
         )
 
+    def display_results(self):
+        """Display game results"""
+        self.window.display_results(self.controller)
+
 
 def select_blocking(view: View, signal: pyqtBoundSignal, draw_fn, *args, **kwargs):
     """Block execution until the signal emits a value, then return that value."""

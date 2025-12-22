@@ -7,7 +7,6 @@ from game.Player import Player
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import ResourceCount, Resource
 from game.Vertex import Vertex, VertexDirection, Port
-from view.display import display_results
 
 if TYPE_CHECKING:
     from drawing.View import View
@@ -21,7 +20,6 @@ class GameController:
 
     def __init__(
             self,
-            game: Game,
             get_settlement_choice: Callable[[Player, "GameController", "View"], Vertex] = None,
             get_road_choice: Callable[[Player, "GameController", "View", Optional[Vertex]], Edge] = None,
             get_settlement_choice_ai: Callable[[Player, "GameController", "View"], Vertex] = None,
@@ -43,7 +41,7 @@ class GameController:
             monopoly_selection: Callable[["GameController", "View"], Resource] = None,
             monopoly_selection_ai: Callable[["GameController"], Resource] = None,
     ):
-        self._game = game
+        self._game = Game(human_player_one=False)
         self.round_num = 1
 
         self.get_settlement_choice = get_settlement_choice
@@ -93,6 +91,9 @@ class GameController:
 
     def start_game(self):
         """Run initial placement, then loop turns until game over."""
+        self._game = Game(human_player_one=False)
+        self.round_num = 1
+
         self.run_initial_placement()
         while not self._game.game_over:
             for player in self._game.players:
@@ -110,7 +111,7 @@ class GameController:
 
             self.round_num += 1
 
-        display_results(self._game)
+        self.view.display_results()
 
     def trade_with_players(self, selling_player, selling, buying) -> List[Tuple[Player, Optional[ResourceCount]]]:
         """Sees which players are willing to trade"""
