@@ -1,6 +1,6 @@
 import random
 from collections import defaultdict
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Set
 
 from game.Edge import Edge, EdgeDirection
 from game.HexTile import HexTile, HexType
@@ -211,7 +211,7 @@ class Board:
 
     @staticmethod
     def _dfs_longest_path(current_road: Edge, current_vertex: Vertex,
-                          road_graph: dict, visited_roads: set) -> int:
+                          road_graph: Dict, visited_roads: Set) -> int:
         """DFS to find the longest path from current position."""
         visited_roads.add(current_road)
         max_length = 1  # Current road counts as 1

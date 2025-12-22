@@ -3,10 +3,10 @@ import time
 from collections import Counter
 from typing import Dict
 
-from PyQt6.QtCore import QPointF, Qt, QRect, QPoint
+from PyQt6.QtCore import QPointF, Qt, QPoint
 from PyQt6.QtGui import QPolygonF, QPixmap, QPen, QColor, QFontMetrics
 
-from drawing.constants import TERRAIN_COLORS, TOKEN_COMMON_COLOR, TOKEN_COLOR, TOKEN_OUTLINE_COLOR, EDGE_COLOR, \
+from view.constants import TERRAIN_COLORS, TOKEN_COMMON_COLOR, TOKEN_COLOR, TOKEN_OUTLINE_COLOR, EDGE_COLOR, \
     hex_to_filepath, SETTLEMENT_ICONS, PLAYER_COLORS, ROBBER_ICON, HIGHLIGHT_ANIMATION
 from game.HexTile import HexTile
 from game.Vertex import Vertex
@@ -263,7 +263,7 @@ class HexTileShape(Shape):
 
 
 class VertexShape(Shape):
-    def __init__(self, x: float, y: float, radius: float, vertex: Vertex, icons: dict):
+    def __init__(self, x: float, y: float, radius: float, vertex: Vertex, icons: Dict):
         self.shapes = []
 
         if vertex.building and vertex.owner:

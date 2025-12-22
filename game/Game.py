@@ -42,7 +42,7 @@ class Game:
         cost = self.BUILDING_COST[building_type]
         return all(player.resources.get(res, 0) >= amt for res, amt in cost.items())
 
-    def roll_dice(self) -> tuple[int, int, int]:
+    def roll_dice(self) -> Tuple[int, int, int]:
         """Roll two dice and distribute resources to players."""
         d1, d2 = randint(1, 6), randint(1, 6)
         total = d1 + d2
@@ -79,7 +79,7 @@ class Game:
 
         return d1, d2, total
 
-    def get_buildable_options(self, player: Player) -> dict:
+    def get_buildable_options(self, player: Player) -> Dict:
         """
         Returns dict of possible Buildable actions and valid board locations.
         Empty list if player cannot afford or no legal space.
@@ -163,7 +163,7 @@ class Game:
             use_resources: bool = True,
             road_restriction: bool = True,
             gain_resources: bool = False,
-    ) -> tuple[bool, str]:
+    ) -> Tuple[bool, str]:
         """Attempt to build a settlement with rules enforced."""
         if vertex.owner is not None or vertex.building is not None:
             if vertex.owner:
@@ -198,7 +198,7 @@ class Game:
             vertex: Vertex,
             build: bool = True,
             use_resources: bool = True
-    ) -> tuple[bool, str]:
+    ) -> Tuple[bool, str]:
         """Attempt to upgrade a settlement to a city."""
         if vertex.owner != player:
             return False, f"Vertex is owned by {vertex.owner.name if vertex.owner else 'nobody'}"
@@ -221,10 +221,10 @@ class Game:
             on_vertex: Optional[Vertex] = None,
             build: bool = True,
             use_resources: bool = True
-    ) -> tuple[bool, str]:
+    ) -> Tuple[bool, str]:
         """Attempt to build a road with rules enforced."""
 
-        def _finalise() -> tuple[bool, str]:
+        def _finalise() -> Tuple[bool, str]:
             if build:
                 Board.build_road(edge, player)
                 if use_resources:
@@ -413,7 +413,7 @@ class Game:
         """Returns the robber's current position"""
         return self._board.robber_position
 
-    def try_buy_development_card(self, player) -> tuple[bool, str]:
+    def try_buy_development_card(self, player) -> Tuple[bool, str]:
         """Attempt to buy a development card for a player."""
         if self.development_deck.empty():
             return False, "There are no more development cards"

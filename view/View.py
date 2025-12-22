@@ -2,8 +2,8 @@ from typing import List, Dict, Optional, Tuple, TYPE_CHECKING, Any
 
 from PyQt6.QtCore import QEventLoop, QTimer, pyqtBoundSignal
 
-from drawing.MainWindow import MainWindow
-from drawing.constants import AI_DECISION_ANIMATION_DELAY
+from view.MainWindow import MainWindow
+from view.constants import AI_DECISION_ANIMATION_DELAY
 from game.Edge import Edge
 from game.HexTile import HexTile
 from game.Player import Player

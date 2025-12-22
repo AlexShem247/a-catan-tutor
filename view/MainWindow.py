@@ -9,14 +9,14 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QPushButton
 )
 
-from drawing.SquareCanvas import SquareCanvas
-from drawing.constants import CROWN_SYM
+from view.SquareCanvas import SquareCanvas
+from view.constants import CROWN_SYM
 from game.Edge import Edge
 from game.Player import PlayerNumber, Player
 from game.PlayerAssets import Buildable, DevelopmentCardType, DevelopmentCard
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
-from view.display import format_counter_offer, get_player_lead_status
+from view.display_utils import format_counter_offer, get_player_lead_status
 
 if TYPE_CHECKING:
     from GameController import GameController
@@ -50,7 +50,7 @@ class MainWindow(QMainWindow):
         self.splitter_layout.addWidget(self.canvas)
 
         # Side panel
-        self.main_menu = uic.loadUi("drawing/ui/main_menu.ui")
+        self.main_menu = uic.loadUi("view/ui/main_menu.ui")
         self.main_menu.setMinimumWidth(0)
         self.main_menu.setMaximumWidth(self.SIDE_PANEL_WIDTH * 2)
         self.splitter_layout.addWidget(self.main_menu)
@@ -64,16 +64,16 @@ class MainWindow(QMainWindow):
         self.splitter_layout.setStretchFactor(0, 1)
         self.splitter_layout.setStretchFactor(1, 0)
 
-        self.resource_selector_widget = uic.loadUi("drawing/ui/resource_selector.ui")
-        self.trade_designer_widget = uic.loadUi("drawing/ui/trade_designer.ui")
-        self.select_trade_widget = uic.loadUi("drawing/ui/select_trade.ui")
-        self.trade_manager_widget = uic.loadUi("drawing/ui/trade_manager.ui")
-        self.development_manager_widget = uic.loadUi("drawing/ui/development_manager.ui")
-        self.development_manager_widget = uic.loadUi("drawing/ui/development_manager.ui")
-        self.results_menu = uic.loadUi("drawing/ui/results_menu.ui")
-        self.start_menu = uic.loadUi("drawing/ui/start_menu.ui")
+        self.resource_selector_widget = uic.loadUi("view/ui/resource_selector.ui")
+        self.trade_designer_widget = uic.loadUi("view/ui/trade_designer.ui")
+        self.select_trade_widget = uic.loadUi("view/ui/select_trade.ui")
+        self.trade_manager_widget = uic.loadUi("view/ui/trade_manager.ui")
+        self.development_manager_widget = uic.loadUi("view/ui/development_manager.ui")
+        self.development_manager_widget = uic.loadUi("view/ui/development_manager.ui")
+        self.results_menu = uic.loadUi("view/ui/results_menu.ui")
+        self.start_menu = uic.loadUi("view/ui/start_menu.ui")
 
-        self.rule_window = uic.loadUi("drawing/ui/rules_window.ui")
+        self.rule_window = uic.loadUi("view/ui/rules_window.ui")
         self.safe_connect(self.start_menu.help_btn, self.show_rules)
         self.safe_connect(self.main_menu.help_btn, self.show_rules)
 
@@ -265,7 +265,7 @@ class MainWindow(QMainWindow):
             quantity_btns: Dict[Resource, Tuple[QLabel, QToolButton, QToolButton]],
             caps: ResourceCount | None = None,
             on_update: Callable[[], None] | None = None,
-            zero_other: Tuple[ResourceCount, dict[Resource, Tuple[QLabel, QToolButton, QToolButton]]] | None = None
+            zero_other: Tuple[ResourceCount, Dict[Resource, Tuple[QLabel, QToolButton, QToolButton]]] | None = None
     ):
         if caps is None:
             caps = {res: float("inf") for res in current_counts}
