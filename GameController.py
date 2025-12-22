@@ -1,7 +1,6 @@
-from typing import Callable, List, Tuple, Optional, TYPE_CHECKING, Dict
+from typing import Callable, List, Tuple, Optional, TYPE_CHECKING
 
 from drawing.constants import AI_DECISION_ANIMATION_DELAY, AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE
-from drawing.view_utils import select_blocking
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game
 from game.HexTile import HexTile
@@ -59,7 +58,7 @@ class GameController:
 
     def start_game(self):
         """Run initial placement, then loop turns until game over."""
-        human_player_one: bool = select_blocking(self.view, self.view.startGame, self.view.display_start_screen)
+        human_player_one = self.view.display_start_screen()
         self.reset_game(human_player_one)
 
         self.run_initial_placement()
@@ -71,13 +70,11 @@ class GameController:
                     played_dev_card = False
                     if playable_cards:
                         # Player can play card before rolling dice
-                        played_card: DevelopmentCardType | bool = select_blocking(self.view, self.view.turnMade,
-                                                                                  self.view.pre_roll, player)
+                        played_card = self.view.pre_roll(player)
                         played_dev_card = played_card is not False
 
                     d1, d2, total, _ = self.roll_dice(player)
-                    select_blocking(self.view, self.view.turnMade, self.view.display_board_turn, player,
-                                    (d1, d2, total), played_dev_card)
+                    self.view.display_board_turn(player, (d1, d2, total), played_dev_card)
                 else:
                     self.play_round_ai_hook(player, self, self.view)
 
@@ -105,8 +102,7 @@ class GameController:
                 self.view.display_board(player, "Select a position to build your settlement")
 
                 vertices = self.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
-                vertex: Vertex = select_blocking(self.view, self.view.canvasSelection,
-                                                 self.view.draw_selectable_vertices, vertices)
+                vertex: Vertex = self.view.draw_selectable_vertices(vertices)
                 self.view.display_board()
             else:
                 vertex = self.get_settlement_choice_ai(player, self, self.view)
@@ -129,7 +125,7 @@ class GameController:
             # Restrict edges to be directly connected to settlement
             edges = [edge for edge in edges if settlement in edge.vertices]
 
-        edge: Edge = select_blocking(self.view, self.view.canvasSelection, self.view.draw_selectable_edges, edges)
+        edge: Edge = self.view.draw_selectable_edges(edges)
 
         return edge
 
@@ -139,10 +135,7 @@ class GameController:
         for player in self._game.players:
             if player != selling_player:
                 if player.is_human:
-                    interested, counter = select_blocking(
-                        self.view, self.view.tradeDecisionMade, self.view.display_trade_manager, player, selling,
-                        buying, selling_player
-                    )
+                    interested, counter = self.view.display_trade_manager(player, selling, buying, selling_player)
                 else:
                     interested, counter = self.trade_manager_ai_hook(player, selling, buying, self.round_num)
 
@@ -150,16 +143,6 @@ class GameController:
                     results.append((player, counter))
 
         return results
-
-    def choose_resources(self, num_resources: int, title: str,
-                         resource_caps: Dict[Resource, int] | None = None) -> ResourceCount:
-        """
-        Generic resource selection helper.
-        Allows choosing exactly `num_resources` resources, optionally capped per resource.
-        """
-        chosen: ResourceCount = select_blocking(self.view, self.view.resourcesPicked, self.view.show_resource_chooser,
-                                                self._game.players[0], num_resources, title, resource_caps)
-        return chosen
 
     def get_game_state(self):
         """Returns the internal game state"""
@@ -177,11 +160,8 @@ class GameController:
                 discard_count = p.calculate_discard_count()
                 if discard_count > 0:
                     if p.is_human:
-                        resources_to_discard = self.choose_resources(
-                            num_resources=discard_count,
-                            title="The robber has been rolled!",
-                            resource_caps=player.resources
-                        )
+                        resources_to_discard = self.view.show_resource_chooser(
+                            p, discard_count, "The robber has been rolled!", p.resources)
                     else:
                         resources_to_discard = self.robber_discard_ai_hook(p, self, self.view, discard_count, False)
                     p.remove_resources(resources_to_discard)
@@ -203,8 +183,7 @@ class GameController:
             # Get available hex tiles (exclude current robber tile)
             available_hexes = [tile for tile in self.get_all_hexes() if not tile.robber]
             self.view.display_board(player, "Select a hex to move the robber")
-            selected_hex: HexTile = select_blocking(self.view, self.view.canvasSelection,
-                                                    self.view.draw_selectable_tiles, available_hexes)
+            selected_hex: HexTile = self.view.draw_selectable_tiles(available_hexes)
 
             # Check for stealable players on adjacent vertices
             adjacent_player_buildings: List[Vertex] = [
@@ -218,9 +197,7 @@ class GameController:
                 tile, steal_from = selected_hex, None
             else:
                 self.view.display_board(player, "Select a player to steal from")
-                selected_player_building: Vertex = select_blocking(self.view, self.view.canvasSelection,
-                                                                   self.view.draw_selectable_vertices,
-                                                                   adjacent_player_buildings)
+                selected_player_building: Vertex = self.view.draw_selectable_vertices(adjacent_player_buildings)
                 selected_player = selected_player_building.owner
 
                 tile, steal_from = selected_hex, selected_player
@@ -278,11 +255,8 @@ class GameController:
         elif card_type == DevelopmentCardType.YEAR_OF_PLENTY:
             # YEAR OF PLENTY: Player chooses two resources from the bank to add to their hand
             if player.is_human:
-                resources = self.choose_resources(
-                    num_resources=2,
-                    title="Year of Plenty: choose any two resources from the bank.",
-                    resource_caps=self.get_bank_resources()
-                )
+                resources = self.view.show_resource_chooser(
+                    player, 2, "Year of Plenty: choose any two resources from the bank.", self.get_bank_resources())
             else:
                 resources = self.year_of_plenty_selection_ai(self)
             player.add_resources(resources)
@@ -293,11 +267,9 @@ class GameController:
         elif card_type == DevelopmentCardType.MONOPOLY:
             # MONOPOLY: Player chooses a single resource type; all other players give all of that resource to the player
             if player.is_human:
-                chosen = self.choose_resources(
-                    num_resources=1,
-                    title="Monopoly: choose a resource to get from the other players.",
-                    resource_caps={res: 1 for res in Resource}
-                )
+                chosen = self.view.show_resource_chooser(
+                    player, 1, "Monopoly: choose a resource to get from the other players.",
+                    {res: 1 for res in Resource})
                 # Extract the single Resource enum
                 resource = next(iter(chosen.keys()))
             else:

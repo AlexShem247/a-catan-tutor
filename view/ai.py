@@ -61,7 +61,7 @@ def get_required_trade_ratio(round_num: int) -> int:
     return ceil(1 + (round_num - 1) / TOTAL_ROUNDS * (MAX_RATIO - 1))
 
 
-def ai_choose_build_action() -> Optional[Buildable]:
+def ai_choose_build_action() -> Buildable | str:
     """
     Choose a desired build action for the AI based on weighted preferences,
     ignoring whether the AI can currently afford it.
@@ -71,7 +71,7 @@ def ai_choose_build_action() -> Optional[Buildable]:
         Buildable.SETTLEMENT: 8,
         Buildable.DEVELOPMENT_CARD: 6,
         Buildable.ROAD: 3,
-        None: 4,
+        "NOTHING": 4,
     }
 
     weighted_actions = []
@@ -81,7 +81,7 @@ def ai_choose_build_action() -> Optional[Buildable]:
         weighted_actions.extend([action] * action_weights[action])
 
     # Always allow doing nothing
-    weighted_actions.extend([None] * action_weights[None])
+    weighted_actions.extend(["NOTHING"] * action_weights["NOTHING"])
 
     return random.choice(weighted_actions)
 
