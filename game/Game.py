@@ -19,7 +19,7 @@ class Game:
             Resource.WOOD: 1, Resource.BRICK: 1, Resource.SHEEP: 1, Resource.WHEAT: 1
         },
         Buildable.CITY: {Resource.ORE: 3, Resource.WHEAT: 2},
-        Buildable.DEVELOPMENT_CARD: {Resource.ORE: 1, Resource.WOOD: 1, Resource.WHEAT: 1}
+        Buildable.DEVELOPMENT_CARD: {Resource.ORE: 1, Resource.SHEEP: 1, Resource.WHEAT: 1}
     }
 
     BANK_INITIAL_RESOURCES: ResourceCount = {
