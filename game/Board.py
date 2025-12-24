@@ -55,13 +55,43 @@ class Board:
         ]
 
         random.shuffle(hex_types_sequence)
-        prod_numbers = PRODUCTION_NUMBERS.copy()
+        numbers = PRODUCTION_NUMBERS.copy()
+
+        def get_adjacent_coords(q_val: int, r_val: int) -> List[Tuple[int, int]]:
+            """Return axial coordinates of hexes adjacent to (q,r)."""
+            directions = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]
+            return [(q_val + dq, r_val + dr) for dq, dr in directions]
+
+        def assign_number(q_val: int, r_val: int, available: List[int]) -> Optional[int]:
+            # Assign numbers with constraint that 6/8 are not adjacent
+            random.shuffle(available)
+            for number in available:
+                if number in (6, 8):
+                    conflict = False
+                    for nq, nr in get_adjacent_coords(q_val, r_val):
+                        neighbor = self.hex_map.get((nq, nr))
+                        if neighbor and neighbor.production_number in (6, 8):
+                            conflict = True
+                            break
+                    if conflict:
+                        continue
+                return number
+            return None  # Backtracking needed if stuck
 
         for i, (q, r) in enumerate(self.HEX_COORDS):
             hex_type = hex_types_sequence[i]
             production_number: Optional[int] = None
             if hex_type != HexType.DESERT:
-                production_number = prod_numbers.pop(0)
+                num = assign_number(q, r, numbers)
+                if num is None:
+                    # If assignment failed due to 6/8 conflicts, restart board generation
+                    self.hexes.clear()
+                    self.hex_map.clear()
+                    self.production_to_hex.clear()
+                    return self.create_hexes()
+                production_number = num
+                numbers.remove(num)
+
             hex_tile = HexTile(q, r, hex_type, production_number)
             self.hexes.append(hex_tile)
             self.hex_map[(q, r)] = hex_tile
