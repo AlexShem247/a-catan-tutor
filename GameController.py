@@ -1,7 +1,7 @@
 from typing import List, Tuple, Optional, Dict
 
 from game.Edge import Edge, EdgeDirection
-from game.Game import Game
+from game.Game import Game, PlayerConfig
 from game.HexTile import HexTile
 from game.Player import Player
 from game.PlayerAssets import Buildable, DevelopmentCardType
@@ -18,22 +18,24 @@ class GameController:
     _game: Game
     round_num: int
 
-    def __init__(self):
+    def __init__(self, game_players: PlayerConfig, simulation_players: PlayerConfig):
         self.view: View | None = None
+        self.game_players = game_players
+        self.simulation_players = simulation_players
         self.reset_game(True)
 
-    def reset_game(self, human_player_one: bool):
+    def reset_game(self, game_mode: bool):
         """Reset the game to a fresh state and reset round counter."""
-        self._game = Game(human_player_one=human_player_one)
+        self._game = Game(self.game_players if game_mode else self.simulation_players)
         self.round_num = 1
         if self.view is not None:
-            self.view.ai_decision_animation_delay = (AI_DECISION_ANIMATION_DELAY if human_player_one
+            self.view.ai_decision_animation_delay = (AI_DECISION_ANIMATION_DELAY if game_mode
                                                      else AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE)
 
     def start_game(self):
         """Run initial placement, then loop turns until game over."""
-        human_player_one = self.view.display_start_screen()
-        self.reset_game(human_player_one)
+        game_mode = self.view.display_start_screen()
+        self.reset_game(game_mode)
 
         self.run_initial_placement()
         while not self._game.game_over:
@@ -122,7 +124,11 @@ class GameController:
                 if player.is_human:
                     interested, counter = self.view.display_trade_manager(player, selling, buying, selling_player)
                 else:
-                    interested, counter = player.policy.respond_to_trade(player, selling, buying, self.round_num)
+                    # AI can only respond if it has enough resources to give
+                    if player.can_afford(buying):
+                        interested, counter = player.policy.respond_to_trade(player, selling, buying, self.round_num)
+                    else:
+                        interested, counter = False, None
 
                 if interested:
                     results.append((player, counter))
@@ -349,11 +355,21 @@ class GameController:
         # Case 1: Prefer player trade if better rate
         if player.policy.is_player_trade_better(player, ai_buying_rate, bank_rate):
             selling = player.policy.choose_resources(player, ai_buying_rate)
-            if selling is None:
+            if not selling:
                 return None
 
             willing_players = self.trade_with_players(player, selling, buying)
-            deal = player.policy.choose_trade_partner(player, willing_players, ai_buying_rate)
+
+            # Only keep offers the AI can actually pay
+            affordable_players = [
+                (p, counter) for (p, counter) in willing_players
+                if counter is None or player.can_afford(counter)
+            ]
+
+            if not affordable_players:
+                return None
+
+            deal = player.policy.choose_trade_partner(player, affordable_players, ai_buying_rate)
 
             if deal is not None:
                 buying_player, counter = deal

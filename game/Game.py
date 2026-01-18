@@ -1,9 +1,8 @@
 from collections import defaultdict
 from random import randint
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Type
 
-from ai.BasicAI import BasicAI
-from ai.RandomAI import RandomAI
+from ai.AI import AI
 from game.Board import Board
 from game.Edge import Edge, EdgeDirection
 from game.HexTile import HexTile
@@ -11,6 +10,8 @@ from game.Player import Player, PlayerNumber
 from game.PlayerAssets import Buildable, DevelopmentDeck
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Building, Vertex, VertexDirection, Port
+
+PlayerConfig = Dict[PlayerNumber, Optional[Type[AI]]]
 
 
 class Game:
@@ -31,34 +32,18 @@ class Game:
     VICTORY_POINTS_TO_WIN = 10
     ROBBER_DICE_NUM = 7
 
-    def __init__(self, human_player_one: bool = True):
+    def __init__(self, player_config: PlayerConfig):
         self.bank_resources: Dict[Resource, int] = self.BANK_INITIAL_RESOURCES.copy()
-        self.players: List[Player] = [
+
+        self.players = [
             Player(
-                is_human=False,
-                player_number=PlayerNumber.P1,
+                is_human=policy_cls is None,
+                player_number=num,
                 bank_resources=self.bank_resources,
-                policy=BasicAI()
-            ),
-            Player(
-                is_human=False,
-                player_number=PlayerNumber.P2,
-                bank_resources=self.bank_resources,
-                policy=RandomAI()
-            ),
-            Player(
-                is_human=False,
-                player_number=PlayerNumber.P3,
-                bank_resources=self.bank_resources,
-                policy=RandomAI()
-            ),
-            Player(
-                is_human=False,
-                player_number=PlayerNumber.P4,
-                bank_resources=self.bank_resources,
-                policy=RandomAI()
-            ),
-        ]
+                policy=None if policy_cls is None else policy_cls()
+            )
+            for num, policy_cls in player_config.items()
+            ]
 
         self._board = Board()
         self.development_deck = DevelopmentDeck()

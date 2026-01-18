@@ -38,22 +38,12 @@ class RandomAI(AI):
                              available_players: List[Tuple[Player, Optional[ResourceCount]]],
                              estimated_cost: int
                              ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
-        """Randomly select a trade partner from affordable offers."""
+        """Randomly select a trade partner from offers the AI can afford."""
         if not available_players:
             return None
 
-        # Keep only offers the AI can actually pay
-        affordable_players = [
-            (p, counter)
-            for (p, counter) in available_players
-            if counter is None or all(player.resources.get(res, 0) >= amt for res, amt in counter.items())
-        ]
-
-        if not affordable_players:
-            return None
-
         # Pick randomly among valid options
-        return random.choice(affordable_players)
+        return random.choice(available_players)
 
     def determine_trade(self,
                         player: Player,
@@ -150,11 +140,7 @@ class RandomAI(AI):
                          buying: ResourceCount,
                          round_num: int
                          ) -> Tuple[bool, Optional[ResourceCount]]:
-        """Randomly accept or reject a trade if affordable."""
-        # Check AI has enough resources to give
-        for resource, amount in buying.items():
-            if player.resources.get(resource, 0) < amount:
-                return False, None  # Cannot trade what you don't have
+        """Randomly accept or reject a trade, assuming AI can afford it."""
 
-        # Random accept/reject logic
+        # Randomly decide to accept or reject the trade
         return random.choice([True, False]), None

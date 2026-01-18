@@ -96,6 +96,10 @@ class Player:
         for resource, amount in resources.items():
             self.remove_resource(resource, amount)
 
+    def can_afford(self, resources: ResourceCount) -> bool:
+        """Return True if the player has enough resources for the given cost dict."""
+        return all(self.resources.get(res, 0) >= amt for res, amt in resources.items())
+
     def add_settlement(self, vertex) -> None:
         """Add a settlement at the given vertex."""
         self.settlements.append(vertex)

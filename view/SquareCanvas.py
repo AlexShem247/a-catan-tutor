@@ -334,7 +334,7 @@ class SquareCanvas(QWidget):
         self.add_shape(TextShape(w * 0.5, h * 0.35, "Catan",
                                  TITLE_COLOR, 200, outline_width=2, bold=True))
 
-        self.add_shape(TextShape(w * 0.5, h * 0.55, "Adaptable Explainable AI Tutor",
+        self.add_shape(TextShape(w * 0.5, h * 0.55, "Explainable AI Tutor",
                                  TITLE_COLOR.lighter(150), 40, outline_width=1, bold=True))
 
         self.add_shape(TextShape(w * 0.5, h * 0.65,

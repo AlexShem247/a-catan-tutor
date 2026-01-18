@@ -89,7 +89,8 @@ class BasicAI(AI):
                              available_players: List[Tuple[Player, Optional[ResourceCount]]],
                              estimated_cost: int
                              ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
-        """Select a trade partner or counteroffer the AI can afford."""
+        """Select a trade partner or counteroffer from offers the AI can afford."""
+
         if not available_players:
             return None
 
@@ -100,17 +101,17 @@ class BasicAI(AI):
             chosen = self._weighted_pick(players)
             return chosen, None
 
-        # Evaluate Counteroffers
+        # Evaluate counteroffers
         counters_with_cost = [
             (p, c, self._resource_cost(c))
             for (p, c) in available_players
-            if c is not None and all(player.resources.get(res, 0) >= amt for res, amt in c.items())
+            if c is not None
         ]
 
         if not counters_with_cost:
             return None
 
-        # Find minimum cost
+        # Find minimum cost counteroffer
         min_cost = min(cost for (_, _, cost) in counters_with_cost)
         cheapest = [(p, c, cost) for (p, c, cost) in counters_with_cost if cost == min_cost]
 
@@ -123,7 +124,7 @@ class BasicAI(AI):
         players = [p for (p, _, _) in cheapest]
         chosen_player = self._weighted_pick(players)
 
-        # Retrieve that player's counteroffer
+        # Return the chosen player's counteroffer
         for p, c, _ in cheapest:
             if p == chosen_player:
                 return p, c
@@ -278,35 +279,31 @@ class BasicAI(AI):
                          buying: ResourceCount,
                          round_num: int
                          ) -> Tuple[bool, Optional[ResourceCount]]:
-        """Decide whether to accept, reject, or counter a trade."""
-        # 1. Check AI has the resources it is being asked to give
-        for resource, amount in buying.items():
-            if player.resources.get(resource, 0) < amount:
-                return False, None  # Cannot trade what you don't have
+        """Decide whether to accept or counter a trade, assuming AI can afford it."""
 
-        # 2. AI expected ratio
+        # 1. AI expected trade ratio for this round
         required_ratio = self._get_required_trade_ratio(round_num)
 
-        # 3. Totals
-        total_selling = sum(selling.values())  # What AI would get
-        total_buying = sum(buying.values())  # What AI would give
+        # 2. Compute totals
+        total_selling = sum(selling.values())  # What AI would receive
+        total_buying = sum(buying.values())    # What AI would give
 
         over_cost = total_selling - required_ratio * total_buying
         over_cost_int = int(abs(over_cost))
 
-        # 4. Decide accept or counter probabilistically
+        # 3. Decide to accept probabilistically
         prob = self.ACCEPT_PROBABILITY_BY_OVERCOST.get(over_cost_int, 0.0)
         if random.random() < prob:
-            return True, None  # Accept
+            return True, None  # Accept trade as-is
 
-        # 5. Generate simple counteroffer if not accepting
+        # 4. Generate a simple counteroffer if AI wants more
         if total_selling < required_ratio * total_buying:
             missing = required_ratio * total_buying - total_selling
-            # Pick one offered resource to increase
+            # Increase the quantity of the most valuable offered resource
             resource_to_increase = max(selling, key=lambda r: selling[r])
             counter_selling = selling.copy()
             counter_selling[resource_to_increase] += int(missing)
             return True, counter_selling
 
-        # Otherwise, reject
+        # 5. Otherwise, reject
         return False, None
