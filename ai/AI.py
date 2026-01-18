@@ -10,131 +10,97 @@ from game.HexTile import HexTile
 
 
 class AI(ABC):
-    """Abstract interface for pure AI decision-making logic."""
+    """Abstract interface for AI decision-making logic in the game."""
 
     @abstractmethod
-    def choose_build_action(self, ) -> Optional[Buildable]:
-        """Choose a desired build action for the AI."""
+    def select_build_action(self, player: Player) -> Optional[Buildable]:
+        """Choose the next building or development action to attempt."""
         pass
 
     @abstractmethod
-    def pick_random_resources(self,
-                              resources: ResourceCount,
-                              num_resources: int
-                              ) -> ResourceCount:
-        """Randomly pick num_resources resource units."""
+    def choose_resources(self, player: Player, num_resources: int) -> ResourceCount:
+        """Select a set of resources to gain or give."""
         pass
 
     @abstractmethod
-    def pick_trade_partner(self,
-                           resources: ResourceCount,
-                           available_players: List[Tuple[Player, Optional[ResourceCount]]],
-                           estimated_cost: int
-                           ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
-        """Decide which trade to follow through with."""
+    def choose_trade_partner(self,
+                             player: Player,
+                             available_players: List[Tuple[Player, Optional[ResourceCount]]],
+                             estimated_cost: int
+                             ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+        """Pick a player to trade with and optionally propose a counteroffer."""
         pass
 
     @abstractmethod
-    def decide_trade_strategy(self,
-                              player_resources: ResourceCount,
-                              cost: ResourceCount,
-                              round_num: int,
-                              bank_rate: int
-                              ) -> Tuple[Optional[Resource], Optional[Resource], int, int]:
-        """Decide trade strategy."""
+    def determine_trade(self,
+                        player: Player,
+                        cost: ResourceCount,
+                        round_num: int,
+                        bank_rate: int
+                        ) -> Tuple[Optional[Resource], Optional[Resource], int, int]:
+        """Plan a trade strategy: what to buy, what to sell, and at which rates."""
         pass
 
     @abstractmethod
-    def should_trade_with_player(self,
-                                 ai_buying_rate: int,
-                                 bank_rate: int
-                                 ) -> bool:
-        """Determine if player trade is preferable to bank trade."""
+    def is_player_trade_better(self, player: Player, ai_buying_rate: int, bank_rate: int) -> bool:
+        """Evaluate if trading with another player is preferable to using the bank."""
         pass
 
     @abstractmethod
-    def choose_random_settlement(self,
-                                 available_vertices: List[Vertex]
-                                 ) -> Optional[Vertex]:
-        """Choose a random settlement vertex."""
+    def select_settlement_location(self, player: Player, available_vertices: List[Vertex]) -> Optional[Vertex]:
+        """Select the vertex where a settlement should be built."""
         pass
 
     @abstractmethod
-    def choose_random_road(self,
-                           available_edges: List[Edge]
-                           ) -> Optional[Edge]:
-        """Choose a random road edge."""
+    def select_road_location(self, player: Player, available_edges: List[Edge]) -> Optional[Edge]:
+        """Select the edge where a road should be built."""
         pass
 
     @abstractmethod
-    def choose_random_build_location(self,
-                                     buildable_options: Dict[Buildable, List | bool],
-                                     action: Buildable
-                                     ) -> Optional[Vertex | Edge | bool]:
-        """Choose a random build location."""
+    def select_build_location(self,
+                              player: Player,
+                              buildable_options: Dict[Buildable, List | bool],
+                              action: Buildable
+                              ) -> Optional[Vertex | Edge | bool]:
+        """Select the specific location to execute a chosen build action."""
         pass
 
     @abstractmethod
-    def can_build_development_card(self,
-                                   buildable_options: Dict[Buildable, List | bool]
-                                   ) -> bool:
-        """Check if development card can be built."""
+    def decide_dev_card_usage(self, player: Player) -> Optional[DevelopmentCardType]:
+        """Choose which development card, if any, to play."""
         pass
 
     @abstractmethod
-    def decide_dev_card_usage(self,
-                              playable_cards: List[DevelopmentCardType],
-                              used_dev_card: bool
-                              ) -> Optional[DevelopmentCardType]:
-        """Decide whether to use a development card."""
+    def select_robber_target(self,
+                             player: Player,
+                             valid_hexes: List[HexTile],
+                             get_players_on_hex_func,
+                             has_resources_func
+                             ) -> Tuple[HexTile, Optional[Player]]:
+        """Select which hex to place the robber on and optionally which player to steal from."""
         pass
 
     @abstractmethod
-    def decide_robber_placement(self,
-                                valid_hexes: List[HexTile],
-                                current_player: Player,
-                                get_players_on_hex_func,
-                                has_resources_func
-                                ) -> Tuple[HexTile, Optional[Player]]:
-        """Decide where to place the robber and who to steal from."""
+    def select_discard_resources(self, player: Player, num_resources: int) -> ResourceCount:
+        """Choose which resources to discard when forced by the robber."""
         pass
 
     @abstractmethod
-    def decide_robber_discard(self,
-                              player_resources: ResourceCount,
-                              num_resources: int
-                              ) -> ResourceCount:
-        """Decide which resources to discard."""
+    def select_year_of_plenty_resources(self, player: Player) -> ResourceCount:
+        """Choose two resources to gain from a Year of Plenty card."""
         pass
 
     @abstractmethod
-    def decide_year_of_plenty_resources(self,
-                                        available_resources: ResourceCount
-                                        ) -> ResourceCount:
-        """Decide which two resources to take."""
+    def select_monopoly_resource(self, player: Player) -> Resource:
+        """Choose a resource type to monopolise when playing a Monopoly card."""
         pass
 
     @abstractmethod
-    def decide_monopoly_resource(self,
-                                 available_resources: ResourceCount
-                                 ) -> Resource:
-        """Decide which resource to monopolise."""
-        pass
-
-    @abstractmethod
-    def trade_manager_ai_logic(self,
-                               player_resources: ResourceCount,
-                               selling: ResourceCount,
-                               buying: ResourceCount,
-                               round_num: int
-                               ) -> Tuple[bool, Optional[ResourceCount]]:
-        """Decide whether to accept, reject, or counter a trade."""
-        pass
-
-    @abstractmethod
-    def decide_post_roll_dev_card_usage(self,
-                                        playable_cards: List[DevelopmentCardType],
-                                        used_dev_card: bool
-                                        ) -> Optional[DevelopmentCardType]:
-        """Decide whether to use a development card post-roll."""
+    def respond_to_trade(self,
+                         player: Player,
+                         selling: ResourceCount,
+                         buying: ResourceCount,
+                         round_num: int
+                         ) -> Tuple[bool, Optional[ResourceCount]]:
+        """Evaluate a trade offer and decide to accept, reject, or propose a counteroffer."""
         pass

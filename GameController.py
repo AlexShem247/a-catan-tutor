@@ -75,7 +75,7 @@ class GameController:
                 self.view.display_board()
                 self.view.draw_selectable_vertices(available_vertices, disable_interactivity=True)
                 self.view.display_board_ai(player, "Select a position to build your settlement")
-                vertex = player.policy.choose_random_settlement(available_vertices)
+                vertex = player.policy.select_settlement_location(player, available_vertices)
             self._game.try_build_settlement(player, vertex, use_resources=False,
                                             road_restriction=False, gain_resources=gain_resource)
 
@@ -112,7 +112,7 @@ class GameController:
         self.view.draw_selectable_edges(available_edges, disable_interactivity=True)
         self.view.display_board_ai(player, "Select a position to build your road")
 
-        return player.policy.choose_random_road(available_edges)
+        return player.policy.select_road_location(player, available_edges)
 
     def trade_with_players(self, selling_player, selling, buying) -> List[Tuple[Player, Optional[ResourceCount]]]:
         """Sees which players are willing to trade"""
@@ -122,8 +122,7 @@ class GameController:
                 if player.is_human:
                     interested, counter = self.view.display_trade_manager(player, selling, buying, selling_player)
                 else:
-                    interested, counter = player.policy.trade_manager_ai_logic(player.resources, selling, buying,
-                                                                               self.round_num)
+                    interested, counter = player.policy.respond_to_trade(player, selling, buying, self.round_num)
 
                 if interested:
                     results.append((player, counter))
@@ -149,7 +148,7 @@ class GameController:
                         resources_to_discard = self.view.show_resource_chooser(
                             p, discard_count, "The robber has been rolled!", p.resources)
                     else:
-                        resources_to_discard = player.policy.decide_robber_discard(player.resources, discard_count)
+                        resources_to_discard = player.policy.select_discard_resources(player, discard_count)
                     p.remove_resources(resources_to_discard)
 
             # 2. Player who rolled dice can move robber and collect resources
@@ -191,9 +190,9 @@ class GameController:
                 hex_tile for hex_tile in self._game.get_all_hexes()
                 if not hex_tile.robber
             ]
-            tile, steal_from = player.policy.decide_robber_placement(
-                valid_hexes,
+            tile, steal_from = player.policy.select_robber_target(
                 player,
+                valid_hexes,
                 lambda h: self._game.get_players_on_hex(h),
                 lambda p: any(v > 0 for v in p.resources.values())
             )
@@ -251,7 +250,7 @@ class GameController:
                 resources = self.view.show_resource_chooser(
                     player, 2, "Year of Plenty: choose any two resources from the bank.", self._game.bank_resources)
             else:
-                resources = player.policy.decide_year_of_plenty_resources(self._game.bank_resources)
+                resources = player.policy.select_year_of_plenty_resources(player)
             player.add_resources(resources)
             resource_list = ", ".join(
                 f"{amt} {res.name.replace('_', ' ').title()}" for res, amt in resources.items() if amt > 0)
@@ -266,7 +265,7 @@ class GameController:
                 # Extract the single Resource enum
                 resource = next(iter(chosen.keys()))
             else:
-                resource = player.policy.decide_monopoly_resource(self._game.bank_resources)
+                resource = player.policy.select_monopoly_resource(player)
             total_taken = 0
             for p in self._game.players:
                 if p == player:
@@ -299,10 +298,9 @@ class GameController:
         """AI turn: decides what to build, trades if helpful, then attempts the build."""
         used_dev_card = False
         card_msg = ""
-        playable_cards = [c.card_type for c in player.development_cards if c.playable]
 
         # Decide whether to play a development card
-        card_to_play = player.policy.decide_dev_card_usage(playable_cards, used_dev_card)
+        card_to_play = player.policy.decide_dev_card_usage(player)
         if card_to_play:
             card_msg = self.play_development_card(player, card_to_play) + " (Pre-roll)"
             used_dev_card = True
@@ -310,7 +308,7 @@ class GameController:
         d1, d2, total, roll_msg = self.roll_dice(player)
 
         # 1. AI chooses what it wants to build
-        chosen_action = player.policy.choose_build_action()
+        chosen_action = player.policy.select_build_action(player)
 
         # 2. Try a bank trade if needed
         trade_msg = None
@@ -321,9 +319,10 @@ class GameController:
         build_msg = self.ai_attempt_build(player, chosen_action)
 
         # 4. Use playable development card if AI has one and hasn't used it
-        card_to_play = player.policy.decide_post_roll_dev_card_usage(playable_cards, used_dev_card)
-        if card_to_play:
-            card_msg = self.play_development_card(player, card_to_play) + " (Post-roll)"
+        if not used_dev_card:
+            card_to_play = player.policy.decide_dev_card_usage(player)
+            if card_to_play:
+                card_msg = self.play_development_card(player, card_to_play) + " (Post-roll)"
 
         # 5. Display results
         msg = "\n".join(msg for msg in [trade_msg, build_msg, card_msg, roll_msg] if msg)
@@ -334,8 +333,8 @@ class GameController:
         cost = Game.BUILDING_COST[desired_build]
 
         # Use pure logic to decide trade strategy
-        buying_resource, selling_resource, bank_rate, ai_buying_rate = player.policy.decide_trade_strategy(
-            player.resources,
+        buying_resource, selling_resource, bank_rate, ai_buying_rate = player.policy.determine_trade(
+            player,
             cost,
             self.round_num,
             bank_rate=4  # Default bank rate
@@ -348,16 +347,13 @@ class GameController:
         buying[buying_resource] = 1
 
         # Case 1: Prefer player trade if better rate
-        if player.policy.should_trade_with_player(ai_buying_rate, bank_rate):
-            selling = player.policy.pick_random_resources(
-                {selling_resource: player.resources.get(selling_resource, 0)},
-                ai_buying_rate
-            )
+        if player.policy.is_player_trade_better(player, ai_buying_rate, bank_rate):
+            selling = player.policy.choose_resources(player, ai_buying_rate)
             if selling is None:
                 return None
 
             willing_players = self.trade_with_players(player, selling, buying)
-            deal = player.policy.pick_trade_partner(player.resources, willing_players, ai_buying_rate)
+            deal = player.policy.choose_trade_partner(player, willing_players, ai_buying_rate)
 
             if deal is not None:
                 buying_player, counter = deal
@@ -391,7 +387,7 @@ class GameController:
 
         # Special handling for development card
         if action == Buildable.DEVELOPMENT_CARD:
-            if player.policy.can_build_development_card(buildable):
+            if buildable.get(Buildable.DEVELOPMENT_CARD, False):
                 success, _ = self._game.try_buy_development_card(player)
                 msg = f"{player.name} bought a development card."
                 return msg
@@ -399,7 +395,7 @@ class GameController:
                 return f"{player.name} chooses to do nothing."
 
         # For other actions, get location
-        location = player.policy.choose_random_build_location(buildable, action)
+        location = player.policy.select_build_location(player, buildable, action)
 
         if action not in buildable or location is None:
             return f"{player.name} chooses to do nothing."
