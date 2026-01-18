@@ -6,7 +6,7 @@ from typing import Dict
 from PyQt6.QtCore import QPointF, Qt, QPoint
 from PyQt6.QtGui import QPolygonF, QPixmap, QPen, QColor, QFontMetrics
 
-from view.constants import TERRAIN_COLORS, TOKEN_COMMON_COLOR, TOKEN_COLOR, TOKEN_OUTLINE_COLOR, EDGE_COLOR, \
+from config.view_constants import TERRAIN_COLORS, TOKEN_COMMON_COLOR, TOKEN_COLOR, TOKEN_OUTLINE_COLOR, EDGE_COLOR, \
     hex_to_filepath, SETTLEMENT_ICONS, PLAYER_COLORS, ROBBER_ICON, HIGHLIGHT_ANIMATION
 from game.HexTile import HexTile
 from game.Vertex import Vertex

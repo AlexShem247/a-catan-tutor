@@ -1,0 +1,56 @@
+from typing import List, Tuple, Dict, Optional
+
+from view.View import View
+from game.Edge import Edge
+from game.HexTile import HexTile
+from game.Player import Player
+from game.PlayerAssets import DevelopmentCardType
+from game.Resources import ResourceCount
+from game.Vertex import Vertex
+
+
+class HeadlessView(View):
+    def display_board(self, player: Optional[Player] = None, msg: Optional[str] = None) -> None:
+        pass
+
+    def display_board_ai(self, player: Player, msg: str) -> None:
+        pass
+
+    def display_board_turn(self, player: Player,
+                           dice_info: Tuple[int, int, int],
+                           played_dev_card: bool = False) -> None:
+        pass
+
+    def display_board_turn_ai(self, player: Player,
+                              dice_info: Tuple[int, int, int],
+                              msg: str) -> None:
+        pass
+
+    def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False) -> Vertex:
+        return vertices[0]
+
+    def draw_selectable_edges(self, edges: List[Edge], disable_interactivity: bool = False) -> Edge:
+        return edges[0]
+
+    def draw_selectable_tiles(self, tiles: List[HexTile]) -> HexTile:
+        return tiles[0]
+
+    def draw_buildables(self, buildables: Dict) -> None:
+        pass
+
+    def show_resource_chooser(self, player: Player, num_resources: int,
+                              title: str, resource_caps: Optional[ResourceCount] = None) -> ResourceCount:
+        return {}
+
+    def display_trade_manager(self, player: Player, selling: ResourceCount,
+                              buying: ResourceCount, selling_player: Player):
+        return False, None
+
+    def pre_roll(self, player: Player) -> DevelopmentCardType | bool:
+        return False
+
+    def display_results(self) -> None:
+        pass
+
+    def display_start_screen(self) -> bool:
+        return False

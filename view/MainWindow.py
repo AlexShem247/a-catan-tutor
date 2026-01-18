@@ -16,7 +16,7 @@ from game.PlayerAssets import Buildable, DevelopmentCardType, DevelopmentCard
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
 from view.SquareCanvas import SquareCanvas
-from view.constants import CROWN_SYM
+from config.view_constants import CROWN_SYM
 from view.display_utils import format_counter_offer, get_player_lead_status
 
 
