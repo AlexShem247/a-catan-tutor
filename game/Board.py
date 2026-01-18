@@ -183,7 +183,7 @@ class Board:
 
             # Block this edge ±2 to enforce 2-edge spacing
             blocked_edges.update({i, (i - 1) % num_edges, (i + 1) % num_edges,
-                                  (i - 2) % num_edges, (i + 2) % num_edges,})
+                                  (i - 2) % num_edges, (i + 2) % num_edges, })
 
             available_edges.remove(i)
 
@@ -195,27 +195,23 @@ class Board:
                 if neighbor:
                     hex_tile.neighbors.append(neighbor)
 
-    @staticmethod
-    def build_settlement(vertex: Vertex, player: Player) -> None:
+    def build_settlement(self, vertex: Vertex, player: Player) -> None:
         """Directly build a settlement at the vertex, ignoring validation."""
         vertex.owner = player
         vertex.building = Building.SETTLEMENT
         player.add_settlement(vertex)
 
-    @staticmethod
-    def build_city(vertex: Vertex, player: Player) -> None:
+    def build_city(self, vertex: Vertex, player: Player) -> None:
         """Directly upgrade a settlement to a city, ignoring validation."""
         vertex.building = Building.CITY
         player.add_city(vertex)
 
-    @staticmethod
-    def build_road(edge: Edge, player: Player) -> None:
+    def build_road(self, edge: Edge, player: Player) -> None:
         """Directly assign ownership of a road, ignoring validation."""
         edge.owner = player
         player.add_road(edge)
 
-    @staticmethod
-    def calculate_longest_road_length(roads: List[Edge]) -> int:
+    def calculate_longest_road_length(self, roads: List[Edge]) -> int:
         """Calculate the longest continuous road length for a player."""
         if not roads:
             return 0
@@ -234,13 +230,12 @@ class Board:
         for start_road in roads:
             for start_vertex in start_road.vertices:
                 visited_roads = set()
-                length = Board._dfs_longest_path(start_road, start_vertex, road_graph, visited_roads)
+                length = self._dfs_longest_path(start_road, start_vertex, road_graph, visited_roads)
                 max_length = max(max_length, length)
 
         return max_length
 
-    @staticmethod
-    def _dfs_longest_path(current_road: Edge, current_vertex: Vertex,
+    def _dfs_longest_path(self, current_road: Edge, current_vertex: Vertex,
                           road_graph: Dict, visited_roads: Set) -> int:
         """DFS to find the longest path from current position."""
         visited_roads.add(current_road)
@@ -258,14 +253,13 @@ class Board:
             for next_road in road_graph[other_vertex]:
                 if next_road not in visited_roads:
                     # Check if this road is blocked by opponent's building
-                    if not Board._is_road_blocked(other_vertex, current_road.owner):
-                        length = 1 + Board._dfs_longest_path(next_road, other_vertex, road_graph, visited_roads.copy())
+                    if not self._is_road_blocked(other_vertex, current_road.owner):
+                        length = 1 + self._dfs_longest_path(next_road, other_vertex, road_graph, visited_roads.copy())
                         max_length = max(max_length, length)
 
         return max_length
 
-    @staticmethod
-    def _is_road_blocked(vertex: Vertex, player: Player) -> bool:
+    def _is_road_blocked(self, vertex: Vertex, player: Player) -> bool:
         """Check if a road connection is blocked by opponent's building."""
         # If vertex has a building owned by another player, it blocks the path
         return vertex.owner is not None and vertex.owner != player

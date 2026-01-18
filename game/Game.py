@@ -2,6 +2,8 @@ from collections import defaultdict
 from random import randint
 from typing import List, Optional, Dict, Tuple
 
+from ai.BasicAI import BasicAI
+from ai.RandomAI import RandomAI
 from game.Board import Board
 from game.Edge import Edge, EdgeDirection
 from game.HexTile import HexTile
@@ -31,8 +33,33 @@ class Game:
 
     def __init__(self, human_player_one: bool = True):
         self.bank_resources: Dict[Resource, int] = self.BANK_INITIAL_RESOURCES.copy()
-        self.players: List[Player] = [Player(human_player_one if p == PlayerNumber.P1
-                                             else False, p, bank_resources=self.bank_resources) for p in PlayerNumber]
+        self.players: List[Player] = [
+            Player(
+                is_human=False,
+                player_number=PlayerNumber.P1,
+                bank_resources=self.bank_resources,
+                policy=BasicAI()
+            ),
+            Player(
+                is_human=False,
+                player_number=PlayerNumber.P2,
+                bank_resources=self.bank_resources,
+                policy=RandomAI()
+            ),
+            Player(
+                is_human=False,
+                player_number=PlayerNumber.P3,
+                bank_resources=self.bank_resources,
+                policy=RandomAI()
+            ),
+            Player(
+                is_human=False,
+                player_number=PlayerNumber.P4,
+                bank_resources=self.bank_resources,
+                policy=RandomAI()
+            ),
+        ]
+
         self._board = Board()
         self.development_deck = DevelopmentDeck()
         self.game_over = False
@@ -105,8 +132,7 @@ class Game:
 
         return options
 
-    @staticmethod
-    def get_trade_rate(player: Player, resource: Resource) -> int:
+    def get_trade_rate(self, player: Player, resource: Resource) -> int:
         """Return the best trade rate for 'player' when selling 'resource'."""
         player_ports = player.get_ports()
 
@@ -179,7 +205,7 @@ class Game:
             return False, "Settlement must be connected to one of your roads"
 
         if build:
-            Board.build_settlement(vertex, player)
+            self._board.build_settlement(vertex, player)
             if use_resources:
                 player.remove_resources(Game.BUILDING_COST[Buildable.SETTLEMENT])
             if gain_resources:
@@ -206,7 +232,7 @@ class Game:
             return False, "Vertex does not have a settlement to upgrade"
 
         if build:
-            Board.build_city(vertex, player)
+            self._board.build_city(vertex, player)
             if use_resources:
                 player.remove_resources(Game.BUILDING_COST[Buildable.CITY])
 
@@ -226,12 +252,12 @@ class Game:
 
         def _finalise() -> Tuple[bool, str]:
             if build:
-                Board.build_road(edge, player)
+                self._board.build_road(edge, player)
                 if use_resources:
                     player.remove_resources(Game.BUILDING_COST[Buildable.ROAD])
 
                 # Recalculate longest road length
-                player.longest_road_length = Board.calculate_longest_road_length(player.roads)
+                player.longest_road_length = self._board.calculate_longest_road_length(player.roads)
 
                 # Update the longest road ownership for ALL players
                 self._update_longest_road_ownership()
@@ -268,7 +294,7 @@ class Game:
         """Update the longest road ownership across all players."""
         # Recalculate for all players (in case roads were broken by settlements)
         for p in self.players:
-            p.longest_road_length = Board.calculate_longest_road_length(p.roads)
+            p.longest_road_length = self._board.calculate_longest_road_length(p.roads)
 
         # Find the player(s) with the longest road
         max_length = max(p.longest_road_length for p in self.players)
@@ -361,26 +387,17 @@ class Game:
         """Return edges adjacent to a vertex where the player can build a road."""
         return [e for e in vertex.edges if self.try_build_road(vertex.owner, e, build=False)[0]]
 
-    @staticmethod
-    def trade_between_players(player: Player, selling: ResourceCount,
+    def trade_between_players(self, player: Player, selling: ResourceCount,
                               buying_player: Player, buying: ResourceCount):
         """Execute a trade of resources between two players."""
 
-        # Remove resources from the selling player
-        for resource, amount in selling.items():
-            player.resources[resource] -= amount
+        # Give resources from the selling player
+        player.remove_resources(selling)
+        buying_player.add_resources(selling)
 
-        # Add those resources to the buying player
-        for resource, amount in selling.items():
-            buying_player.resources[resource] += amount
-
-        # Remove resources from the buying player
-        for resource, amount in buying.items():
-            buying_player.resources[resource] -= amount
-
-        # Add those resources to the selling player
-        for resource, amount in buying.items():
-            player.resources[resource] += amount
+        # Give resources from the buying player
+        buying_player.remove_resources(buying)
+        player.add_resources(buying)
 
     def set_robber(self, tile: HexTile):
         """Replace the robber tile with 'tile'"""
@@ -388,8 +405,7 @@ class Game:
         self._board.robber_position = tile
         self._board.robber_position.robber = True
 
-    @staticmethod
-    def get_players_on_hex(hex_tile: HexTile) -> List[Player]:
+    def get_players_on_hex(self, hex_tile: HexTile) -> List[Player]:
         """Return a list of players who own a settlement or city on the given hex tile."""
         return list(set([v.owner for v in hex_tile.vertices if v.owner is not None]))
 
@@ -407,7 +423,7 @@ class Game:
 
     def get_hex_tiles_with_players(self):
         """Return a list of hex tiles that have at least one player on them."""
-        return [h for h in self._board.hexes if Game.get_players_on_hex(h)]
+        return [h for h in self._board.hexes if self.get_players_on_hex(h)]
 
     def get_robber_tile(self) -> HexTile:
         """Returns the robber's current position"""

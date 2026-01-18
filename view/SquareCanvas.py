@@ -233,7 +233,7 @@ class SquareCanvas(QWidget):
             x1, y1 = vertex_xy(v1, cx, cy, HEX_TILE_RADIUS)
             x2, y2 = vertex_xy(v2, cx, cy, HEX_TILE_RADIUS)
 
-            color = PLAYER_COLORS[edge.owner.playerNumber] if edge.owner else EDGE_COLOR
+            color = PLAYER_COLORS[edge.owner.player_number] if edge.owner else EDGE_COLOR
             self.add_shape(LineShape(x1, y1, x2, y2, ROAD_THICKNESS, color))
 
         # Draw ports

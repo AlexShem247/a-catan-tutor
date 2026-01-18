@@ -267,12 +267,12 @@ class VertexShape(Shape):
         self.shapes = []
 
         if vertex.building and vertex.owner:
-            pixmap = icons[SETTLEMENT_ICONS[vertex.owner.playerNumber, vertex.building]]
+            pixmap = icons[SETTLEMENT_ICONS[vertex.owner.player_number, vertex.building]]
             icon_size = 4.0 * radius
             self.shapes.append(PixmapShape(x, y, icon_size, icon_size, pixmap))
         else:
             color = next(
-                (PLAYER_COLORS[p.playerNumber] for p, c in Counter(e.owner for e in vertex.edges if e.owner).items() if
+                (PLAYER_COLORS[p.player_number] for p, c in Counter(e.owner for e in vertex.edges if e.owner).items() if
                  c >= 2),
                 EDGE_COLOR
             )
