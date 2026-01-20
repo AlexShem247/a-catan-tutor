@@ -9,7 +9,7 @@ from view.HeadlessView import HeadlessView
 from game.Player import PlayerNumber
 from ai.AI import AI
 
-NUM_SIMULATIONS = 100
+NUM_SIMULATIONS = 500
 SHUFFLE_ORDER = True  # Randomise player order
 
 
@@ -79,7 +79,7 @@ def run_simulations(player_policies: Dict[PlayerNumber, Type[AI]], num_runs: int
     axes[1].bar(vp_bins, [x / 3 for x in other_counts], color='red', width=0.8, edgecolor='black')
     axes[1].set_xticks(vp_bins)
     axes[1].set_xlabel("Victory Points")
-    axes[1].set_title(f"Other Players\nWin rate: {other_win_rate/3:.1f}% | Avg VP: {other_avg:.2f}")
+    axes[1].set_title(f"{other_keys[0]}\nWin rate: {other_win_rate/3:.1f}% | Avg VP: {other_avg:.2f}")
 
     plt.tight_layout()
     plt.show()

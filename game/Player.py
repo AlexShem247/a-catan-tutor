@@ -100,6 +100,10 @@ class Player:
         """Return True if the player has enough resources for the given cost dict."""
         return all(self.resources.get(res, 0) >= amt for res, amt in resources.items())
 
+    def has_resources(self) -> bool:
+        """Return True if the player has at least one resource of any type."""
+        return any(amount > 0 for amount in self.resources.values())
+
     def add_settlement(self, vertex) -> None:
         """Add a settlement at the given vertex."""
         self.settlements.append(vertex)

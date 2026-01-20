@@ -4,7 +4,7 @@ import sys
 from PyQt6.QtWidgets import QApplication
 
 from GameController import GameController
-from config.player_policies import STANDARD_SINGLEPLAYER, BASIC_VS_RANDOM
+from config.player_policies import STANDARD_SINGLEPLAYER, BASIC_VS_RANDOM, ALL_RANDOM
 from view.CLIView import CLIView
 from view.MainWindow import MainWindow
 from view.QtView import QtView

@@ -1,23 +1,20 @@
 import random
-from typing import List, Optional, Tuple, Dict
+from typing import List, Optional, Tuple
 
 from ai.AI import AI
+from ai.actions import Action, ActionType, Phase
 from game.Edge import Edge
+from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
-from game.PlayerAssets import DevelopmentCardType, Buildable
+from game.PlayerAssets import Buildable
 from game.Resources import ResourceCount, Resource
 from game.Vertex import Vertex
 
 
 class RandomAI(AI):
     """Purely random Catan AI with no strategic logic."""
-
-    def select_build_action(self, player: Player) -> Optional[Buildable]:
-        """Randomly choose a build action for the AI."""
-        return random.choice(list(Buildable))
-
-    def choose_resources(self, player: Player, num_resources: int) -> ResourceCount:
+    def _choose_resources(self, player: Player, num_resources: int) -> ResourceCount:
         """Randomly select a number of resources from available ones."""
         # Flatten all available resources into a pool
         pool = [r for r, count in player.resources.items() for _ in range(count)]
@@ -35,8 +32,8 @@ class RandomAI(AI):
 
     def choose_trade_partner(self,
                              player: Player,
+                             game: Game,
                              available_players: List[Tuple[Player, Optional[ResourceCount]]],
-                             estimated_cost: int
                              ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
         """Randomly select a trade partner from offers the AI can afford."""
         if not available_players:
@@ -45,68 +42,18 @@ class RandomAI(AI):
         # Pick randomly among valid options
         return random.choice(available_players)
 
-    def determine_trade(self,
-                        player: Player,
-                        cost: ResourceCount,
-                        round_num: int,
-                        bank_rate: int
-                        ) -> Tuple[Optional[Resource], Optional[Resource], int, int]:
-        """Randomly decide which resource to buy/sell and at what rate."""
-        if not player.resources:
-            return None, None, 0, 0
-
-        # Only pick resources that the AI actually owns for selling
-        tradable = [r for r, count in player.resources.items() if count > 0]
-        if not tradable:
-            return None, None, 0, 0
-
-        buying = random.choice(list(Resource))
-        selling = random.choice(tradable)
-
-        if buying == selling:
-            return None, None, 0, 0
-
-        ai_buying_rate = random.randint(1, bank_rate)
-        return buying, selling, bank_rate, ai_buying_rate
-
-    def is_player_trade_better(self, player: Player, ai_buying_rate: int, bank_rate: int) -> bool:
-        """Randomly decide whether a player trade is preferable to bank trade."""
-        return random.choice([True, False])
-
-    def select_settlement_location(self, player: Player, available_vertices: List[Vertex]) -> Optional[Vertex]:
+    def select_settlement_location(self, player: Player, game: Game, available_vertices: List[Vertex]) \
+            -> Optional[Vertex]:
         """Randomly select a settlement location from available vertices."""
         return random.choice(available_vertices) if available_vertices else None
 
-    def select_road_location(self, player: Player, available_edges: List[Edge]) -> Optional[Edge]:
+    def select_road_location(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
         """Randomly select a road location from available edges."""
         return random.choice(available_edges) if available_edges else None
 
-    def select_build_location(self,
-                              player: Player,
-                              buildable_options: Dict[Buildable, List | bool],
-                              action: Buildable
-                              ) -> Optional[Vertex | Edge | bool]:
-        """Randomly pick a location for a chosen build action."""
-        if action not in buildable_options:
-            return None
-
-        value = buildable_options[action]
-
-        if isinstance(value, list):
-            return random.choice(value) if value else None
-
-        return value if value else None
-
-    def decide_dev_card_usage(self, player: Player) -> Optional[DevelopmentCardType]:
-        """Randomly choose a playable development card to use, if any."""
-        playable_cards = [c.card_type for c in player.development_cards if c.playable]
-
-        if playable_cards:
-            return random.choice(playable_cards)
-        return None
-
     def select_robber_target(self,
                              player: Player,
+                             game: Game,
                              valid_hexes: List[HexTile],
                              get_players_on_hex_func,
                              has_resources_func
@@ -122,25 +69,97 @@ class RandomAI(AI):
         target = random.choice(players) if players else None
         return hex_tile, target
 
-    def select_discard_resources(self, player: Player, num_resources: int) -> ResourceCount:
+    def select_discard_resources(self, player: Player, game: Game, num_resources: int) -> ResourceCount:
         """Randomly choose resources to discard when required."""
-        return self.choose_resources(player, num_resources)
+        return self._choose_resources(player, num_resources)
 
-    def select_year_of_plenty_resources(self, player: Player) -> ResourceCount:
+    def select_year_of_plenty_resources(self, player: Player, game: Game) -> ResourceCount:
         """Randomly pick two resources for a Year of Plenty card."""
-        return self.choose_resources(player, 2)
+        return self._choose_resources(player, 2)
 
-    def select_monopoly_resource(self, player: Player) -> Resource:
+    def select_monopoly_resource(self, player: Player, game: Game) -> Resource:
         """Randomly pick a resource to monopolise."""
         return random.choice(list(Resource))
 
     def respond_to_trade(self,
                          player: Player,
+                         game: Game,
                          selling: ResourceCount,
                          buying: ResourceCount,
-                         round_num: int
                          ) -> Tuple[bool, Optional[ResourceCount]]:
         """Randomly accept or reject a trade, assuming AI can afford it."""
 
         # Randomly decide to accept or reject the trade
         return random.choice([True, False]), None
+
+    def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:
+        """
+        Return the next action for this AI.
+        Can be called repeatedly until the AI returns END_TURN or None.
+        """
+
+        if phase == Phase.PRE_ROLL:
+            if not dev_played:
+                # Play a dev card if possible
+                playable_cards = [c.card_type for c in player.development_cards if c.playable]
+                if playable_cards and random.choice([True, False]):
+                    return Action(ActionType.PLAY_DEV_CARD, random.choice(playable_cards))
+            return Action(ActionType.ROLL)
+
+        # Main phase
+
+        # 1. Build if possible
+        buildables_options = game.get_buildable_options(player)
+        buildables = [b for b, locs in buildables_options.items() if locs]
+        if buildables and random.choice([True, False]):
+            chosen_build = random.choice(buildables)
+            locations = buildables_options[chosen_build]
+
+            # Pick a random location for the build
+            if isinstance(locations, list) and locations:
+                loc = random.choice(locations)
+            else:
+                loc = locations  # could be True/False for dev card
+            return Action(ActionType.BUILD, (chosen_build, loc))
+
+        # 2. Buy a development card if affordable
+        if buildables_options[Buildable.DEVELOPMENT_CARD] and random.choice([True, False]):
+            return Action(ActionType.BUY_DEV_CARD)
+
+        # 3. Trade randomly (with bank or players)
+        if player.has_resources() and random.choice([True, False]):
+            return self.random_trade_action(player, game)
+
+        # 5. End turn if nothing else is chosen
+        return Action(ActionType.END_TURN)
+
+    def random_trade_action(self, player: Player, game: Game) -> Optional[Action]:
+        """Generate a random trade action (bank or player) if the AI has resources."""
+        # Flatten available resources
+        tradable_resources = [r for r, count in player.resources.items() if count > 0]
+        if not tradable_resources:
+            return None
+
+        # Pick a random resource to sell
+        sell_resource = random.choice(tradable_resources)
+        bank_rate = game.get_trade_rate(player, sell_resource)  # Fetch correct bank rate
+
+        selling: ResourceCount = {}
+        buying: ResourceCount = {}
+
+        # Decide amount to sell
+        if player.resources.get(sell_resource, 0) >= bank_rate:
+            # Can do a bank trade
+            selling[sell_resource] = bank_rate
+            # Pick a different random resource to buy
+            buying_resource = random.choice([r for r in Resource if r != sell_resource])
+            buying[buying_resource] = 1
+            return Action(ActionType.TRADE_WITH_BANK, (selling, buying))
+        else:
+            # Otherwise propose a trade with a player (random sell quantity)
+            num_to_sell = random.randint(1, player.resources[sell_resource])
+            selling[sell_resource] = num_to_sell
+            # Pick a random resource to acquire
+            buying_resource = random.choice([r for r in Resource if r != sell_resource])
+            buying[buying_resource] = 1
+            return Action(ActionType.TRADE_WITH_PLAYER, (selling, buying))

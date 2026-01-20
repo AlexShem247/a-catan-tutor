@@ -48,6 +48,7 @@ class Game:
         self._board = Board()
         self.development_deck = DevelopmentDeck()
         self.game_over = False
+        self.round_num = 1
 
     def can_afford(self, player: Player, building_type: Buildable) -> bool:
         """Check if the player has enough resources to build the given type."""
