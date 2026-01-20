@@ -1,19 +1,22 @@
+import time
 from collections import defaultdict
-from typing import Dict, Type
 from random import shuffle
+from typing import Dict, Type
+
 import matplotlib.pyplot as plt
 
 from GameController import GameController
-from config.player_policies import BASIC_VS_RANDOM, ALL_RANDOM
-from view.HeadlessView import HeadlessView
-from game.Player import PlayerNumber
 from ai.AI import AI
+from config.player_policies import RULE_BASED_VS_RANDOM
+from game.Player import PlayerNumber
+from view.HeadlessView import HeadlessView
 
 NUM_SIMULATIONS = 500
 SHUFFLE_ORDER = True  # Randomise player order
 
 
 def run_simulations(player_policies: Dict[PlayerNumber, Type[AI]], num_runs: int = NUM_SIMULATIONS):
+    start = time.time()
     first_policy_class = list(player_policies.values())[0]
     first_policy_name = first_policy_class.__name__
 
@@ -79,7 +82,13 @@ def run_simulations(player_policies: Dict[PlayerNumber, Type[AI]], num_runs: int
     axes[1].bar(vp_bins, [x / 3 for x in other_counts], color='red', width=0.8, edgecolor='black')
     axes[1].set_xticks(vp_bins)
     axes[1].set_xlabel("Victory Points")
-    axes[1].set_title(f"{other_keys[0]}\nWin rate: {other_win_rate/3:.1f}% | Avg VP: {other_avg:.2f}")
+    axes[1].set_title(f"{other_keys[0]}\nWin rate: {other_win_rate / 3:.1f}% | Avg VP: {other_avg:.2f}")
+
+    print(
+        f"Simulation of {NUM_SIMULATIONS} games: "
+        f"1 {first_policy_name} vs 3 {other_keys[0].rstrip(' (Other)')} - "
+        f"Took {time.time() - start:.1f} seconds."
+    )
 
     plt.tight_layout()
     plt.show()
@@ -87,5 +96,6 @@ def run_simulations(player_policies: Dict[PlayerNumber, Type[AI]], num_runs: int
 
 if __name__ == "__main__":
     print("Running Catan simulations...")
-    run_simulations(BASIC_VS_RANDOM)
-    run_simulations(ALL_RANDOM)
+    run_simulations(RULE_BASED_VS_RANDOM)
+    # run_simulations(BASIC_VS_RANDOM)
+    # run_simulations(ALL_RANDOM)

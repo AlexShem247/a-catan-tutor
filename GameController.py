@@ -195,13 +195,7 @@ class GameController:
                 hex_tile for hex_tile in self._game.get_all_hexes()
                 if not hex_tile.robber
             ]
-            tile, steal_from = player.policy.select_robber_target(
-                player,
-                self._game,
-                valid_hexes,
-                lambda h: self._game.get_players_on_hex(h),
-                lambda p: any(v > 0 for v in p.resources.values())
-            )
+            tile, steal_from = player.policy.select_robber_target(player, self._game, valid_hexes)
 
         # Move the robber
         self._game.set_robber(tile)

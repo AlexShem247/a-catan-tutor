@@ -4,7 +4,7 @@ import sys
 from PyQt6.QtWidgets import QApplication
 
 from GameController import GameController
-from config.player_policies import STANDARD_SINGLEPLAYER, BASIC_VS_RANDOM, ALL_RANDOM
+from config.player_policies import STANDARD_SINGLEPLAYER, RULE_BASED_VS_RANDOM
 from view.CLIView import CLIView
 from view.MainWindow import MainWindow
 from view.QtView import QtView
@@ -15,7 +15,7 @@ def main():
     parser.add_argument("--cli", action="store_true", help="Run the CLI version of the game")
     args = parser.parse_args()
 
-    controller = GameController(STANDARD_SINGLEPLAYER, BASIC_VS_RANDOM)
+    controller = GameController(STANDARD_SINGLEPLAYER, RULE_BASED_VS_RANDOM)
 
     if args.cli:
         controller.view = CLIView(controller)

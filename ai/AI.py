@@ -40,8 +40,6 @@ class AI(ABC):
                              player: Player,
                              game: "Game",
                              valid_hexes: List[HexTile],
-                             get_players_on_hex_func,
-                             has_resources_func
                              ) -> Tuple[HexTile, Optional[Player]]:
         """Select which hex to place the robber on and optionally which player to steal from."""
         pass

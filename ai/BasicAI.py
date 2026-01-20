@@ -246,16 +246,14 @@ class BasicAI(AI):
                              player: Player,
                              game: Game,
                              valid_hexes: List[HexTile],
-                             get_players_on_hex_func,
-                             has_resources_func
                              ) -> Tuple[HexTile, Optional[Player]]:
         """Select a hex for the robber and a player to steal from, if any."""
         # Filter hexes that have at least one stealable opponent
         stealable_hexes = [
             hex_tile for hex_tile in valid_hexes
             if any(
-                p != player and has_resources_func(p)
-                for p in get_players_on_hex_func(hex_tile)
+                p != player and p.has_resources()
+                for p in game.get_players_on_hex(hex_tile)
             )
         ]
 
@@ -264,8 +262,8 @@ class BasicAI(AI):
             hex_tile = random.choice(stealable_hexes)
 
             stealable_players = [
-                p for p in get_players_on_hex_func(hex_tile)
-                if p != player and has_resources_func(p)
+                p for p in game.get_players_on_hex(hex_tile)
+                if p != player and p.has_resources()
             ]
 
             target_player = random.choice(stealable_players)

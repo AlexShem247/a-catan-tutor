@@ -55,15 +55,13 @@ class RandomAI(AI):
                              player: Player,
                              game: Game,
                              valid_hexes: List[HexTile],
-                             get_players_on_hex_func,
-                             has_resources_func
                              ) -> Tuple[HexTile, Optional[Player]]:
         """Randomly select a hex for the robber and a victim player, if any."""
         hex_tile = random.choice(valid_hexes)
 
         players = [
-            p for p in get_players_on_hex_func(hex_tile)
-            if p != player and has_resources_func(p)
+            p for p in game.get_players_on_hex(hex_tile)
+            if p != player and p.has_resources()
         ]
 
         target = random.choice(players) if players else None
