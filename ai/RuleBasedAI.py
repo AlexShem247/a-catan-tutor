@@ -1,5 +1,6 @@
 import random
-from typing import Tuple, Optional, List, Set
+from collections import defaultdict
+from typing import Tuple, Optional, List, Set, Dict
 
 from ai.AI import AI
 from ai.RandomAI import RandomAI
@@ -8,6 +9,7 @@ from game.Edge import Edge
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
+from game.PlayerAssets import Buildable
 from game.Resources import ResourceCount, Resource
 from game.Vertex import Vertex
 
@@ -123,13 +125,14 @@ class RuleBasedAI(AI):
 
     def select_robber_target(self, player: Player, game: Game, valid_hexes: List[HexTile]) \
             -> Tuple[HexTile, Optional[Player]]:
-        # 1. Score each valid hex ---
+        # 1. Score each valid hex
         best_score = -1
         best_hex = None
+        our_resource_tiles = {h for v in player.settlements + player.cities for h in v.hexes}
 
         for h in valid_hexes:
             # Players on this hex
-            players_on_h = game.get_players_on_hex(h)
+            players_on_h = [p for p in game.get_players_on_hex(h) if p != player]
             score = 0.0
             for p in players_on_h:
                 # Dummy I(): always 1
@@ -139,8 +142,8 @@ class RuleBasedAI(AI):
             score *= self._dice_probability(h.production_number)
 
             # Tie-breaking: prefer hex we do not occupy
-            if h in player.settlements or h in player.cities:
-                score *= 0.9  # slight penalty for own hex
+            if h in our_resource_tiles:
+                score *= 0.5  # slight penalty for own hex
 
             if score > best_score:
                 best_score = score
@@ -150,7 +153,8 @@ class RuleBasedAI(AI):
             best_hex = random.choice(valid_hexes)
 
         # 2. Choose player to steal from
-        players_on_best_hex = game.get_players_on_hex(best_hex)
+        players_on_best_hex = [p for p in game.get_players_on_hex(best_hex) if p != player]
+
         if not players_on_best_hex:
             return best_hex, None
 
@@ -161,6 +165,40 @@ class RuleBasedAI(AI):
         )
 
         return best_hex, best_player
+
+    def _expected_rolls_for_resource(self, player: Player, resource: Resource) -> float:
+        """Estimate the expected number of dice rolls to gather one unit of the given resource."""
+
+        # Compute production frequency f_r for this resource
+        fr = 0.0
+        for v in player.settlements + player.cities:
+            for h in v.hexes:
+                if h.resource == resource:
+                    production_factor = 2 if v in player.cities else 1
+                    fr += self._dice_probability(h.production_number) * production_factor
+
+        if fr <= 0:
+            return float("inf")  # Cannot produce this resource
+
+        # Expected rolls to get one unit
+        return 1 / fr
+
+    def _estimated_time_to_build(self, player: Player, R_target: ResourceCount, max_turns: int = 1000) -> float:
+        """Estimate expected dice rolls to gather all resources in R_target using a capped for loop."""
+
+        total_rolls = 0.0
+
+        for r, target_amount in R_target.items():
+            missing = max(0, target_amount - player.resources.get(r, 0))
+            if missing > 0:
+                expected_rolls = self._expected_rolls_for_resource(player, r)
+                if expected_rolls == float("inf"):
+                    return float("inf")  # Cannot produce this resource at all
+                total_rolls += missing * expected_rolls
+
+        # TODO: later: apply trading rules to owned here
+
+        return total_rolls
 
     def select_discard_resources(self, player: Player, game: Game, num_resources: int) -> ResourceCount:
         return self.random_policy.select_discard_resources(player, game, num_resources)
@@ -175,10 +213,38 @@ class RuleBasedAI(AI):
             -> Tuple[bool, Optional[ResourceCount]]:
         return self.random_policy.respond_to_trade(player, game, selling, buying)
 
-    def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:
-        # if phase == Phase.PRE_ROLL:
-        #     return Action(ActionType.ROLL)
-        #
-        # # Main Phase
+    def _get_candidate_actions(self, player: Player, game: Game) -> List[Tuple[Action, float]]:
+        """Generate all candidate actions for this turn with their resource costs."""
+        candidate_actions: List[Tuple[Action, float]] = []
 
-        return self.random_policy.next_action(player, game, phase, dev_played)
+        for v in game.get_available_vertices(player, Buildable.SETTLEMENT):
+            candidate_actions.append((Action(ActionType.BUILD, (Buildable.SETTLEMENT, v)),
+                                      self._estimated_time_to_build(player, Game.BUILDING_COST[Buildable.SETTLEMENT])))
+
+        for s in game.get_available_vertices(player, Buildable.CITY):
+            candidate_actions.append((Action(ActionType.BUILD, (Buildable.CITY, s)),
+                                      self._estimated_time_to_build(player, Game.BUILDING_COST[Buildable.CITY])))
+
+        for e in game.get_available_edges(player):
+            candidate_actions.append((Action(ActionType.BUILD, (Buildable.ROAD, e)),
+                                      self._estimated_time_to_build(player, Game.BUILDING_COST[Buildable.ROAD])))
+
+        if not game.development_deck.empty():
+            candidate_actions.append((Action(ActionType.BUY_DEV_CARD),
+                                     self._estimated_time_to_build(player, Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD])))
+
+        return sorted(candidate_actions, key=lambda x: x[1])
+
+    def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:
+        if phase == Phase.PRE_ROLL:
+            return Action(ActionType.ROLL)
+
+        # Main Phase
+        candidate_actions = self._get_candidate_actions(player, game)
+        if candidate_actions:
+            action, etb = candidate_actions[0]
+            if etb == 0:
+                return action
+
+        # No feasible action, end turn
+        return Action(ActionType.END_TURN)

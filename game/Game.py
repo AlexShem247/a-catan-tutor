@@ -346,27 +346,46 @@ class Game:
 
     def get_available_vertices(self, player: Player, building_type: Buildable, road_restriction: bool = True) -> \
             List[Vertex]:
-        """Return a list of vertices where the player can build a settlement or city."""
-        available = []
+        """Return a list of vertices where the player can build a settlement or city, respecting limits."""
+
+        available: List[Vertex] = []
+
         if building_type == Buildable.SETTLEMENT:
+            # Check if player reached the settlement limit
+            if len(player.settlements) >= Buildable.SETTLEMENT.value[1]:
+                return []
+
             for vertex in self._board.vertices:
-                success, _ = self.try_build_settlement(player, vertex, build=False, road_restriction=road_restriction)
+                success, _ = self.try_build_settlement(
+                    player, vertex, build=False, road_restriction=road_restriction
+                )
                 if success:
                     available.append(vertex)
+
         elif building_type == Buildable.CITY:
+            # Check if player reached the city limit
+            if len(player.cities) >= Buildable.CITY.value[1]:
+                return []
+
             for vertex in player.settlements:
                 success, _ = self.try_build_city(player, vertex, build=False)
                 if success:
                     available.append(vertex)
+
         return available
 
     def get_available_edges(self, player: Player) -> List[Edge]:
-        """Return a list of edges where the player can build a road."""
-        available = []
+        """Return a list of edges where the player can legally build a road."""
+        # Check if player has already built the maximum number of roads
+        if len(player.roads) >= Buildable.ROAD.value[1]:  # ROAD.value[1] is max count
+            return []
+
+        available: List[Edge] = []
         for edge in self._board.edges:
             success, _ = self.try_build_road(player, edge, build=False)
             if success:
                 available.append(edge)
+
         return available
 
     def get_buildable_edges_for_vertex(self, vertex: Vertex) -> List[Edge]:
