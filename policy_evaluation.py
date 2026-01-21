@@ -11,7 +11,7 @@ from config.player_policies import RULE_BASED_VS_RANDOM
 from game.Player import PlayerNumber
 from view.HeadlessView import HeadlessView
 
-NUM_SIMULATIONS = 500
+NUM_SIMULATIONS = 100
 SHUFFLE_ORDER = True  # Randomise player order
 
 

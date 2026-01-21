@@ -25,13 +25,13 @@ class AI(ABC):
         pass
 
     @abstractmethod
-    def select_settlement_location(self, player: Player, game: "Game", available_vertices: List[Vertex]) \
+    def select_initial_settlement_location(self, player: Player, game: "Game", available_vertices: List[Vertex]) \
             -> Optional[Vertex]:
         """Select the vertex where a settlement should be built."""
         pass
 
     @abstractmethod
-    def select_road_location(self, player: Player, game: "Game", available_edges: List[Edge]) -> Optional[Edge]:
+    def select_initial_road_location(self, player: Player, game: "Game", available_edges: List[Edge]) -> Optional[Edge]:
         """Select the edge where a road should be built."""
         pass
 

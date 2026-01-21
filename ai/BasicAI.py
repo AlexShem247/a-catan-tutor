@@ -205,12 +205,12 @@ class BasicAI(AI):
         """Check if a player trade is preferable to bank trade."""
         return ai_buying_rate < bank_rate
 
-    def select_settlement_location(self, player: Player, game: Game, available_vertices: List[Vertex]) \
+    def select_initial_settlement_location(self, player: Player, game: Game, available_vertices: List[Vertex]) \
             -> Optional[Vertex]:
         """Select a settlement location from available vertices."""
         return random.choice(available_vertices) if available_vertices else None
 
-    def select_road_location(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
+    def select_initial_road_location(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
         """Select a road location from available edges."""
         return random.choice(available_edges) if available_edges else None
 

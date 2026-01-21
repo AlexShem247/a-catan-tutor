@@ -1,8 +1,9 @@
+import random
 from typing import Tuple, Optional, List, Set
 
 from ai.AI import AI
 from ai.RandomAI import RandomAI
-from ai.actions import Phase, Action
+from ai.actions import Phase, Action, ActionType
 from game.Edge import Edge
 from game.Game import Game
 from game.HexTile import HexTile
@@ -19,7 +20,7 @@ class RuleBasedAI(AI):
     def __init__(self):
         self.random_policy = RandomAI()
 
-    def select_settlement_location(self, player: Player, game: Game, available_vertices: List[Vertex]) \
+    def select_initial_settlement_location(self, player: Player, game: Game, available_vertices: List[Vertex]) \
             -> Optional[Vertex]:
         """Choose initial settlement location based on settlement utility formula."""
         if not available_vertices:
@@ -35,30 +36,9 @@ class RuleBasedAI(AI):
         )
         return best_vertex
 
-    def select_road_location(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
+    def select_initial_road_location(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
         """Choose the initial road that moves toward the highest-utility settlement vertex."""
-        if not available_edges:
-            return None
-
-        # All empty vertices on board
-        empty_vertices = [v for v in game.get_all_vertices() if v.owner is None]
-
-        # Compute target vertex using same utility formula
-        target_vertex = max(
-            empty_vertices,
-            key=lambda v: self._vertex_utility(v, player, game, empty_vertices),
-            default=None
-        )
-
-        if not target_vertex:
-            return available_edges[0]
-
-        # Pick edge adjacent to the current settlement that moves toward target
-        for edge in available_edges:
-            if target_vertex in edge.vertices:
-                return edge
-
-        return available_edges[0]  # Fallback
+        return self.random_policy.select_initial_road_location(player, game, available_edges)
 
     def _vertex_utility(
             self,
@@ -143,7 +123,44 @@ class RuleBasedAI(AI):
 
     def select_robber_target(self, player: Player, game: Game, valid_hexes: List[HexTile]) \
             -> Tuple[HexTile, Optional[Player]]:
-        return self.random_policy.select_robber_target(player, game, valid_hexes)
+        # 1. Score each valid hex ---
+        best_score = -1
+        best_hex = None
+
+        for h in valid_hexes:
+            # Players on this hex
+            players_on_h = game.get_players_on_hex(h)
+            score = 0.0
+            for p in players_on_h:
+                # Dummy I(): always 1
+                # TODO: Replace with indicator function based on inferred opponent needs
+                score += p.calc_victory_points()[0] * 1
+            # Multiply by dice probability
+            score *= self._dice_probability(h.production_number)
+
+            # Tie-breaking: prefer hex we do not occupy
+            if h in player.settlements or h in player.cities:
+                score *= 0.9  # slight penalty for own hex
+
+            if score > best_score:
+                best_score = score
+                best_hex = h
+
+        if best_hex is None:
+            best_hex = random.choice(valid_hexes)
+
+        # 2. Choose player to steal from
+        players_on_best_hex = game.get_players_on_hex(best_hex)
+        if not players_on_best_hex:
+            return best_hex, None
+
+        # Pick player with most cards weighted by VP
+        best_player = max(
+            players_on_best_hex,
+            key=lambda pl: sum(p.resources.values()) * pl.calc_victory_points()[0]
+        )
+
+        return best_hex, best_player
 
     def select_discard_resources(self, player: Player, game: Game, num_resources: int) -> ResourceCount:
         return self.random_policy.select_discard_resources(player, game, num_resources)
@@ -159,4 +176,9 @@ class RuleBasedAI(AI):
         return self.random_policy.respond_to_trade(player, game, selling, buying)
 
     def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:
+        # if phase == Phase.PRE_ROLL:
+        #     return Action(ActionType.ROLL)
+        #
+        # # Main Phase
+
         return self.random_policy.next_action(player, game, phase, dev_played)

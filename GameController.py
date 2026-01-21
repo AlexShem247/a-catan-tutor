@@ -76,7 +76,7 @@ class GameController:
                 self.view.display_board()
                 self.view.draw_selectable_vertices(available_vertices, disable_interactivity=True)
                 self.view.display_board_ai(player, "Select a position to build your settlement")
-                vertex = player.policy.select_settlement_location(player, self._game, available_vertices)
+                vertex = player.policy.select_initial_settlement_location(player, self._game, available_vertices)
             self._game.try_build_settlement(player, vertex, use_resources=False,
                                             road_restriction=False, gain_resources=gain_resource)
 
@@ -113,7 +113,7 @@ class GameController:
         self.view.draw_selectable_edges(available_edges, disable_interactivity=True)
         self.view.display_board_ai(player, "Select a position to build your road")
 
-        return player.policy.select_road_location(player, self._game, available_edges)
+        return player.policy.select_initial_road_location(player, self._game, available_edges)
 
     def trade_with_players(self, selling_player, selling, buying) -> List[Tuple[Player, Optional[ResourceCount]]]:
         """Sees which players are willing to trade"""
@@ -203,6 +203,9 @@ class GameController:
         # If there is a player to steal from, handle the discard
         if steal_from is not None:
             resource = steal_from.random_resource()
+            if not resource:
+                return None
+
             self._game.trade_between_players(player, {}, steal_from, resource)
 
             return steal_from, next(iter(resource.keys()))
