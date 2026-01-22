@@ -1,9 +1,10 @@
 import random
-from collections import defaultdict
-from typing import Tuple, Optional, List, Set, Dict
+from collections import deque
+from typing import Tuple, Optional, List, Set, Deque
 
 from ai.AI import AI
 from ai.RandomAI import RandomAI
+from ai.SimPlayerState import SimPlayerState
 from ai.actions import Phase, Action, ActionType
 from game.Edge import Edge
 from game.Game import Game
@@ -166,7 +167,7 @@ class RuleBasedAI(AI):
 
         return best_hex, best_player
 
-    def _expected_rolls_for_resource(self, player: Player, resource: Resource) -> float:
+    def _expected_rolls_for_resource(self, player: SimPlayerState, resource: Resource) -> float:
         """Estimate the expected number of dice rolls to gather one unit of the given resource."""
 
         # Compute production frequency f_r for this resource
@@ -183,22 +184,17 @@ class RuleBasedAI(AI):
         # Expected rolls to get one unit
         return 1 / fr
 
-    def _estimated_time_to_build(self, player: Player, R_target: ResourceCount, max_turns: int = 1000) -> float:
+    def _estimated_time_to_build(self, player: SimPlayerState, R_target: ResourceCount) -> float:
         """Estimate expected dice rolls to gather all resources in R_target using a capped for loop."""
 
-        total_rolls = 0.0
-
-        for r, target_amount in R_target.items():
-            missing = max(0, target_amount - player.resources.get(r, 0))
-            if missing > 0:
-                expected_rolls = self._expected_rolls_for_resource(player, r)
-                if expected_rolls == float("inf"):
-                    return float("inf")  # Cannot produce this resource at all
-                total_rolls += missing * expected_rolls
+        expected_rolls_per_resource = {
+            r: self._expected_rolls_for_resource(player, r) * max(0, R_target[r] - player.resources[r])
+            for r in R_target
+        }
 
         # TODO: later: apply trading rules to owned here
 
-        return total_rolls
+        return max(expected_rolls_per_resource.values())
 
     def select_discard_resources(self, player: Player, game: Game, num_resources: int) -> ResourceCount:
         return self.random_policy.select_discard_resources(player, game, num_resources)
@@ -213,38 +209,208 @@ class RuleBasedAI(AI):
             -> Tuple[bool, Optional[ResourceCount]]:
         return self.random_policy.respond_to_trade(player, game, selling, buying)
 
-    def _get_candidate_actions(self, player: Player, game: Game) -> List[Tuple[Action, float]]:
-        """Generate all candidate actions for this turn with their resource costs."""
-        candidate_actions: List[Tuple[Action, float]] = []
+    def _legal_settlement_vertex(self, player: SimPlayerState, vertex: Vertex) -> bool:
+        """Checks if settlement placement is legal"""
+        if vertex in (player.settlements + player.cities) or vertex.owner is not None:
+            # Vertex already built on
+            return False
 
-        for v in game.get_available_vertices(player, Buildable.SETTLEMENT):
-            candidate_actions.append((Action(ActionType.BUILD, (Buildable.SETTLEMENT, v)),
-                                      self._estimated_time_to_build(player, Game.BUILDING_COST[Buildable.SETTLEMENT])))
+        # Check 2-distance rule: no neighbor of this vertex has a building
+        for edge in vertex.edges:
+            neighbour = edge.get_other_vertex(vertex)
+            if neighbour in [player.settlements + player.cities] or neighbour.owner is not None:
+                # Neighbour owned
+                return False
 
-        for s in game.get_available_vertices(player, Buildable.CITY):
-            candidate_actions.append((Action(ActionType.BUILD, (Buildable.CITY, s)),
-                                      self._estimated_time_to_build(player, Game.BUILDING_COST[Buildable.CITY])))
+        return True
 
-        for e in game.get_available_edges(player):
-            candidate_actions.append((Action(ActionType.BUILD, (Buildable.ROAD, e)),
-                                      self._estimated_time_to_build(player, Game.BUILDING_COST[Buildable.ROAD])))
+    def _calc_etb_actions(self, player: SimPlayerState, total_actions: List[Action]) -> float:
+        total_resources: ResourceCount = {res: 0 for res in Resource}
 
-        if not game.development_deck.empty():
-            candidate_actions.append((Action(ActionType.BUY_DEV_CARD),
-                                     self._estimated_time_to_build(player, Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD])))
+        for action in total_actions:
+            step_resources = self._calc_step_resources(action)
+            for res, cost in step_resources.items():
+                total_resources[res] += cost
 
+        # Compute ETB based on total resources
+        return self._estimated_time_to_build(player, total_resources)
+
+    def _calc_step_resources(self, step: Action) -> ResourceCount:
+        total_resources = {res: 0 for res in Resource}
+        if step.type == ActionType.BUILD:
+            building: Buildable = step.payload[0]
+            for res, cost in Game.BUILDING_COST[building].items():
+                total_resources[res] += cost
+
+        return total_resources
+
+    def _distant_settlement_candidates(self, player: SimPlayerState, max_extra_roads: int = 2) \
+            -> List[Tuple[List[Action], float, int]]:
+        """
+        Finds potential settlement locations reachable within 0 to max_extra_roads from
+        the player's existing roads/settlements.
+        """
+        if len(player.settlements) >= Buildable.SETTLEMENT.max_on_board:
+            # Cannot build more settlements
+            return []
+
+        max_extra_roads = min(Buildable.ROAD.max_on_board - len(player.roads), max_extra_roads)
+        candidate_actions = []
+
+        # All vertices reachable via player's current roads
+        network_vertices = set()
+        for road in player.roads:
+            network_vertices.update(road.vertices)
+
+        # BFS queue: (current_vertex, actions_so_far, roads_used)
+        queue: Deque[Tuple[Vertex, List[Action], int]] = deque()
+        for v in network_vertices:
+            queue.append((v, [], 0))  # (vertex, action list, roads used)
+
+        visited = set()  # keep track of vertices we've explored with a given road count
+
+        while queue:
+            vertex, actions_so_far, roads_used = queue.popleft()
+
+            # Skip if we already visited this vertex with fewer or equal roads
+            key = (vertex, roads_used)
+            if key in visited or roads_used > max_extra_roads:
+                continue
+            visited.add(key)
+
+            # Check if we can build a settlement here
+            if self._legal_settlement_vertex(player, vertex):
+                # Valid location
+                total_actions = actions_so_far + [Action(ActionType.BUILD, (Buildable.SETTLEMENT, vertex))]
+                etb = self._calc_etb_actions(player, total_actions)
+                candidate_actions.append((total_actions, etb, 1))
+
+            # Explore neighbors to extend network by one road
+            for edge in vertex.edges:
+                if edge in player.roads:
+                    # Player already owns edge
+                    continue
+
+                if edge.owner is not None:
+                    # Opponent owns edge
+                    continue
+
+                if edge in [a.payload[1] for a in actions_so_far]:
+                    # Edge always built in our current path
+                    continue
+
+                # Edge is unowned
+                # Legal to add a road here?
+                if len(actions_so_far) + 1 <= max_extra_roads:
+                    new_actions = actions_so_far + [Action(ActionType.BUILD, (Buildable.ROAD, edge))]
+                    queue.append((edge.get_other_vertex(vertex), new_actions, roads_used + 1))
+
+        return candidate_actions
+
+    def _get_candidate_actions(self, player: SimPlayerState) -> List[Tuple[List[Action], float, int]]:
+        """Generate all candidate actions to increase VP given ETB"""
+        candidate_actions: List[Tuple[List[Action], float, int]] = []
+
+        # Add legal settlements (within 0-3 roads)
+        candidate_actions.extend(self._distant_settlement_candidates(player))
+
+        # Add potential cities
+        etb_city = self._estimated_time_to_build(player, Game.BUILDING_COST[Buildable.CITY])
+        if len(player.cities) < Buildable.CITY.max_on_board:
+            candidate_actions.extend([
+                ([Action(ActionType.BUILD, (Buildable.CITY, s))], etb_city, 1) for s in player.settlements
+            ])
+
+        # TODO: Add development cards
         return sorted(candidate_actions, key=lambda x: x[1])
+
+    def _estimated_time_to_win(self, player: SimPlayerState, max_iterations=10_000) -> float:
+        """Estimated Time to Win (ETW) Calculation"""
+        points = player.victory_points()
+        etw = 0
+        iteration = 1
+        while points < 10 and iteration < max_iterations:
+            candidate_actions = self._get_candidate_actions(player)
+            if len(candidate_actions) == 0:
+                return float("inf")  # No more actions possible
+
+            actions, etb, vp_inc = candidate_actions[0]
+            for step in actions:
+                # Perform action
+                self._simulate_step(player, step)
+
+            etw += etb
+            points += vp_inc
+            iteration += 1
+
+        return etw
+
+    def _simulate_step(self, player: SimPlayerState, step: Action):
+        if step.type == ActionType.BUILD:
+            building, loc = step.payload
+            if building == Buildable.ROAD:
+                player.build_road(loc)  # Simulate road build
+            elif building == Buildable.SETTLEMENT:
+                player.build_settlement(loc)  # Simulate settlement build
+            elif building == Buildable.CITY:
+                player.build_city(loc)  # Simulate city build
+        # TODO: Handle other actions steps
+
+    def _select_best_action(self, player: Player, utilities: List[Tuple[Action, float]]) -> Action:
+        """Choose action with the highest utility"""
+        # Lets trying picking most affordable action with the highest utility, i.e. myopic
+        affordable_actions = []
+
+        for action, utility in utilities:
+            # Calculate resource cost for this action
+            cost = self._calc_step_resources(action)
+
+            # Only include if player can afford it
+            if player.can_afford(cost):
+                affordable_actions.append((action, utility))
+
+        if not affordable_actions:
+            # No affordable action, end turn
+            return Action(ActionType.END_TURN)
+
+        # Return action with the highest utility
+        return max(affordable_actions, key=lambda x: x[1])[0]
+
+    def _evaluate_utilities(self, player: SimPlayerState, candidates: List[Tuple[List[Action], float, int]],
+                            etw_before: float) -> List[Tuple[Action, float]]:
+
+        # TODO: Add other factors and weights
+        utilities = []
+
+        for actions, _, _ in candidates:
+            # Simulate action on a copy of the player state
+            step = actions[0]
+            player_copy = player.copy()
+            self._simulate_step(player_copy, step)  # update state copy
+            etw_after = self._estimated_time_to_win(player_copy)
+
+            if etw_before == 0:
+                u_self = 0  # Already won, or no improvement possible
+            else:
+                u_self = (etw_before - etw_after) / etw_before * 100
+
+            # Discount for time: ETB of the action itself
+            etb_action = self._calc_etb_actions(player, [step])
+            discount_rate = 0.1
+            eu = u_self / ((1 + discount_rate) ** etb_action)
+            utilities.append((step, eu))
+
+        return utilities
 
     def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:
         if phase == Phase.PRE_ROLL:
             return Action(ActionType.ROLL)
 
         # Main Phase
-        candidate_actions = self._get_candidate_actions(player, game)
-        if candidate_actions:
-            action, etb = candidate_actions[0]
-            if etb == 0:
-                return action
+        sim_player = SimPlayerState(player)
+        etw_before = self._estimated_time_to_win(sim_player.copy())
+        candidates = self._get_candidate_actions(sim_player)
+        utilities = self._evaluate_utilities(sim_player, candidates, etw_before)
+        best_action = self._select_best_action(player, utilities)
 
-        # No feasible action, end turn
-        return Action(ActionType.END_TURN)
+        return best_action

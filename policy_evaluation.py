@@ -1,3 +1,4 @@
+import sys
 import time
 from collections import defaultdict
 from random import shuffle
@@ -15,7 +16,8 @@ NUM_SIMULATIONS = 100
 SHUFFLE_ORDER = True  # Randomise player order
 
 
-def run_simulations(player_policies: Dict[PlayerNumber, Type[AI]], num_runs: int = NUM_SIMULATIONS):
+def run_simulations(player_policies: Dict[PlayerNumber, Type[AI]], num_runs: int = NUM_SIMULATIONS,
+                    use_progress: bool = True):
     start = time.time()
     first_policy_class = list(player_policies.values())[0]
     first_policy_name = first_policy_class.__name__
@@ -23,7 +25,13 @@ def run_simulations(player_policies: Dict[PlayerNumber, Type[AI]], num_runs: int
     first_policy_wins = 0
     points_summary: Dict[str, list[int]] = defaultdict(list)
 
-    for sim in range(num_runs):
+    # Use tqdm progress-bar module
+    iterator = range(num_runs)
+    if use_progress:
+        from tqdm import tqdm
+        iterator = tqdm(range(num_runs))
+
+    for _ in iterator:
         if SHUFFLE_ORDER:
             other_policies = list(player_policies.values())[1:]
             all_players = other_policies + [first_policy_class]
@@ -95,7 +103,8 @@ def run_simulations(player_policies: Dict[PlayerNumber, Type[AI]], num_runs: int
 
 
 if __name__ == "__main__":
-    print("Running Catan simulations...")
-    run_simulations(RULE_BASED_VS_RANDOM)
+    print(f"Running {NUM_SIMULATIONS} Catan simulations...")
+    use_tqdm = "--no-progress" not in sys.argv
+    run_simulations(RULE_BASED_VS_RANDOM, use_progress=use_tqdm)
     # run_simulations(BASIC_VS_RANDOM)
     # run_simulations(ALL_RANDOM)

@@ -1,5 +1,5 @@
 from enum import IntEnum, Enum
-from typing import List, Optional, TYPE_CHECKING, Tuple
+from typing import List, Optional, TYPE_CHECKING, Tuple, Set
 
 from game.HexTile import HexTile
 from game.PlayerAssets import Building
@@ -39,6 +39,24 @@ class Vertex:
     def get_pos(self) -> str:
         q, r, direction = self.pos
         return f"{q}, {r}, {direction.name.title().replace('_', ' ')}"
+
+    def get_neighbours(self) -> Set["Vertex"]:
+        """Returns the set of vertices that share an edge with this vertex."""
+        neighbor_vertices = set()
+        for edge in self.edges:
+            # Add the other vertex of the edge
+            if edge.vertices[0] != self:
+                neighbor_vertices.add(edge.vertices[0])
+            if edge.vertices[1] != self:
+                neighbor_vertices.add(edge.vertices[1])
+        return neighbor_vertices
+
+    def get_edge_between(self, neighbour: "Vertex") -> Optional["Edge"]:
+        """Returns the Edge object connecting this vertex to the neighbour, if it exists."""
+        for edge in self.edges:
+            if edge.vertices[0] == neighbour or edge.vertices[1] == neighbour:
+                return edge
+        return None
 
     def __repr__(self) -> str:
         if not self.owner:
