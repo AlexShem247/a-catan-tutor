@@ -1,3 +1,4 @@
+from collections import Counter
 from typing import List, TYPE_CHECKING
 
 from game.Edge import Edge
@@ -23,15 +24,9 @@ class SimPlayerState:
         self.cities: List[Vertex] = list(player.cities)
         self.roads: List[Edge] = list(player.roads)
 
-        # Development cards (only what matters)
-        self.vp_cards: int = sum(
-            1 for c in player.development_cards
-            if c.card_type == DevelopmentCardType.VICTORY_POINT
-        )
-
-        self.knights: int = sum(
-            1 for c in player.development_cards
-            if c.card_type == DevelopmentCardType.KNIGHT
+        # Development cards
+        self.dev_cards: Counter[DevelopmentCardType] = Counter(
+            c.card_type for c in player.development_cards
         )
 
         # Achievements
@@ -52,8 +47,7 @@ class SimPlayerState:
         new.cities = list(self.cities)
         new.roads = list(self.roads)
 
-        new.vp_cards = self.vp_cards
-        new.knights = self.knights
+        new.dev_cards = self.dev_cards.copy()
 
         new.longest_road_length = self.longest_road_length
         new.has_longest_road = self.has_longest_road
@@ -80,7 +74,7 @@ class SimPlayerState:
             points += 2
 
         # Hidden VP cards
-        points += self.vp_cards
+        points += self.dev_cards.get(DevelopmentCardType.VICTORY_POINT, 0)
 
         return points
 
@@ -115,12 +109,11 @@ class SimPlayerState:
 
     def add_knight(self) -> None:
         """Simulate playing a knight."""
-        self.knights += 1
+        self.dev_cards[DevelopmentCardType.KNIGHT] += 1
         self.army_size += 1
-
         if self.army_size >= 3:
             self.has_largest_army = True
 
     def add_vp_card(self) -> None:
         """Simulate gaining a VP development card."""
-        self.vp_cards += 1
+        self.dev_cards[DevelopmentCardType.VICTORY_POINT] += 1

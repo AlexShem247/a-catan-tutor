@@ -213,6 +213,7 @@ class GameController:
     def play_development_card(self, player: Player, card_type: DevelopmentCardType) -> str:
         """Plays the development card for a player and returns a descriptive message."""
         msg = f"{player.name} played {card_type.name.replace('_', ' ').title()}."
+        self._game.development_deck.play(card_type)
 
         if card_type == DevelopmentCardType.KNIGHT:
             # KNIGHT: Move the robber and steal one resource from a player adjacent to the new robber location
