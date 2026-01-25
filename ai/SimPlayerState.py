@@ -1,6 +1,7 @@
 from collections import Counter
 from typing import List, TYPE_CHECKING
 
+from game.Board import Board
 from game.Edge import Edge
 from game.PlayerAssets import DevelopmentCardType
 from game.Resources import ResourceCount
@@ -15,6 +16,7 @@ class SimPlayerState:
 
     def __init__(self, player: "Player"):
         """Create a simulation state from a real Player."""
+        self.player_number = player.player_number
 
         # Resources (copy)
         self.resources: ResourceCount = dict(player.resources)
@@ -40,6 +42,7 @@ class SimPlayerState:
         """Create a fast deep copy of this simulation state."""
 
         new = SimPlayerState.__new__(SimPlayerState)
+        new.player_number = self.player_number
 
         new.resources = dict(self.resources)
 
@@ -103,9 +106,12 @@ class SimPlayerState:
 
         self.cities.append(vertex)
 
-    def build_road(self, edge: Edge) -> None:
-        """Add a road."""
+    def build_road(self, edge: Edge, opponent_road_length: List[int]) -> None:
+        """Add a road and updated the longest road length."""
         self.roads.append(edge)
+        self.longest_road_length = Board.calculate_longest_road_length(self.roads)
+        if self.longest_road_length > 5 and self.longest_road_length > max(opponent_road_length):
+            self.has_longest_road = True
 
     def add_knight(self) -> None:
         """Simulate playing a knight."""

@@ -113,7 +113,7 @@ def calc_step_resources(step: Action) -> ResourceCount:
 
 
 def distant_settlement_candidates(player: SimPlayerState, max_extra_roads: int = 2) \
-        -> List[Tuple[List[Action], float, int]]:
+        -> List[Tuple[List[Action], float, float]]:
     """
     Finds potential settlement locations reachable within 0 to max_extra_roads from
     the player's existing roads/settlements.
@@ -222,7 +222,7 @@ def purchase_development_card_action(player: SimPlayerState, deck: DevelopmentDe
     return deck_actions
 
 
-def estimated_time_to_win(player: SimPlayerState, game: Game, max_iterations=10_000) -> float:
+def estimated_time_to_win(player: SimPlayerState, game: Game, max_iterations=1_000) -> float:
     """Estimated Time to Win (ETW) Calculation"""
     points = player.victory_points()
     etw = 0
@@ -235,7 +235,7 @@ def estimated_time_to_win(player: SimPlayerState, game: Game, max_iterations=10_
         actions, etb, vp_inc = candidate_actions[0]
         for step in actions:
             # Perform action
-            simulate_step(player, step)
+            simulate_step(player, game, step)
 
         etw += etb
         points += vp_inc
@@ -244,11 +244,16 @@ def estimated_time_to_win(player: SimPlayerState, game: Game, max_iterations=10_
     return etw
 
 
-def simulate_step(player: SimPlayerState, step: Action):
+def get_opponents(player: SimPlayerState, game: Game):
+    return [p for p in game.players if p.player_number != player.player_number]
+
+
+def simulate_step(player: SimPlayerState, game: Game, step: Action):
     if step.type == ActionType.BUILD:
         building, loc = step.payload
         if building == Buildable.ROAD:
-            player.build_road(loc)  # Simulate road build
+            # Simulate road build
+            player.build_road(loc, [p.longest_road_length for p in get_opponents(player, game)])
         elif building == Buildable.SETTLEMENT:
             player.build_settlement(loc)  # Simulate settlement build
         elif building == Buildable.CITY:

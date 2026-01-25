@@ -6,20 +6,18 @@ from ai.RandomAI import RandomAI
 from ai.SimPlayerState import SimPlayerState
 from ai.actions import Phase, Action, ActionType
 from ai.heuristics import dice_probability, get_reachable_vertices, simulate_step, \
-    estimated_time_to_win, calc_etb_actions, get_candidate_actions, choose_max_utility_action
+    estimated_time_to_win, calc_etb_actions, get_candidate_actions, choose_max_utility_action, get_opponents
+from config.Weight import Weight
 from game.Edge import Edge
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
+from game.PlayerAssets import Buildable
 from game.Resources import ResourceCount, Resource
 from game.Vertex import Vertex
 
 
 class RuleBasedAI(AI):
-    INIT_PLACE_YIELD_WEIGHT = 1.0  # Expected dice yield importance for first/second settlements
-    INIT_PLACE_DIVERSITY_WEIGHT = 0.5  # Value of having diverse resources initially
-    INIT_PLACE_BLOCK_WEIGHT = 0.3  # Penalty if initial settlement doesn't block opponent expansion
-
     def __init__(self):
         self.random_policy = RandomAI()
 
@@ -76,9 +74,9 @@ class RuleBasedAI(AI):
                 break
 
         utility = (
-                self.INIT_PLACE_YIELD_WEIGHT * dice_sum +
-                self.INIT_PLACE_DIVERSITY_WEIGHT * diversity -
-                self.INIT_PLACE_BLOCK_WEIGHT * blocking_penalty
+                Weight.INIT_PLACE_YIELD * dice_sum +
+                Weight.INIT_PLACE_DIVERSITY * diversity -
+                Weight.INIT_PLACE_BLOCK * blocking_penalty
         )
 
         # For second settlement: boost if adds new resource types
@@ -87,7 +85,7 @@ class RuleBasedAI(AI):
             for s in player.settlements:
                 first_resources.update({h.resource for h in s.hexes if h.resource is not None})
             combined_diversity = len(resources | first_resources)
-            utility += self.INIT_PLACE_DIVERSITY_WEIGHT * (combined_diversity - diversity)
+            utility += Weight.INIT_PLACE_DIVERSITY * (combined_diversity - diversity)
 
         return utility
 
@@ -152,8 +150,27 @@ class RuleBasedAI(AI):
             -> Tuple[bool, Optional[ResourceCount]]:
         return self.random_policy.respond_to_trade(player, game, selling, buying)
 
-    def _evaluate_utilities(self, player: SimPlayerState, game: Game, candidates: List[Tuple[List[Action], float, int]],
-                            etw_before: float) -> List[Tuple[Action, float]]:
+    def _compute_k_lr(self, player: SimPlayerState, game: Game) -> float:
+        """Compute scaling factor for Longest Road priority."""
+        vp = player.victory_points()
+        f_phase = min(vp / 10.0, 1.0)
+        my_len = player.longest_road_length
+        opponent_best = max([p.longest_road_length for p in get_opponents(player, game)])
+
+        # Target length needed to claim / retain Longest Road
+        longest_road = max(my_len, opponent_best)
+        target = max(5, longest_road + 1)
+        dist = max(0, target - my_len)
+        f_dist = 1.0 / (1.0 + dist)
+        gap = my_len - opponent_best
+        f_contest = 1.0 / (1.0 + max(gap, 0) + 1e-6)
+
+        k = Weight.LR_BASE + Weight.LR_PHASE * f_phase + Weight.LR_DISTANCE * f_dist + Weight.LR_CONTEST * f_contest
+        return max(k, 0.0)
+
+    def _evaluate_utilities(self, player: SimPlayerState, game: Game,
+                            candidates: List[Tuple[List[Action], float, float]], etw_before: float) \
+            -> List[Tuple[Action, float]]:
 
         # TODO: Add other factors and weights
         utilities = []
@@ -162,19 +179,29 @@ class RuleBasedAI(AI):
             # Simulate action on a copy of the player state
             step = actions[0]
             player_copy = player.copy()
-            simulate_step(player_copy, step)
+            simulate_step(player_copy, game, step)
             etw_after = estimated_time_to_win(player_copy, game)
 
+            # Self Utility Calculation
             if etw_before == 0:
                 # Already won or no improvement possible
                 u_self = 0
             else:
                 u_self = (etw_before - etw_after) / etw_before * 100
 
+            # Special Calculation
+            u_special = 0.0
+            if step.type == ActionType.BUILD and step.payload[0] == Buildable.ROAD:
+                delta = max(0, player_copy.longest_road_length - player.longest_road_length)
+                u_special += self._compute_k_lr(player_copy, game) * delta
+
+            # TODO: Add largest army into calc
+
             # Discount for time: ETB of the action itself
             etb_action = calc_etb_actions(player, [step])
             discount_rate = 0.1
-            eu = u_self / ((1 + discount_rate) ** etb_action)
+            eu = ((Weight.BUILD_SELF_UTILITY * u_self + Weight.BUILD_SPECIAL_UTILITY * u_special) /
+                  ((1 + discount_rate) ** etb_action))
             utilities.append((step, eu))
 
         return utilities
