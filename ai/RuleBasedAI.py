@@ -6,7 +6,7 @@ from ai.RandomAI import RandomAI
 from ai.SimPlayerState import SimPlayerState
 from ai.actions import Phase, Action, ActionType
 from ai.heuristics import dice_probability, get_reachable_vertices, simulate_step, \
-    estimated_time_to_win, calc_etb_actions, get_candidate_actions, choose_max_utility_action, get_opponents
+    estimated_time_to_win, get_candidate_actions, choose_max_utility_action, get_opponents, EPSILON
 from config.Weight import Weight
 from game.Edge import Edge
 from game.Game import Game
@@ -20,6 +20,7 @@ from game.Vertex import Vertex
 class RuleBasedAI(AI):
     def __init__(self):
         self.random_policy = RandomAI()
+        self._eval_stats = {"cache_hits": 0, "cache_misses": 0, "evaluations": 0}
 
     def select_initial_settlement_location(self, player: Player, game: Game, available_vertices: List[Vertex]) \
             -> Optional[Vertex]:
@@ -114,7 +115,7 @@ class RuleBasedAI(AI):
 
             # Tie-breaking: prefer hex we do not occupy
             if h in our_resource_tiles:
-                score *= 0.5  # slight penalty for own hex
+                score *= Weight.ROBBER_OWN_HEX_PENALTY  # Use weight for own hex penalty
 
             if score > best_score:
                 best_score = score
@@ -155,15 +156,15 @@ class RuleBasedAI(AI):
         vp = player.victory_points()
         f_phase = min(vp / 10.0, 1.0)
         my_len = player.longest_road_length
-        opponent_best = max([p.longest_road_length for p in get_opponents(player, game)])
+        opponent_best = max([p.longest_road_length for p in get_opponents(player, game)], default=0)
 
         # Target length needed to claim / retain Longest Road
         longest_road = max(my_len, opponent_best)
-        target = max(5, longest_road + 1)
+        target = max(Weight.LR_MIN_ROAD_LENGTH, longest_road + 1)  # Use weight for minimum road length
         dist = max(0, target - my_len)
         f_dist = 1.0 / (1.0 + dist)
         gap = my_len - opponent_best
-        f_contest = 1.0 / (1.0 + max(gap, 0) + 1e-6)
+        f_contest = 1.0 / (1.0 + max(gap, 0) + EPSILON)  # Use epsilon to avoid division by zero
 
         k = Weight.LR_BASE + Weight.LR_PHASE * f_phase + Weight.LR_DISTANCE * f_dist + Weight.LR_CONTEST * f_contest
         return max(k, 0.0)
@@ -174,16 +175,16 @@ class RuleBasedAI(AI):
         f_phase = min(vp / 10.0, 1.0)
 
         my_knights = player.army_size
-        opponent_best = max([p.army_size for p in get_opponents(player, game)])
+        opponent_best = max([p.army_size for p in get_opponents(player, game)], default=0)
 
         # Target number of knights needed to claim / retain Largest Army
         largest_army = max(my_knights, opponent_best)
-        target = max(3, largest_army + 1)
+        target = max(Weight.LA_MIN_KNIGHTS, largest_army + 1)  # Use weight for minimum knights
         dist = max(0, target - my_knights)
         f_dist = 1.0 / (1.0 + dist)
 
         gap = my_knights - opponent_best
-        f_contest = 1.0 / (1.0 + max(gap, 0) + 1e-6)
+        f_contest = 1.0 / (1.0 + max(gap, 0) + EPSILON)  # Use epsilon to avoid division by zero
 
         k = Weight.LA_BASE + Weight.LA_PHASE * f_phase + Weight.LA_KNIGHT_DIST * f_dist + Weight.LA_CONTEST * f_contest
         return max(k, 0.0)
@@ -192,38 +193,56 @@ class RuleBasedAI(AI):
                             candidates: List[Tuple[List[Action], float, float]], etw_before: float) \
             -> List[Tuple[Action, float]]:
 
-        # TODO: Add other factors and weights
+        self._eval_stats["evaluations"] += 1
+
         utilities = []
 
-        for actions, _, _ in candidates:
-            # Simulate action on a copy of the player state
+        # Sort candidates by ETB for early pruning
+        candidates.sort(key=lambda x: x[1])
+
+        # Only evaluate top N candidates
+        max_eval = min(Weight.MAX_EVALUATIONS, len(candidates))  # Use weight for max evaluations
+
+        for actions, etb, _ in candidates[:max_eval]:
+            # Skip actions that take too long
+            if etb > Weight.MAX_ETB_THRESHOLD:  # Use weight for ETB threshold
+                continue
+
             step = actions[0]
             player_copy = player.copy()
             simulate_step(player_copy, game, step)
-            etw_after = estimated_time_to_win(player_copy, game, dev_played)
+
+            # Use cached ETW with reduced simulation depth
+            etw_after = estimated_time_to_win(
+                player_copy, game, dev_played,
+                max_iterations=Weight.MAX_ETW_SIMULATION_DEPTH_SHALLOW  # Use weight for shallow simulation depth
+            )
 
             # Self Utility Calculation
             if etw_before == 0:
-                # Already won or no improvement possible
                 u_self = 0
             else:
-                u_self = (etw_before - etw_after) / etw_before * 100
+                u_self = max(0.0, (etw_before - etw_after) / etw_before * 100)
 
-            # Special Calculation
+            # Special Calculation (simplified)
             u_special = 0.0
             if step.type == ActionType.BUILD and step.payload[0] == Buildable.ROAD:
-                delta = max(0, player_copy.longest_road_length - player.longest_road_length)
-                u_special += self._compute_k_lr(player_copy, game) * delta
+                # Only consider LR if we're close to the threshold
+                if player.longest_road_length >= Weight.LR_ROAD_THRESHOLD:  # Use weight for road threshold
+                    delta = max(0, player_copy.longest_road_length - player.longest_road_length)
+                    u_special += Weight.LR_UTILITY_MULTIPLIER * delta  # Use weight for utility multiplier
 
             if step.type == ActionType.PLAY_DEV_CARD and step.payload == DevelopmentCardType.KNIGHT:
-                delta_knight = 1  # Always +1 when playing a knight
-                u_special += self._compute_k_la(player_copy, game) * delta_knight
+                # Only if we're close to the largest army
+                if player.army_size >= Weight.LA_ARMY_THRESHOLD:  # Use weight for army threshold
+                    delta_knight = 1
+                    u_special += self._compute_k_la(player_copy, game) * delta_knight
 
             # Discount for time: ETB of the action itself
-            etb_action = calc_etb_actions(player, [step])
-            discount_rate = 0.1
+            discount_rate = Weight.TIME_DISCOUNT_RATE  # Use weight for discount rate
             eu = ((Weight.BUILD_SELF_UTILITY * u_self + Weight.BUILD_SPECIAL_UTILITY * u_special) /
-                  ((1 + discount_rate) ** etb_action))
+                  ((1 + discount_rate) ** max(1.0, etb)))  # Ensure at least 1 to avoid division by 0
+
             utilities.append((step, eu))
 
         return utilities
@@ -234,9 +253,25 @@ class RuleBasedAI(AI):
 
         # Main Phase
         sim_player = SimPlayerState(player)
-        etw_before = estimated_time_to_win(sim_player.copy(), game, dev_played)
-        candidates = get_candidate_actions(sim_player, game, dev_played)
+        etw_before = estimated_time_to_win(
+            sim_player.copy(), game, dev_played,
+            max_iterations=Weight.MAX_ETW_SIMULATION_DEPTH_DEEP  # Use weight for deep simulation depth
+        )
+
+        # Get limited candidate actions
+        candidates = get_candidate_actions(
+            sim_player, game, dev_played,
+            max_candidates=Weight.MAX_CANDIDATES_GENERATE  # Use weight for max candidates
+        )
+
+        if not candidates:
+            return Action(ActionType.END_TURN)
+
         utilities = self._evaluate_utilities(sim_player, game, dev_played, candidates, etw_before)
+
+        if not utilities:
+            return Action(ActionType.END_TURN)
+
         best_action = choose_max_utility_action(player, utilities)
 
         return best_action

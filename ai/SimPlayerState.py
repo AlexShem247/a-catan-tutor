@@ -1,18 +1,32 @@
 from collections import Counter
-from typing import List, TYPE_CHECKING
+from functools import lru_cache
+from typing import List, TYPE_CHECKING, Dict, Tuple
 
 from game.Board import Board
 from game.Edge import Edge
 from game.PlayerAssets import DevelopmentCardType
-from game.Resources import ResourceCount
+from game.Resources import ResourceCount, Resource
 from game.Vertex import Vertex
 
 if TYPE_CHECKING:
     from game.Player import Player
 
 
+@lru_cache(maxsize=128)
+def dice_probability_cached(number: int) -> float:
+    """Return the probability of rolling the given dice number on two six-sided dice."""
+    dice_probs = {2: 1 / 36, 3: 2 / 36, 4: 3 / 36, 5: 4 / 36, 6: 5 / 36,
+                  8: 5 / 36, 9: 4 / 36, 10: 3 / 36, 11: 2 / 36, 12: 1 / 36}
+    return dice_probs.get(number, 0)
+
+
+def dice_probability(number: int) -> float:
+    """Wrapper for cached dice probability."""
+    return dice_probability_cached(number)
+
+
 class SimPlayerState:
-    """Lightweight player model for ETW forward simulation."""
+    """Lightweight player model for ETW forward simulation with caching."""
 
     def __init__(self, player: "Player"):
         """Create a simulation state from a real Player."""
@@ -38,9 +52,14 @@ class SimPlayerState:
         self.army_size: int = player.army_size
         self.has_largest_army: bool = player.has_largest_army
 
-    def copy(self) -> "SimPlayerState":
-        """Create a fast deep copy of this simulation state."""
+        # Caches for performance optimization
+        self.etw_cache: Dict[Tuple, float] = {}
+        self.etb_cache: Dict[Tuple, float] = {}
+        self.candidate_cache: Dict[Tuple, List] = {}
+        self._production_cache: Dict[Resource, float] = {}
 
+    def copy(self) -> "SimPlayerState":
+        """Create a fast deep copy of this simulation state with fresh caches."""
         new = SimPlayerState.__new__(SimPlayerState)
         new.player_number = self.player_number
 
@@ -57,6 +76,12 @@ class SimPlayerState:
 
         new.army_size = self.army_size
         new.has_largest_army = self.has_largest_army
+
+        # Create fresh caches for the copy
+        new.etw_cache = {}
+        new.etb_cache = {}
+        new.candidate_cache = {}
+        new._production_cache = {}
 
         return new
 
@@ -92,11 +117,13 @@ class SimPlayerState:
     def add_resources(self, resources: ResourceCount) -> None:
         """Add resources (used for expected income)."""
         for r, c in resources.items():
-            self.resources[r] += c
+            self.resources[r] = self.resources.get(r, 0) + c
 
     def build_settlement(self, vertex: Vertex) -> None:
         """Add a settlement (no legality checking)."""
         self.settlements.append(vertex)
+        # Clear production cache as settlements affect production
+        self._production_cache.clear()
 
     def build_city(self, vertex: Vertex) -> None:
         """Upgrade settlement to city."""
@@ -104,6 +131,8 @@ class SimPlayerState:
             self.settlements.remove(vertex)
 
         self.cities.append(vertex)
+        # Clear production cache as cities affect production
+        self._production_cache.clear()
 
     def build_road(self, edge: Edge, opponent_road_length: List[int]) -> None:
         """Add a road and updated the longest road length."""
@@ -121,3 +150,21 @@ class SimPlayerState:
     def remove_card(self, ctype: DevelopmentCardType) -> None:
         """Simulate gaining a VP development card."""
         self.dev_cards[ctype] = max(0, self.dev_cards[ctype] - 1)
+
+    def get_production_rate(self, resource: Resource) -> float:
+        """Get cached production rate for a resource."""
+        if resource not in self._production_cache:
+            fr = 0.0
+            for v in self.settlements:
+                for h in v.hexes:
+                    if h.resource == resource:
+                        fr += dice_probability(h.production_number)
+
+            for v in self.cities:
+                for h in v.hexes:
+                    if h.resource == resource:
+                        fr += dice_probability(h.production_number) * 2
+
+            self._production_cache[resource] = fr
+
+        return self._production_cache[resource]
