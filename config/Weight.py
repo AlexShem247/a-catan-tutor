@@ -11,3 +11,8 @@ class Weight:
     LR_PHASE = 0.6  # Weight of game progress (early vs late)
     LR_DISTANCE = 1.0  # Weight of closeness to claiming Longest Road
     LR_CONTEST = 0.8  # Weight of competition for Longest Road
+
+    LA_BASE = 0.2  # Baseline value for Largest Army
+    LA_PHASE = 0.6  # Weight for game phase
+    LA_KNIGHT_DIST = 1.0  # Weight for closeness to claiming Largest Army
+    LA_CONTEST = 0.8  # Weight for contest with other players

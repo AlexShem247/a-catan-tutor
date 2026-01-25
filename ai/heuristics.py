@@ -1,11 +1,10 @@
-from collections import deque
-from typing import List, Set, Tuple, Deque
+from typing import List, Set, Tuple
 
 from ai.SimPlayerState import SimPlayerState
 from ai.actions import ActionType, Action
 from game.Game import Game
 from game.Player import Player
-from game.PlayerAssets import Buildable, DevelopmentDeck, DevelopmentCardType
+from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
 
@@ -114,69 +113,125 @@ def calc_step_resources(step: Action) -> ResourceCount:
 
 def distant_settlement_candidates(player: SimPlayerState, max_extra_roads: int = 2) \
         -> List[Tuple[List[Action], float, float]]:
-    """
-    Finds potential settlement locations reachable within 0 to max_extra_roads from
-    the player's existing roads/settlements.
-    """
     if len(player.settlements) >= Buildable.SETTLEMENT.max_on_board:
-        # Cannot build more settlements
         return []
 
     max_extra_roads = min(Buildable.ROAD.max_on_board - len(player.roads), max_extra_roads)
-    candidate_actions = []
 
-    # All vertices reachable via player's current roads
+    # Fast lookup structures
+    player_roads_set = set(player.roads)
+    player_settlement_vertices = {s for s in player.settlements}
+    player_city_vertices = {c for c in player.cities}
+    all_player_vertices = player_settlement_vertices | player_city_vertices
+
+    # Collect all vertices connected to player's road network
     network_vertices = set()
     for road in player.roads:
         network_vertices.update(road.vertices)
 
-    # BFS queue: (current_vertex, actions_so_far, roads_used)
-    queue: Deque[Tuple[Vertex, List[Action], int]] = deque()
-    for v in network_vertices:
-        queue.append((v, [], 0))  # (vertex, action list, roads used)
+    # Cache for settlement legality - precompute for all vertices
+    legal_vertices_cache = {}
+    candidate_actions = []
 
-    visited = set()  # keep track of vertices we've explored with a given road count
+    # Phase 1: Check immediate network vertices (0 roads)
+    for vertex in network_vertices:
+        if vertex not in legal_vertices_cache:
+            legal_vertices_cache[vertex] = legal_settlement_vertex(player, vertex)
+        if legal_vertices_cache[vertex]:
+            actions = [Action(ActionType.BUILD, (Buildable.SETTLEMENT, vertex))]
+            etb = calc_etb_actions(player, actions)
+            candidate_actions.append((actions, etb, 1))
 
-    while queue:
-        vertex, actions_so_far, roads_used = queue.popleft()
+    if max_extra_roads == 0:
+        return candidate_actions
 
-        # Skip if we already visited this vertex with fewer or equal roads
-        key = (vertex, roads_used)
-        if key in visited or roads_used > max_extra_roads:
-            continue
-        visited.add(key)
+    # Phase 2: Check vertices reachable with 1 road
+    # Build set of potential vertices for 1-road expansion
+    visited_one_road = set()
 
-        # Check if we can build a settlement here
-        if legal_settlement_vertex(player, vertex):
-            # Valid location
-            total_actions = actions_so_far + [Action(ActionType.BUILD, (Buildable.SETTLEMENT, vertex))]
-            etb = calc_etb_actions(player, total_actions)
-            candidate_actions.append((total_actions, etb, 1))
-
-        # Explore neighbors to extend network by one road
-        for edge in vertex.edges:
-            if edge in player.roads:
-                # Player already owns edge
+    for start_vertex in network_vertices:
+        for edge in start_vertex.edges:
+            if edge.owner is not None or edge in player_roads_set:
                 continue
 
-            if edge.owner is not None:
-                # Opponent owns edge
+            # Get the other vertex of this edge
+            other_vertex = edge.get_other_vertex(start_vertex)
+
+            # Skip if vertex is already occupied or in visited
+            if (other_vertex in all_player_vertices or
+                    other_vertex in visited_one_road):
                 continue
 
-            if edge in [a.payload[1] for a in actions_so_far]:
-                # Edge always built in our current path
+            # Check if we can build a settlement here
+            if other_vertex not in legal_vertices_cache:
+                legal_vertices_cache[other_vertex] = legal_settlement_vertex(player, other_vertex)
+
+            if legal_vertices_cache[other_vertex]:
+                actions = [
+                    Action(ActionType.BUILD, (Buildable.ROAD, edge)),
+                    Action(ActionType.BUILD, (Buildable.SETTLEMENT, other_vertex))
+                ]
+                etb = calc_etb_actions(player, actions)
+                candidate_actions.append((actions, etb, 1))
+
+            visited_one_road.add(other_vertex)
+
+    if max_extra_roads == 1:
+        return candidate_actions
+
+    # Phase 3: Check vertices reachable with 2 roads
+    # Two approaches:
+
+    # APPROACH 1: Direct 2-hop exploration (more efficient)
+    visited_two_roads = set()
+
+    # Explore from vertices reachable with 1 road
+    for mid_vertex in visited_one_road:
+        for edge in mid_vertex.edges:
+            if edge.owner is not None or edge in player_roads_set:
                 continue
 
-            # Edge is unowned
-            # Legal to add a road here?
-            if len(actions_so_far) + 1 <= max_extra_roads:
-                new_actions = actions_so_far + [Action(ActionType.BUILD, (Buildable.ROAD, edge))]
-                queue.append((edge.get_other_vertex(vertex), new_actions, roads_used + 1))
+            # Get the vertex that's 2 hops away
+            end_vertex = edge.get_other_vertex(mid_vertex)
+
+            # Skip if already visited or occupied
+            if (end_vertex in visited_two_roads or
+                    end_vertex in all_player_vertices or
+                    end_vertex in network_vertices):
+                continue
+
+            # Need to find which road connects start_vertex to mid_vertex
+            # Find the connecting edge between network and mid_vertex
+            connecting_edge = None
+            for e in mid_vertex.edges:
+                other = e.get_other_vertex(mid_vertex)
+                if other in network_vertices and e.owner is None and e not in player_roads_set:
+                    connecting_edge = e
+                    break
+
+            if connecting_edge is None:
+                continue
+
+            # Check settlement legality
+            if end_vertex not in legal_vertices_cache:
+                legal_vertices_cache[end_vertex] = legal_settlement_vertex(player, end_vertex)
+
+            if legal_vertices_cache[end_vertex]:
+                actions = [
+                    Action(ActionType.BUILD, (Buildable.ROAD, connecting_edge)),
+                    Action(ActionType.BUILD, (Buildable.ROAD, edge)),
+                    Action(ActionType.BUILD, (Buildable.SETTLEMENT, end_vertex))
+                ]
+                etb = calc_etb_actions(player, actions)
+                candidate_actions.append((actions, etb, 1))
+
+            visited_two_roads.add(end_vertex)
 
     return candidate_actions
 
 
-def get_candidate_actions(player: SimPlayerState, game: Game) -> List[Tuple[List[Action], float, float]]:
+def get_candidate_actions(player: SimPlayerState, game: Game, dev_played: bool) \
+        -> List[Tuple[List[Action], float, float]]:
     """
     Generate all feasible action sequences for the player.
 
@@ -199,15 +254,58 @@ def get_candidate_actions(player: SimPlayerState, game: Game) -> List[Tuple[List
         ])
 
     # Development Deck Actions
-    candidate_actions.extend(purchase_development_card_action(player, game.development_deck))
+    candidate_actions.extend(purchase_development_card_action(player, game))
+    if not dev_played:
+        candidate_actions.extend(play_development_card_action(player, game))
 
-    # TODO: Add other development cards
     return sorted(candidate_actions, key=lambda x: x[1])
 
 
-def purchase_development_card_action(player: SimPlayerState, deck: DevelopmentDeck) -> \
+def expected_vp_from_knight(player: SimPlayerState, game: Game) -> float:
+    """Estimate expected VP gain from buying and playing a Knight card."""
+    my_knights = player.army_size
+    opponents = get_opponents(player, game)
+    opponent_best = max([p.army_size for p in opponents], default=0)
+
+    # Current Largest Army VP (0 or 2)
+    has_largest_army = 2 if player.has_largest_army else 0
+
+    # Target to claim/retain Largest Army
+    target = max(3, opponent_best + 1)
+
+    # If playing a Knight gives Largest Army
+    if my_knights + 1 >= target and not player.has_largest_army:
+        la_vp_gain = 2 - has_largest_army
+    else:
+        la_vp_gain = 0
+
+    return la_vp_gain
+
+
+def play_development_card_action(player: SimPlayerState, game: Game) -> \
         List[Tuple[List[Action], float, float]]:
-    """Generate all development card actions to increase VP given ETB"""
+    """Generate all development card play actions to increase VP given ETB"""
+    actions: List[Tuple[List[Action], float, float]] = []
+    etb = 0.0
+    for card_type, qty in player.dev_cards.items():
+        if qty <= 0 or card_type == DevelopmentCardType.VICTORY_POINT:
+            continue
+        for _ in range(qty):
+            action = Action(ActionType.PLAY_DEV_CARD, payload=card_type)
+            # ETB = 0 because card is already in hand
+            if card_type == DevelopmentCardType.KNIGHT:
+                expected_vp = expected_vp_from_knight(player, game)
+            else:
+                expected_vp = 0.0
+            actions.append(([action], etb, expected_vp))
+
+    return actions
+
+
+def purchase_development_card_action(player: SimPlayerState, game: Game) -> \
+        List[Tuple[List[Action], float, float]]:
+    """Generate buying new development card actions to increase VP given ETB"""
+    deck = game.development_deck
     if deck.empty():
         return []
 
@@ -219,16 +317,23 @@ def purchase_development_card_action(player: SimPlayerState, deck: DevelopmentDe
     vp_prob = deck.get_probability(DevelopmentCardType.VICTORY_POINT, player.dev_cards)
     deck_actions.append((actions, card_purchase_etb, vp_prob))
 
+    # Chance of drawing a Knight card
+    knight_prob = deck.get_probability(DevelopmentCardType.KNIGHT, player.dev_cards)
+    vp_gain_knight = expected_vp_from_knight(player, game)
+    deck_actions.append(
+        (actions + [Action(ActionType.END_TURN), Action(ActionType.PLAY_DEV_CARD, DevelopmentCardType.KNIGHT)],
+         card_purchase_etb + 1, knight_prob * vp_gain_knight))
+
     return deck_actions
 
 
-def estimated_time_to_win(player: SimPlayerState, game: Game, max_iterations=1_000) -> float:
+def estimated_time_to_win(player: SimPlayerState, game: Game, dev_played: bool, max_iterations=100) -> float:
     """Estimated Time to Win (ETW) Calculation"""
     points = player.victory_points()
     etw = 0
     iteration = 1
     while points < 10 and iteration < max_iterations:
-        candidate_actions = get_candidate_actions(player, game)
+        candidate_actions = get_candidate_actions(player, game, dev_played)
         if len(candidate_actions) == 0:
             return float("inf")  # No more actions possible
 
@@ -240,6 +345,8 @@ def estimated_time_to_win(player: SimPlayerState, game: Game, max_iterations=1_0
         etw += etb
         points += vp_inc
         iteration += 1
+        if iteration > 90:
+            pass
 
     return etw
 
@@ -258,7 +365,11 @@ def simulate_step(player: SimPlayerState, game: Game, step: Action):
             player.build_settlement(loc)  # Simulate settlement build
         elif building == Buildable.CITY:
             player.build_city(loc)  # Simulate city build
-    # TODO: Handle other actions steps
+    elif step.type == ActionType.PLAY_DEV_CARD:
+        ctype = step.payload
+        player.remove_card(ctype)
+        if ctype == DevelopmentCardType.KNIGHT:
+            player.add_knight([p.army_size for p in get_opponents(player, game)])
 
 
 def choose_max_utility_action(player: Player, utilities: List[Tuple[Action, float]]) -> Action:

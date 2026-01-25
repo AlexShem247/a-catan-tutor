@@ -62,7 +62,6 @@ class SimPlayerState:
 
     def victory_points(self) -> int:
         """Return total victory points (including hidden VP cards)."""
-
         points = 0
 
         # Buildings
@@ -113,13 +112,12 @@ class SimPlayerState:
         if self.longest_road_length > 5 and self.longest_road_length > max(opponent_road_length):
             self.has_longest_road = True
 
-    def add_knight(self) -> None:
+    def add_knight(self, opponent_army_size: List[int]) -> None:
         """Simulate playing a knight."""
-        self.dev_cards[DevelopmentCardType.KNIGHT] += 1
         self.army_size += 1
-        if self.army_size >= 3:
+        if self.army_size >= 3 and self.army_size > max(opponent_army_size):
             self.has_largest_army = True
 
-    def add_vp_card(self) -> None:
+    def remove_card(self, ctype: DevelopmentCardType) -> None:
         """Simulate gaining a VP development card."""
-        self.dev_cards[DevelopmentCardType.VICTORY_POINT] += 1
+        self.dev_cards[ctype] = max(0, self.dev_cards[ctype] - 1)

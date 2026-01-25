@@ -12,7 +12,7 @@ from game.Edge import Edge
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
-from game.PlayerAssets import Buildable
+from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import ResourceCount, Resource
 from game.Vertex import Vertex
 
@@ -168,7 +168,27 @@ class RuleBasedAI(AI):
         k = Weight.LR_BASE + Weight.LR_PHASE * f_phase + Weight.LR_DISTANCE * f_dist + Weight.LR_CONTEST * f_contest
         return max(k, 0.0)
 
-    def _evaluate_utilities(self, player: SimPlayerState, game: Game,
+    def _compute_k_la(self, player: SimPlayerState, game: Game) -> float:
+        """Compute scaling factor for Largest Army priority."""
+        vp = player.victory_points()
+        f_phase = min(vp / 10.0, 1.0)
+
+        my_knights = player.army_size
+        opponent_best = max([p.army_size for p in get_opponents(player, game)])
+
+        # Target number of knights needed to claim / retain Largest Army
+        largest_army = max(my_knights, opponent_best)
+        target = max(3, largest_army + 1)
+        dist = max(0, target - my_knights)
+        f_dist = 1.0 / (1.0 + dist)
+
+        gap = my_knights - opponent_best
+        f_contest = 1.0 / (1.0 + max(gap, 0) + 1e-6)
+
+        k = Weight.LA_BASE + Weight.LA_PHASE * f_phase + Weight.LA_KNIGHT_DIST * f_dist + Weight.LA_CONTEST * f_contest
+        return max(k, 0.0)
+
+    def _evaluate_utilities(self, player: SimPlayerState, game: Game, dev_played: bool,
                             candidates: List[Tuple[List[Action], float, float]], etw_before: float) \
             -> List[Tuple[Action, float]]:
 
@@ -180,7 +200,7 @@ class RuleBasedAI(AI):
             step = actions[0]
             player_copy = player.copy()
             simulate_step(player_copy, game, step)
-            etw_after = estimated_time_to_win(player_copy, game)
+            etw_after = estimated_time_to_win(player_copy, game, dev_played)
 
             # Self Utility Calculation
             if etw_before == 0:
@@ -195,7 +215,9 @@ class RuleBasedAI(AI):
                 delta = max(0, player_copy.longest_road_length - player.longest_road_length)
                 u_special += self._compute_k_lr(player_copy, game) * delta
 
-            # TODO: Add largest army into calc
+            if step.type == ActionType.PLAY_DEV_CARD and step.payload == DevelopmentCardType.KNIGHT:
+                delta_knight = 1  # Always +1 when playing a knight
+                u_special += self._compute_k_la(player_copy, game) * delta_knight
 
             # Discount for time: ETB of the action itself
             etb_action = calc_etb_actions(player, [step])
@@ -212,9 +234,9 @@ class RuleBasedAI(AI):
 
         # Main Phase
         sim_player = SimPlayerState(player)
-        etw_before = estimated_time_to_win(sim_player.copy(), game)
-        candidates = get_candidate_actions(sim_player, game)
-        utilities = self._evaluate_utilities(sim_player, game, candidates, etw_before)
+        etw_before = estimated_time_to_win(sim_player.copy(), game, dev_played)
+        candidates = get_candidate_actions(sim_player, game, dev_played)
+        utilities = self._evaluate_utilities(sim_player, game, dev_played, candidates, etw_before)
         best_action = choose_max_utility_action(player, utilities)
 
         return best_action

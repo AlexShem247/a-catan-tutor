@@ -12,7 +12,7 @@ from config.player_policies import RULE_BASED_VS_RANDOM
 from game.Player import PlayerNumber
 from view.HeadlessView import HeadlessView
 
-NUM_SIMULATIONS = 100
+NUM_SIMULATIONS = 10
 SHUFFLE_ORDER = True  # Randomise player order
 
 
@@ -106,5 +106,3 @@ if __name__ == "__main__":
     print(f"Running {NUM_SIMULATIONS} Catan simulations...")
     use_tqdm = "--no-progress" not in sys.argv
     run_simulations(RULE_BASED_VS_RANDOM, use_progress=use_tqdm)
-    # run_simulations(BASIC_VS_RANDOM)
-    # run_simulations(ALL_RANDOM)
