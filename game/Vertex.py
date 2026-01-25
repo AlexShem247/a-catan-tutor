@@ -3,6 +3,7 @@ from typing import List, Optional, TYPE_CHECKING, Tuple, Set
 
 from game.HexTile import HexTile
 from game.PlayerAssets import Building
+from game.Resources import Resource
 
 if TYPE_CHECKING:
     from game.Player import Player
@@ -25,6 +26,18 @@ class Port(Enum):
     WHEAT = 3
     ORE = 4
     THREE_TO_ONE = 5
+
+    @classmethod
+    def resource_to_port(cls, resource: Resource) -> Optional["Port"]:
+        """Convert a Resource to its corresponding 2:1 Port, if any."""
+        resource_to_port = {
+            Resource.WOOD: cls.WOOD,
+            Resource.BRICK: cls.BRICK,
+            Resource.SHEEP: cls.SHEEP,
+            Resource.WHEAT: cls.WHEAT,
+            Resource.ORE: cls.ORE,
+        }
+        return resource_to_port.get(resource)
 
 
 class Vertex:

@@ -115,7 +115,7 @@ class RuleBasedAI(AI):
 
             # Tie-breaking: prefer hex we do not occupy
             if h in our_resource_tiles:
-                score *= Weight.ROBBER_OWN_HEX_PENALTY  # Use weight for own hex penalty
+                score *= Weight.ROBBER_OWN_HEX_PENALTY
 
             if score > best_score:
                 best_score = score
@@ -160,11 +160,11 @@ class RuleBasedAI(AI):
 
         # Target length needed to claim / retain Longest Road
         longest_road = max(my_len, opponent_best)
-        target = max(Weight.LR_MIN_ROAD_LENGTH, longest_road + 1)  # Use weight for minimum road length
+        target = max(Weight.LR_MIN_ROAD_LENGTH, longest_road + 1)
         dist = max(0, target - my_len)
         f_dist = 1.0 / (1.0 + dist)
         gap = my_len - opponent_best
-        f_contest = 1.0 / (1.0 + max(gap, 0) + EPSILON)  # Use epsilon to avoid division by zero
+        f_contest = 1.0 / (1.0 + max(gap, 0) + EPSILON)
 
         k = Weight.LR_BASE + Weight.LR_PHASE * f_phase + Weight.LR_DISTANCE * f_dist + Weight.LR_CONTEST * f_contest
         return max(k, 0.0)
@@ -179,12 +179,12 @@ class RuleBasedAI(AI):
 
         # Target number of knights needed to claim / retain Largest Army
         largest_army = max(my_knights, opponent_best)
-        target = max(Weight.LA_MIN_KNIGHTS, largest_army + 1)  # Use weight for minimum knights
+        target = max(Weight.LA_MIN_KNIGHTS, largest_army + 1)
         dist = max(0, target - my_knights)
         f_dist = 1.0 / (1.0 + dist)
 
         gap = my_knights - opponent_best
-        f_contest = 1.0 / (1.0 + max(gap, 0) + EPSILON)  # Use epsilon to avoid division by zero
+        f_contest = 1.0 / (1.0 + max(gap, 0) + EPSILON)
 
         k = Weight.LA_BASE + Weight.LA_PHASE * f_phase + Weight.LA_KNIGHT_DIST * f_dist + Weight.LA_CONTEST * f_contest
         return max(k, 0.0)
@@ -201,11 +201,11 @@ class RuleBasedAI(AI):
         candidates.sort(key=lambda x: x[1])
 
         # Only evaluate top N candidates
-        max_eval = min(Weight.MAX_EVALUATIONS, len(candidates))  # Use weight for max evaluations
+        max_eval = min(Weight.MAX_EVALUATIONS, len(candidates))
 
         for actions, etb, _ in candidates[:max_eval]:
             # Skip actions that take too long
-            if etb > Weight.MAX_ETB_THRESHOLD:  # Use weight for ETB threshold
+            if etb > Weight.MAX_ETB_THRESHOLD:
                 continue
 
             step = actions[0]
@@ -215,7 +215,7 @@ class RuleBasedAI(AI):
             # Use cached ETW with reduced simulation depth
             etw_after = estimated_time_to_win(
                 player_copy, game, dev_played,
-                max_iterations=Weight.MAX_ETW_SIMULATION_DEPTH_SHALLOW  # Use weight for shallow simulation depth
+                max_iterations=Weight.MAX_ETW_SIMULATION_DEPTH_SHALLOW
             )
 
             # Self Utility Calculation
@@ -224,17 +224,17 @@ class RuleBasedAI(AI):
             else:
                 u_self = max(0.0, (etw_before - etw_after) / etw_before * 100)
 
-            # Special Calculation (simplified)
+            # Special Calculation
             u_special = 0.0
             if step.type == ActionType.BUILD and step.payload[0] == Buildable.ROAD:
                 # Only consider LR if we're close to the threshold
-                if player.longest_road_length >= Weight.LR_ROAD_THRESHOLD:  # Use weight for road threshold
+                if player.longest_road_length >= Weight.LR_ROAD_THRESHOLD:
                     delta = max(0, player_copy.longest_road_length - player.longest_road_length)
-                    u_special += Weight.LR_UTILITY_MULTIPLIER * delta  # Use weight for utility multiplier
+                    u_special += Weight.LR_UTILITY_MULTIPLIER * delta
 
             if step.type == ActionType.PLAY_DEV_CARD and step.payload == DevelopmentCardType.KNIGHT:
                 # Only if we're close to the largest army
-                if player.army_size >= Weight.LA_ARMY_THRESHOLD:  # Use weight for army threshold
+                if player.army_size >= Weight.LA_ARMY_THRESHOLD:
                     delta_knight = 1
                     u_special += self._compute_k_la(player_copy, game) * delta_knight
 
@@ -255,13 +255,13 @@ class RuleBasedAI(AI):
         sim_player = SimPlayerState(player)
         etw_before = estimated_time_to_win(
             sim_player.copy(), game, dev_played,
-            max_iterations=Weight.MAX_ETW_SIMULATION_DEPTH_DEEP  # Use weight for deep simulation depth
+            max_iterations=Weight.MAX_ETW_SIMULATION_DEPTH_DEEP
         )
 
         # Get limited candidate actions
         candidates = get_candidate_actions(
             sim_player, game, dev_played,
-            max_candidates=Weight.MAX_CANDIDATES_GENERATE  # Use weight for max candidates
+            max_candidates=Weight.MAX_CANDIDATES_GENERATE
         )
 
         if not candidates:

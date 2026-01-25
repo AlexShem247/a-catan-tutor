@@ -154,13 +154,13 @@ if __name__ == "__main__":
     print(f"CPU cores available: {NUM_PROCESSES}")
 
     use_tqdm = "--no-progress" not in sys.argv
+    policy = RULE_BASED_VS_RANDOM
 
     # Warm up the pool (helps with accurate timing)
     print("Using parallel processing...")
     # Test a single game first to ensure everything loads
-    test_args = (12345, RULE_BASED_VS_RANDOM,
-                 list(RULE_BASED_VS_RANDOM.values())[0], 0)
+    test_args = (12345, policy, list(policy.values())[0], 0)
     run_single_game(test_args)
     print("Test game completed successfully, starting batch...")
 
-    run_simulations_parallel(RULE_BASED_VS_RANDOM, NUM_SIMULATIONS, use_tqdm)
+    run_simulations_parallel(policy, NUM_SIMULATIONS, use_tqdm)

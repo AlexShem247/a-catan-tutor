@@ -1,4 +1,4 @@
-from typing import List, Set, Tuple
+from typing import List, Set, Tuple, Dict, Optional
 
 from ai.SimPlayerState import SimPlayerState, dice_probability
 from ai.actions import ActionType, Action
@@ -6,7 +6,7 @@ from game.Game import Game
 from game.Player import Player
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
-from game.Vertex import Vertex
+from game.Vertex import Vertex, Port
 
 # Small value to avoid division by zero
 EPSILON = 1e-6
@@ -15,31 +15,31 @@ EPSILON = 1e-6
 # These limit search space to maintain acceptable runtime
 
 # Settlement candidate search limits
-MAX_EXTRA_ROADS_FOR_SETTLEMENT = 1       # Max roads to build to reach a settlement location
-MAX_POTENTIAL_VERTICES = 10               # Max vertices to consider in heuristic pre-filtering
-MAX_SETTLEMENTS_FOR_CITY_UPGRADE = 2     # Max settlements to consider for city upgrade
-MAX_SETTLEMENT_CANDIDATES = 3            # Max settlement candidates to include in action list
+MAX_EXTRA_ROADS_FOR_SETTLEMENT = 1  # Max roads to build to reach a settlement location
+MAX_POTENTIAL_VERTICES = 10  # Max vertices to consider in heuristic pre-filtering
+MAX_SETTLEMENTS_FOR_CITY_UPGRADE = 2  # Max settlements to consider for city upgrade
+MAX_SETTLEMENT_CANDIDATES = 3  # Max settlement candidates to include in action list
 
 # Candidate action generation thresholds
-MIN_CANDIDATES_FOR_ROAD = 3              # Minimum candidate count before considering road building
-ROAD_ETB_THRESHOLD = 10.0                # Max ETB to consider building a road
-DEV_CARD_ETB_THRESHOLD = 15.0            # Max ETB to consider buying development cards
-MAX_ARMY_SIZE_FOR_KNIGHT_PURCHASE = 5    # Don't buy knights if army size exceeds this
+MIN_CANDIDATES_FOR_ROAD = 3  # Minimum candidate count before considering road building
+ROAD_ETB_THRESHOLD = 10.0  # Max ETB to consider building a road
+DEV_CARD_ETB_THRESHOLD = 15.0  # Max ETB to consider buying development cards
+MAX_ARMY_SIZE_FOR_KNIGHT_PURCHASE = 5  # Don't buy knights if army size exceeds this
 
 # Expected VP thresholds for knight evaluation
-KNIGHT_DEFICIT_THRESHOLD = 2             # Knight deficit for reduced value
-LOW_KNIGHT_VALUE = 0.1                   # Value when far from the largest army
-HIGH_KNIGHT_VALUE = 2.0                  # Value when claiming the largest army
-MEDIUM_KNIGHT_VALUE = 0.5                # Value when maintaining the largest army
-MIN_EXPECTED_VP_FOR_KNIGHT = 0.2         # Minimum expected VP to consider knight purchase
+KNIGHT_DEFICIT_THRESHOLD = 2  # Knight deficit for reduced value
+LOW_KNIGHT_VALUE = 0.1  # Value when far from the largest army
+HIGH_KNIGHT_VALUE = 2.0  # Value when claiming the largest army
+MEDIUM_KNIGHT_VALUE = 0.5  # Value when maintaining the largest army
+MIN_EXPECTED_VP_FOR_KNIGHT = 0.2  # Minimum expected VP to consider knight purchase
 
 # ETW simulation performance limits
-ETW_SIMULATION_MAX_CANDIDATES = 5        # Max candidates to evaluate during ETW simulation
-ETW_ETB_THRESHOLD = 20.0                 # ETB threshold to abort ETW simulation
-ETW_NO_ACTION_PENALTY = 50.0             # Penalty added when no actions available
-ETW_MISSING_POINT_PENALTY = 10.0         # Penalty per missing victory point
-WIN_POINTS = 10                          # Victory points needed to win
-ETW_MAX_DEPTH_OFFSET = 5                 # Offset added to WIN_POINTS for simulation depth limit
+ETW_SIMULATION_MAX_CANDIDATES = 5  # Max candidates to evaluate during ETW simulation
+ETW_ETB_THRESHOLD = 20.0  # ETB threshold to abort ETW simulation
+ETW_NO_ACTION_PENALTY = 50.0  # Penalty added when no actions available
+ETW_MISSING_POINT_PENALTY = 10.0  # Penalty per missing victory point
+WIN_POINTS = 10  # Victory points needed to win
+ETW_MAX_DEPTH_OFFSET = 5  # Offset added to WIN_POINTS for simulation depth limit
 
 
 def get_reachable_vertices(start_vertex: Vertex, player: Player, available_vertices: List[Vertex]) -> Set[Vertex]:
@@ -64,21 +64,95 @@ def get_reachable_vertices(start_vertex: Vertex, player: Player, available_verti
     return visited
 
 
+def get_bank_trade_ratio(buildings: List[Vertex], resource: Resource) -> int:
+    """Returns the best available trade ratio for a resource (2:1, 3:1, or 4:1)."""
+    # Get all ports the player controls
+    controlled_ports = {v.port for v in buildings if v.port}
+
+    # Check for specific 2:1 port for this resource
+    specific_port = Port.resource_to_port(resource)
+    if specific_port in controlled_ports:
+        return 2
+
+    # Check for generic 3:1 port
+    if Port.THREE_TO_ONE in controlled_ports:
+        return 3
+
+    # Default bank rate
+    return 4
+
+
 def expected_rolls_for_resource(player: SimPlayerState, resource: Resource) -> float:
     """Estimate the expected number of dice rolls to gather one unit of the given resource."""
     fr = player.get_production_rate(resource)
 
-    if fr <= EPSILON:  # Use EPSILON constant
+    if fr <= EPSILON:
         return float("inf")  # Cannot produce this resource
 
     # Expected rolls to get one unit
     return 1 / fr
 
 
+def _calculate_deficits_and_excesses(current: ResourceCount, target: ResourceCount) \
+        -> Tuple[Dict[Resource, int], Dict[Resource, int]]:
+    """Calculate resource deficits and excesses relative to target."""
+    deficits, excesses = {}, {}
+
+    for resource in Resource:
+        needed = target.get(resource, 0)
+        have = current.get(resource, 0)
+
+        if have >= needed:
+            excesses[resource] = have - needed
+            deficits[resource] = 0
+        else:
+            excesses[resource] = 0
+            deficits[resource] = needed - have
+
+    return deficits, excesses
+
+
+def _calculate_trade_adjusted_rolls(
+        deficits: Dict[Resource, int],
+        excesses: Dict[Resource, int],
+        production_rates: Dict[Resource, float],
+        trade_ratio_func
+) -> Dict[Resource, float]:
+    """Calculate trade-adjusted rolls for each resource."""
+    trade_adjusted = {}
+
+    for resource_i in Resource:
+        if deficits[resource_i] <= 0:
+            trade_adjusted[resource_i] = 0.0
+            continue
+
+        # Direct production time
+        direct_rolls = deficits[resource_i] * production_rates[resource_i]
+
+        # Get trade ratio for converting to this resource
+        trade_ratio = trade_ratio_func(resource_i)
+
+        # Calculate Σ excess_rj / tradeRatio_j→i
+        trade_savings = 0.0
+        for resource_j in Resource:
+            if resource_j == resource_i:
+                continue
+
+            excess = excesses.get(resource_j, 0)
+            if excess > 0:
+                # Convert excess of resource_j to resource_i via trading
+                resource_i_from_trade = excess / trade_ratio
+                time_saved = resource_i_from_trade * production_rates[resource_i]
+                trade_savings += time_saved
+
+        # Apply formula: max(0, direct - savings)
+        trade_adjusted[resource_i] = max(0.0, direct_rolls - trade_savings)
+
+    return trade_adjusted
+
+
 def estimated_time_to_build(player: SimPlayerState, R_target: ResourceCount) -> float:
     """Optimised ETB calculation using expected values with caching."""
-
-    # Check cache
     target_key = tuple((r.value, R_target.get(r, 0)) for r in Resource)
     player_key = (
         player.player_number,
@@ -90,27 +164,33 @@ def estimated_time_to_build(player: SimPlayerState, R_target: ResourceCount) -> 
     if cache_key in player.etb_cache:
         return player.etb_cache[cache_key]
 
-    # Calculate expected rolls for each needed resource
-    max_rolls = 0.0
-    current = player.resources.copy()
+    # Get current resources
+    current = {r: player.resources.get(r, 0) for r in Resource}
 
-    for resource, needed in R_target.items():
-        if needed <= current.get(resource, 0):
-            continue
+    # Calculate production rates
+    production_rates = {
+        r: expected_rolls_for_resource(player, r)
+        for r in Resource
+    }
 
-        deficit = needed - current.get(resource, 0)
-        expected_per_unit = expected_rolls_for_resource(player, resource)
-        expected_rolls = deficit * expected_per_unit
+    # Calculate deficits and excesses
+    deficits, excesses = _calculate_deficits_and_excesses(current, R_target)
 
-        if expected_rolls > max_rolls:
-            max_rolls = expected_rolls
+    # Calculate trade-adjusted rolls
+    trade_adjusted_rolls = _calculate_trade_adjusted_rolls(
+        deficits=deficits,
+        excesses=excesses,
+        production_rates=production_rates,
+        trade_ratio_func=lambda r: get_bank_trade_ratio(player.settlements + player.cities, r)
+    )
 
-    # TODO: Include trading in calculation
+    # ETB = max of all resource times (parallel production)
+    etb = max(trade_adjusted_rolls.values())
 
     # Cache result
-    player.etb_cache[cache_key] = max_rolls
+    player.etb_cache[cache_key] = etb
 
-    return max_rolls
+    return etb
 
 
 def legal_settlement_vertex(player: SimPlayerState, vertex: Vertex) -> bool:
@@ -271,7 +351,7 @@ def get_candidate_actions(player: SimPlayerState, game: Game, dev_played: bool, 
 
     # 3. Development cards - only consider if we're close to the largest army or need VP
     points_needed = WIN_POINTS - player.victory_points()
-    if player.army_size >= 2 or points_needed <= 2:  # Buy cards if close to army or win
+    if player.army_size >= 2 or points_needed <= 2:
         dev_card_actions = purchase_development_card_action(player, game)
         candidate_actions.extend(dev_card_actions)
 
@@ -281,7 +361,7 @@ def get_candidate_actions(player: SimPlayerState, game: Game, dev_played: bool, 
         candidate_actions.extend(play_cards)
 
     # 5. Consider buying roads only if we have excess resources or need for settlements
-    if len(candidate_actions) < MIN_CANDIDATES_FOR_ROAD:  # Not many good options
+    if len(candidate_actions) < MIN_CANDIDATES_FOR_ROAD:
         road_cost = Game.BUILDING_COST[Buildable.ROAD]
         road_etb = estimated_time_to_build(player, road_cost)
         # Only add road if we can build it relatively quickly
@@ -360,7 +440,7 @@ def purchase_development_card_action(player: SimPlayerState, game: Game) -> \
     deck_actions: List[Tuple[List[Action], float, float]] = []
     card_purchase_etb = estimated_time_to_build(player, Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD])
 
-    if card_purchase_etb > DEV_CARD_ETB_THRESHOLD:  # Too expensive, skip
+    if card_purchase_etb > DEV_CARD_ETB_THRESHOLD:
         return deck_actions
 
     actions = [Action(ActionType.BUY_DEV_CARD)]
@@ -371,10 +451,10 @@ def purchase_development_card_action(player: SimPlayerState, game: Game) -> \
         deck_actions.append((actions, card_purchase_etb, vp_prob))
 
     # Chance of drawing a Knight card (only if we need knights)
-    if player.army_size < MAX_ARMY_SIZE_FOR_KNIGHT_PURCHASE:  # Don't buy knights if we already have many
+    if player.army_size < MAX_ARMY_SIZE_FOR_KNIGHT_PURCHASE:
         knight_prob = deck.get_probability(DevelopmentCardType.KNIGHT, player.dev_cards)
         vp_gain_knight = expected_vp_from_knight(player, game)
-        if knight_prob * vp_gain_knight > MIN_EXPECTED_VP_FOR_KNIGHT:  # Only if worthwhile
+        if knight_prob * vp_gain_knight > MIN_EXPECTED_VP_FOR_KNIGHT:
             deck_actions.append(
                 (actions + [Action(ActionType.END_TURN), Action(ActionType.PLAY_DEV_CARD, DevelopmentCardType.KNIGHT)],
                  card_purchase_etb + 1, knight_prob * vp_gain_knight))
@@ -478,20 +558,63 @@ def simulate_step(player: SimPlayerState, game: Game, step: Action):
 
 
 def choose_max_utility_action(player: Player, utilities: List[Tuple[Action, float]]) -> Action:
-    """Choose action with the highest utility."""
-    affordable_actions = []
+    """Choose best action, including bank trades if needed."""
+    best_action = None
+    best_utility = float("-inf")
 
     for action, utility in utilities:
-        # Calculate resource cost for this action
+        # Check if player can afford this action directly
         cost = calc_step_resources(action)
 
-        # Only include if player can afford it
         if player.can_afford(cost):
-            affordable_actions.append((action, utility))
+            # Directly affordable
+            if utility > best_utility:
+                best_utility = utility
+                best_action = action
+        else:
+            # Check if we can afford it with bank trades
+            bank_trade_action = _get_bank_trade_for_action(player, cost)
+            if bank_trade_action:
+                # The action + bank trade is affordable
+                if utility > best_utility:
+                    best_utility = utility
+                    best_action = bank_trade_action
 
-    if not affordable_actions:
-        # No affordable action, end turn
-        return Action(ActionType.END_TURN)
+    if best_action:
+        return best_action
 
-    # Return action with the highest utility
-    return max(affordable_actions, key=lambda x: x[1])[0]
+    # No affordable actions even with bank trades
+    return Action(ActionType.END_TURN)
+
+
+def _get_bank_trade_for_action(player: Player, cost: ResourceCount) -> Optional[Action]:
+    """Find a single bank trade that helps make the action affordable."""
+
+    # Find first resource we're short on
+    for needed_resource, needed_amount in cost.items():
+        have = player.resources.get(needed_resource, 0)
+        if have < needed_amount:
+            # Try to find a resource to sell
+            for sell_resource in Resource:
+                if sell_resource == needed_resource:
+                    continue
+
+                have_sell = player.resources.get(sell_resource, 0)
+                if have_sell <= 0:
+                    continue
+
+                # Get trade ratio for the SELL resource
+                trade_ratio = get_bank_trade_ratio(player.settlements + player.cities, sell_resource)
+
+                # Can we get at least 1 of the needed resource?
+                if have_sell >= trade_ratio:
+                    # Create a trade for exactly 1 of the needed resource
+                    return Action(
+                        ActionType.TRADE_WITH_BANK,
+                        payload=(
+                            {sell_resource: trade_ratio},
+                            {needed_resource: 1}
+                        )
+                    )
+
+    return None

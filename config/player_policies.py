@@ -18,6 +18,13 @@ RULE_BASED_VS_RANDOM: PlayerConfig = {
     PlayerNumber.P4: RandomAI,
 }
 
+RULE_BASED_VS_BASIC: PlayerConfig = {
+    PlayerNumber.P1: RuleBasedAI,
+    PlayerNumber.P2: BasicAI,
+    PlayerNumber.P3: BasicAI,
+    PlayerNumber.P4: BasicAI,
+}
+
 BASIC_VS_RANDOM: PlayerConfig = {
     PlayerNumber.P1: BasicAI,
     PlayerNumber.P2: RandomAI,

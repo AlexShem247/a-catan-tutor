@@ -207,8 +207,35 @@ class BasicAI(AI):
 
     def select_initial_settlement_location(self, player: Player, game: Game, available_vertices: List[Vertex]) \
             -> Optional[Vertex]:
-        """Select a settlement location from available vertices."""
-        return random.choice(available_vertices) if available_vertices else None
+        """Select a settlement location from available vertices using a simple heuristic."""
+
+        def score_vertex(vertex: Vertex) -> float:
+            score = 0
+
+            # Sum the probabilities of adjacent tiles
+            for tile in vertex.hexes:
+                score += tile.production_number or 0
+
+            # Reward resource diversity
+            resources = {tile.resource for tile in vertex.hexes if tile.resource}
+
+            return score + len(resources) * 1.5
+
+        if not available_vertices:
+            return None
+
+        # Pick the vertex with the highest score (break ties randomly)
+        best_score = -1
+        best_vertices = []
+        for v in available_vertices:
+            s = score_vertex(v)
+            if s > best_score:
+                best_score = s
+                best_vertices = [v]
+            elif s == best_score:
+                best_vertices.append(v)
+
+        return random.choice(best_vertices)
 
     def select_initial_road_location(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
         """Select a road location from available edges."""
