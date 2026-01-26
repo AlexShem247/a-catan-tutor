@@ -1,12 +1,9 @@
 import random
-from typing import Tuple, Optional, List
 
 from ai.AI import AI
 from ai.RandomAI import RandomAI
-from ai.SimPlayerState import SimPlayerState
-from ai.actions import Phase, Action, ActionType
-from ai.heuristics import dice_probability, get_reachable_vertices, simulate_step, \
-    estimated_time_to_win, get_candidate_actions, choose_max_utility_action, get_opponents, EPSILON
+from ai.actions import Phase
+from ai.heuristics import *
 from config.Weight import Weight
 from game.Edge import Edge
 from game.Game import Game
@@ -39,8 +36,54 @@ class RuleBasedAI(AI):
         return best_vertex
 
     def select_initial_road_location(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
-        """Choose the initial road that moves toward the highest-utility settlement vertex."""
-        return self.random_policy.select_initial_road_location(player, game, available_edges)
+        """First settlement: road toward the best legal vertex. Second: try to connect."""
+        if not available_edges:
+            return None
+
+        if len(player.settlements) + len(player.cities) >= 2:
+            return self.road_building_placement(player, game, available_edges)
+
+        current_settlement = player.settlements[-1]
+
+        # Get all legal settlement vertices on the board
+        legal_vertices = get_legal_settlement_vertices(game)
+
+        if len(player.settlements) == 1:
+            # FIRST SETTLEMENT: Find the best legal vertex, build road toward it
+            best_vertex = max(
+                legal_vertices,
+                key=lambda v: self._vertex_utility(v, player, game, legal_vertices, first_settlement=False),
+                default=None
+            )
+
+            if best_vertex:
+                # Find which available edge gets us closest to this best vertex
+                return find_edge_toward_vertex(current_settlement, best_vertex, available_edges)
+
+        else:
+            # SECOND SETTLEMENT: Try to connect to first settlement
+            first_settlement = player.settlements[0]
+
+            # Check if any available edge helps connect to first settlement
+            for edge in available_edges:
+                other_vertex = edge.get_other_vertex(current_settlement)
+
+                # Check if this edge moves us toward first settlement
+                if moves_toward_vertex(other_vertex, first_settlement):
+                    return edge
+
+            # If no connection possible, build toward the best legal vertex (same as first)
+            best_vertex = max(
+                legal_vertices,
+                key=lambda v: self._vertex_utility(v, player, game, legal_vertices, first_settlement=False),
+                default=None
+            )
+
+            if best_vertex:
+                return find_edge_toward_vertex(current_settlement, best_vertex, available_edges)
+
+        # Fallback
+        return random.choice(available_edges) if available_edges else None
 
     def _vertex_utility(
             self,
@@ -275,3 +318,27 @@ class RuleBasedAI(AI):
         best_action = choose_max_utility_action(player, utilities)
 
         return best_action
+
+    def road_building_placement(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
+        """Place road: connect gaps first, otherwise build toward the best settlement."""
+
+        # 1. Try to connect disconnected parts of road network
+        connecting_edge = find_gap_connection(player, available_edges)
+        if connecting_edge:
+            return connecting_edge
+
+        # 2. Build toward the best potential settlement
+        legal_vertices = get_legal_settlement_vertices(game)
+        if legal_vertices:
+            best_vertex = max(
+                legal_vertices,
+                key=lambda v: self._vertex_utility(v, player, game, legal_vertices, first_settlement=False),
+                default=None
+            )
+
+            if best_vertex:
+                # Find edge that moves toward the best vertex from any of our structures
+                return find_edge_toward_vertex_from_any(player, best_vertex, available_edges)
+
+        # 3. Random fallback
+        return random.choice(available_edges) if available_edges else None
