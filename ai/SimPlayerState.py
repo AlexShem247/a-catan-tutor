@@ -1,8 +1,9 @@
 from collections import Counter
 from functools import lru_cache
-from typing import List, TYPE_CHECKING, Dict, Tuple
+from typing import List, TYPE_CHECKING, Dict, Tuple, NamedTuple
 
 from game.Board import Board
+from game.Game import Game
 from game.Edge import Edge
 from game.PlayerAssets import DevelopmentCardType
 from game.Resources import ResourceCount, Resource
@@ -28,7 +29,7 @@ def dice_probability(number: int) -> float:
 class SimPlayerState:
     """Lightweight player model for ETW forward simulation with caching."""
 
-    def __init__(self, player: "Player"):
+    def __init__(self, player: "Player", opponent: bool = False):
         """Create a simulation state from a real Player."""
         self.player_number = player.player_number
 
@@ -41,9 +42,13 @@ class SimPlayerState:
         self.roads: List[Edge] = list(player.roads)
 
         # Development cards
-        self.dev_cards: Counter[DevelopmentCardType] = Counter(
-            c.card_type for c in player.development_cards
-        )
+        if opponent:
+            # We do not know development cards
+            self.dev_cards: Counter[DevelopmentCardType] = Counter()
+        else:
+            self.dev_cards: Counter[DevelopmentCardType] = Counter(
+                c.card_type for c in player.development_cards
+            )
 
         # Achievements
         self.longest_road_length: int = player.longest_road_length
@@ -168,3 +173,8 @@ class SimPlayerState:
             self._production_cache[resource] = fr
 
         return self._production_cache[resource]
+
+
+class SimGame(NamedTuple):
+    player_state: SimPlayerState
+    game: Game

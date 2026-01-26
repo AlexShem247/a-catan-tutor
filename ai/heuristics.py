@@ -1,9 +1,10 @@
 from typing import List, Set, Tuple, Dict, Optional
 
-from ai.SimPlayerState import SimPlayerState, dice_probability
+from ai.SimPlayerState import SimPlayerState, dice_probability, SimGame
 from ai.actions import ActionType, Action
 from game.Edge import Edge
 from game.Game import Game
+from game.HexTile import HexTile
 from game.Player import Player
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
@@ -41,6 +42,8 @@ ETW_NO_ACTION_PENALTY = 50.0  # Penalty added when no actions available
 ETW_MISSING_POINT_PENALTY = 10.0  # Penalty per missing victory point
 WIN_POINTS = 10  # Victory points needed to win
 ETW_MAX_DEPTH_OFFSET = 5  # Offset added to WIN_POINTS for simulation depth limit
+MAX_EVALUATIONS = 5  # Maximum number of candidate actions to evaluate per turn
+MAX_ETB_THRESHOLD = 15.0  # Maximum ETB value to consider an action (higher = ignore)
 
 
 def get_reachable_vertices(start_vertex: Vertex, player: Player, available_vertices: List[Vertex]) -> Set[Vertex]:
@@ -234,7 +237,7 @@ def calc_step_resources(step: Action) -> ResourceCount:
     return total_resources
 
 
-def distant_settlement_candidates(player: SimPlayerState) \
+def distant_settlement_candidates(player: SimPlayerState, sim_game: SimGame) \
         -> List[Tuple[List[Action], float, float]]:
     """Find settlement candidates with optimised search and pruning."""
     if len(player.settlements) >= Buildable.SETTLEMENT.max_on_board:
@@ -259,7 +262,7 @@ def distant_settlement_candidates(player: SimPlayerState) \
     for v in network_vertices:
         all_vertices.update([v])
         for edge in v.edges:
-            if edge not in player_roads_set and edge.owner is None:
+            if edge not in player_roads_set and edge.owner is None and edge not in sim_game.player_state.roads:
                 all_vertices.add(edge.get_other_vertex(v))
 
     # Phase 1: Check immediate network vertices (0 roads)
@@ -278,7 +281,7 @@ def distant_settlement_candidates(player: SimPlayerState) \
     # Phase 2: Check vertices reachable with 1 road (limited to top N by heuristic)
     potential_vertices = []
     for vertex in all_vertices - network_vertices - all_player_vertices:
-        if not legal_settlement_vertex(player, vertex):
+        if not legal_settlement_vertex(sim_game.player_state, vertex):
             continue
 
         # Simple heuristic: number of adjacent hexes with good production
@@ -297,7 +300,7 @@ def distant_settlement_candidates(player: SimPlayerState) \
         for start_vertex in network_vertices:
             for edge in start_vertex.edges:
                 if edge.get_other_vertex(start_vertex) == vertex:
-                    if edge.owner is None and edge not in player_roads_set:
+                    if edge.owner is None and edge not in player_roads_set and edge not in sim_game.player_state.roads:
                         # This is a direct connection
                         actions = [
                             Action(ActionType.BUILD, (Buildable.ROAD, edge)),
@@ -313,7 +316,7 @@ def distant_settlement_candidates(player: SimPlayerState) \
     return candidate_actions
 
 
-def get_candidate_actions(player: SimPlayerState, game: Game, dev_played: bool, max_candidates: int = 8) \
+def get_candidate_actions(player: SimPlayerState, sim_game: SimGame, dev_played: bool, max_candidates: int = 8) \
         -> List[Tuple[List[Action], float, float]]:
     """Generate candidate actions with intelligent pruning and caching."""
 
@@ -345,7 +348,7 @@ def get_candidate_actions(player: SimPlayerState, game: Game, dev_played: bool, 
             candidate_actions.append(([Action(ActionType.BUILD, (Buildable.CITY, s))], city_etb, 1))
 
     # 2. Settlement candidates with distance limit
-    settlement_candidates = distant_settlement_candidates(player)
+    settlement_candidates = distant_settlement_candidates(player, sim_game)
     # Sort by ETB and take top N
     settlement_candidates.sort(key=lambda x: x[1])
     candidate_actions.extend(settlement_candidates[:MAX_SETTLEMENT_CANDIDATES])
@@ -353,12 +356,12 @@ def get_candidate_actions(player: SimPlayerState, game: Game, dev_played: bool, 
     # 3. Development cards - only consider if we're close to the largest army or need VP
     points_needed = WIN_POINTS - player.victory_points()
     if player.army_size >= 2 or points_needed <= 2:
-        dev_card_actions = purchase_development_card_action(player, game)
+        dev_card_actions = purchase_development_card_action(player, sim_game.game)
         candidate_actions.extend(dev_card_actions)
 
     # 4. Play development cards if available (only if not already played this turn)
     if not dev_played:
-        play_cards = play_development_card_action(player, game)
+        play_cards = play_development_card_action(player, sim_game.game)
         candidate_actions.extend(play_cards)
 
     # 5. Consider buying roads only if we have excess resources or need for settlements
@@ -463,7 +466,8 @@ def purchase_development_card_action(player: SimPlayerState, game: Game) -> \
     return deck_actions
 
 
-def estimated_time_to_win(player: SimPlayerState, game: Game, dev_played: bool, max_iterations: int = 8) -> float:
+def estimated_time_to_win(player: SimPlayerState, sim_game: SimGame, dev_played: bool, max_iterations: int = 8) \
+        -> float:
     """Optimised ETW calculation with memorisation and early pruning."""
 
     # Create cache key
@@ -495,7 +499,7 @@ def estimated_time_to_win(player: SimPlayerState, game: Game, dev_played: bool, 
 
     while points < WIN_POINTS and iterations < max_depth:
         # Get candidates but limit number
-        candidate_actions = get_candidate_actions(sim_player, game, dev_played,
+        candidate_actions = get_candidate_actions(sim_player, sim_game, dev_played,
                                                   max_candidates=ETW_SIMULATION_MAX_CANDIDATES)
 
         if not candidate_actions:
@@ -515,7 +519,7 @@ def estimated_time_to_win(player: SimPlayerState, game: Game, dev_played: bool, 
 
         # Apply actions
         for step in actions:
-            simulate_step(sim_player, game, step)
+            simulate_step(sim_player, sim_game.game, step)
 
         iterations += 1
 
@@ -529,7 +533,7 @@ def estimated_time_to_win(player: SimPlayerState, game: Game, dev_played: bool, 
 
 
 def get_opponents(player: SimPlayerState, game: Game) -> List[SimPlayerState]:
-    return [SimPlayerState(p) for p in game.players if p.player_number != player.player_number]
+    return [SimPlayerState(p, opponent=True) for p in game.players if p.player_number != player.player_number]
 
 
 def simulate_step(player: SimPlayerState, game: Game, step: Action):
@@ -558,7 +562,8 @@ def simulate_step(player: SimPlayerState, game: Game, step: Action):
             player.add_knight(opp_armies)
 
 
-def choose_max_utility_action(player: Player, utilities: List[Tuple[Action, float]]) -> Action:
+def choose_max_utility_action(player: SimPlayerState, utilities: List[Tuple[Action, float]],
+                              ignore_affordability: bool = False) -> Action:
     """Choose best action, including bank trades if needed."""
     best_action = None
     best_utility = float("-inf")
@@ -567,7 +572,7 @@ def choose_max_utility_action(player: Player, utilities: List[Tuple[Action, floa
         # Check if player can afford this action directly
         cost = calc_step_resources(action)
 
-        if player.can_afford(cost):
+        if player.can_afford(cost) or ignore_affordability:
             # Directly affordable
             if utility > best_utility:
                 best_utility = utility
@@ -588,7 +593,7 @@ def choose_max_utility_action(player: Player, utilities: List[Tuple[Action, floa
     return Action(ActionType.END_TURN)
 
 
-def _get_bank_trade_for_action(player: Player, cost: ResourceCount) -> Optional[Action]:
+def _get_bank_trade_for_action(player: SimPlayerState, cost: ResourceCount) -> Optional[Action]:
     """Find a single bank trade that helps make the action affordable."""
 
     # Find first resource we're short on
@@ -747,3 +752,24 @@ def find_edge_toward_vertex_from_any(player: Player, target_vertex: Vertex,
                 best_edge = edge
 
     return best_edge
+
+
+def score_hex_for_opponent(opponent: Player, game: Game, hex_tile: HexTile, importance: Dict[Resource, float]) \
+        -> float:
+    """Calculates importance of hex tile for opponent"""
+
+    resource = hex_tile.resource
+
+    # Resource not needed
+    if resource not in importance:
+        return 0.0
+
+    imp = importance[resource]
+
+    # Expected production
+    production = (
+            dice_probability(hex_tile.production_number)
+            * game.count_player_buildings(opponent, hex_tile)
+    )
+
+    return imp * production

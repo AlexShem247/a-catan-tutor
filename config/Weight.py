@@ -36,9 +36,4 @@ class Weight:
     # Time discount factor
     TIME_DISCOUNT_RATE = 0.1  # Discount rate for future actions (higher = prefer immediate gains)
 
-    # Performance optimization limits
-    MAX_EVALUATIONS = 5  # Maximum number of candidate actions to evaluate per turn
-    MAX_CANDIDATES_GENERATE = 8  # Maximum number of candidate actions to generate per turn
-    MAX_ETW_SIMULATION_DEPTH_SHALLOW = 5  # ETW simulation depth for candidate evaluation
-    MAX_ETW_SIMULATION_DEPTH_DEEP = 8  # ETW simulation depth for main planning
-    MAX_ETB_THRESHOLD = 15.0  # Maximum ETB value to consider an action (higher = ignore)
+    OPPONENT_INTERFERENCE_LEADING = 0.8  # How much leading player is weighted when calculating interference

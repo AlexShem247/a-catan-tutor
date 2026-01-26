@@ -140,23 +140,42 @@ class RuleBasedAI(AI):
 
     def select_robber_target(self, player: Player, game: Game, valid_hexes: List[HexTile]) \
             -> Tuple[HexTile, Optional[Player]]:
-        # 1. Score each valid hex
-        best_score = -1
-        best_hex = None
-        our_resource_tiles = {h for v in player.settlements + player.cities for h in v.hexes}
+        best_score = float("-inf")
+        best_hex: Optional[HexTile] = None
 
+        # All hexes we touch (for penalty)
+        our_resource_tiles = {h for v in (player.settlements + player.cities) for h in v.hexes}
+
+        # Compute opponent importance
+        opponent_importance: Dict[Player, Dict[Resource, float]] = {}
+        for opponent in game.players:
+            if opponent == player:
+                continue
+
+            best_action = self.calculate_best_main_game_action(SimPlayerState(opponent), game, False,
+                                                               ignore_affordability=True, ignore_opponents=True)
+
+            required = calc_step_resources(best_action)
+            total = sum(required.values())
+
+            opponent_importance[opponent] = {res: amt / total for res, amt in required.items() if amt > 0} \
+                if total > 0 else {}
+
+        # Score each valid hex
         for h in valid_hexes:
-            # Players on this hex
             players_on_h = [p for p in game.get_players_on_hex(h) if p != player]
+
+            if not players_on_h:
+                continue
+
             score = 0.0
             for p in players_on_h:
-                # Dummy I(): always 1
-                # TODO: Replace with indicator function based on inferred opponent needs
-                score += p.calc_victory_points()[0] * 1
-            # Multiply by dice probability
+                score += score_hex_for_opponent(p, game, h, opponent_importance[p]) * p.calc_victory_points()[0]
+
+            # Weight by dice probability
             score *= dice_probability(h.production_number)
 
-            # Tie-breaking: prefer hex we do not occupy
+            # Penalise blocking ourselves
             if h in our_resource_tiles:
                 score *= Weight.ROBBER_OWN_HEX_PENALTY
 
@@ -164,31 +183,73 @@ class RuleBasedAI(AI):
                 best_score = score
                 best_hex = h
 
+        # Fallback
         if best_hex is None:
             best_hex = random.choice(valid_hexes)
 
-        # 2. Choose player to steal from
+        # Pick steal target
         players_on_best_hex = [p for p in game.get_players_on_hex(best_hex) if p != player]
 
         if not players_on_best_hex:
             return best_hex, None
 
-        # Pick player with most cards weighted by VP
-        best_player = max(
-            players_on_best_hex,
-            key=lambda pl: sum(p.resources.values()) * pl.calc_victory_points()[0]
-        )
-
+        best_player = max(players_on_best_hex, key=lambda pl: sum(pl.resources.values()) * pl.calc_victory_points()[0])
         return best_hex, best_player
 
     def select_discard_resources(self, player: Player, game: Game, num_resources: int) -> ResourceCount:
-        return self.random_policy.select_discard_resources(player, game, num_resources)
+        """Select resources to discard, keeping critical ones for best next action."""
+        have = player.resources.copy()
+        best_action = self.calculate_best_main_game_action(SimPlayerState(player), game, False)
+        needed = calc_step_resources(best_action)
+        surplus = {r: max(0, have[r] - needed.get(r, 0)) for r in have}
+        discard = {r: 0 for r in have}
+        remaining = num_resources
+
+        while remaining > 0:
+            r = min(
+                have.keys(),
+                key=lambda x: (surplus[x] <= 0, have[x], x in (Resource.ORE, Resource.WHEAT))
+            )
+            discard[r] += 1
+            have[r] -= 1
+            if surplus[r] > 0:
+                surplus[r] -= 1
+            remaining -= 1
+
+        return discard
 
     def select_year_of_plenty_resources(self, player: Player, game: Game) -> ResourceCount:
-        return self.random_policy.select_year_of_plenty_resources(player, game)
+        """Select the two most-needed resources for the player's next action."""
+        best_action = self.calculate_best_main_game_action(SimPlayerState(player), game, False)
+        needed = calc_step_resources(best_action)
+        # Sort resources by how much is still needed, descending
+        sorted_needed = sorted(needed, key=lambda r: max(0, needed[r] - player.resources[r]), reverse=True)
+        # Pick up to two, fill with any if less than two
+        picked = sorted_needed[:2] + [r for r in Resource if r not in sorted_needed][:max(0, 2 - len(sorted_needed))]
+        return {r: 1 for r in picked[:2]}
 
     def select_monopoly_resource(self, player: Player, game: Game) -> Resource:
-        return self.random_policy.select_monopoly_resource(player, game)
+        """Select the resource that will most hurt opponents based on their likely next actions."""
+        # Estimate resource needs for all opponents
+        need_counts: Dict[Resource, int] = {r: 0 for r in Resource}
+        for opponent in game.players:
+            if opponent == player:
+                continue
+
+            best_action = self.calculate_best_main_game_action(
+                SimPlayerState(opponent), game, False,
+                ignore_affordability=True, ignore_opponents=True
+            )
+
+            required = calc_step_resources(best_action)
+            for r, amt in required.items():
+                if amt > 0:
+                    need_counts[r] += 1  # Count how many opponents need this resource
+
+        # Pick the resource needed by the most opponents (tie-break randomly)
+        max_count = max(need_counts.values())
+        candidates = [r for r, c in need_counts.items() if c == max_count]
+        return random.choice(candidates)
 
     def respond_to_trade(self, player: Player, game: Game, selling: ResourceCount, buying: ResourceCount) \
             -> Tuple[bool, Optional[ResourceCount]]:
@@ -233,7 +294,8 @@ class RuleBasedAI(AI):
         return max(k, 0.0)
 
     def _evaluate_utilities(self, player: SimPlayerState, game: Game, dev_played: bool,
-                            candidates: List[Tuple[List[Action], float, float]], etw_before: float) \
+                            candidates: List[Tuple[List[Action], float, float]], etw_before: float,
+                            opponents_etw_before: Dict[SimPlayerState, float]) \
             -> List[Tuple[Action, float]]:
 
         self._eval_stats["evaluations"] += 1
@@ -244,11 +306,11 @@ class RuleBasedAI(AI):
         candidates.sort(key=lambda x: x[1])
 
         # Only evaluate top N candidates
-        max_eval = min(Weight.MAX_EVALUATIONS, len(candidates))
+        max_eval = min(MAX_EVALUATIONS, len(candidates))
 
         for actions, etb, _ in candidates[:max_eval]:
             # Skip actions that take too long
-            if etb > Weight.MAX_ETB_THRESHOLD:
+            if etb > MAX_ETB_THRESHOLD:
                 continue
 
             step = actions[0]
@@ -257,8 +319,7 @@ class RuleBasedAI(AI):
 
             # Use cached ETW with reduced simulation depth
             etw_after = estimated_time_to_win(
-                player_copy, game, dev_played,
-                max_iterations=Weight.MAX_ETW_SIMULATION_DEPTH_SHALLOW
+                player_copy, SimGame(player_copy, game), dev_played,
             )
 
             # Self Utility Calculation
@@ -266,6 +327,24 @@ class RuleBasedAI(AI):
                 u_self = 0
             else:
                 u_self = max(0.0, (etw_before - etw_after) / etw_before * 100)
+
+            # Opponent-Interference Utility Calculation
+            u_opp = 0.0
+            leading_opponent = None if not opponents_etw_before else \
+                min(opponents_etw_before, key=opponents_etw_before.get)
+            for opponent, opponent_etw_before in opponents_etw_before.items():
+                opponent_etw_after = estimated_time_to_win(
+                    opponent, SimGame(player_copy, game), False,
+                )
+                if opponent_etw_before == 0:
+                    delay_caused = 0
+                else:
+                    delay_caused = max(0.0, (opponent_etw_after - opponent_etw_before) / opponent_etw_before * 100)
+
+                if opponent == leading_opponent:
+                    u_opp += Weight.OPPONENT_INTERFERENCE_LEADING * delay_caused
+                else:
+                    u_opp += (1 - Weight.OPPONENT_INTERFERENCE_LEADING) / 2 * delay_caused
 
             # Special Calculation
             u_special = 0.0
@@ -283,39 +362,52 @@ class RuleBasedAI(AI):
 
             # Discount for time: ETB of the action itself
             discount_rate = Weight.TIME_DISCOUNT_RATE  # Use weight for discount rate
-            eu = ((Weight.BUILD_SELF_UTILITY * u_self + Weight.BUILD_SPECIAL_UTILITY * u_special) /
+            eu = ((Weight.BUILD_SELF_UTILITY * u_self + Weight.BUILD_OPPONENT_UTILITY * u_opp +
+                   Weight.BUILD_SPECIAL_UTILITY * u_special) /
                   ((1 + discount_rate) ** max(1.0, etb)))  # Ensure at least 1 to avoid division by 0
 
             utilities.append((step, eu))
 
         return utilities
 
-    def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:
-        if phase == Phase.PRE_ROLL:
-            return Action(ActionType.ROLL)
-
+    def calculate_best_main_game_action(self, sim_player: SimPlayerState, game: Game, dev_played: bool,
+                                        ignore_affordability: bool = False, ignore_opponents: bool = False) \
+            -> Action:
         # Main Phase
-        sim_player = SimPlayerState(player)
         etw_before = estimated_time_to_win(
-            sim_player.copy(), game, dev_played,
-            max_iterations=Weight.MAX_ETW_SIMULATION_DEPTH_DEEP
+            sim_player.copy(), SimGame(sim_player, game), dev_played,
         )
+
+        opponents_etw_before: Dict[SimPlayerState, float] = {}
+        if not ignore_opponents:
+            for opponent in get_opponents(sim_player, game):
+                opponents_etw_before[opponent] = estimated_time_to_win(
+                    opponent.copy(), SimGame(sim_player, game), False,
+                )
 
         # Get limited candidate actions
         candidates = get_candidate_actions(
-            sim_player, game, dev_played,
-            max_candidates=Weight.MAX_CANDIDATES_GENERATE
+            sim_player, SimGame(sim_player, game), dev_played,
         )
 
         if not candidates:
             return Action(ActionType.END_TURN)
 
-        utilities = self._evaluate_utilities(sim_player, game, dev_played, candidates, etw_before)
+        utilities = self._evaluate_utilities(sim_player, game, dev_played, candidates, etw_before, opponents_etw_before)
 
         if not utilities:
             return Action(ActionType.END_TURN)
 
-        best_action = choose_max_utility_action(player, utilities)
+        best_action = choose_max_utility_action(sim_player, utilities, ignore_affordability=ignore_affordability)
+
+        return best_action
+
+    def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:
+        if phase == Phase.PRE_ROLL:
+            return Action(ActionType.ROLL)
+
+        # Main Phase
+        best_action = self.calculate_best_main_game_action(SimPlayerState(player), game, dev_played)
 
         return best_action
 

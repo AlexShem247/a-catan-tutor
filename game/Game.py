@@ -448,3 +448,19 @@ class Game:
     def get_ports(self) -> List[Tuple[Port, Vertex, Vertex]]:
         """Returns the list of ports and their position"""
         return self._board.port_vertices
+
+    def count_player_buildings(self, player: Player, hex_tile: HexTile) -> int:
+        """Counts how many resource units a player produces on this hex."""
+
+        count = 0
+        for vertex in hex_tile.vertices:
+
+            if vertex.owner != player:
+                continue
+
+            if vertex.building == Building.CITY:
+                count += 2
+            else:
+                count += 1
+
+        return count
