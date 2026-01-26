@@ -1,4 +1,4 @@
-class Weight:
+class StrategyWeights:
     # Initial placement weights
     INIT_PLACE_YIELD = 1.0  # Expected dice yield importance for first/second settlements
     INIT_PLACE_DIVERSITY = 0.5  # Value of having diverse resources initially
@@ -8,6 +8,7 @@ class Weight:
     BUILD_SELF_UTILITY = 1.0  # Importance of advancing own plan (reducing ETW)
     BUILD_OPPONENT_UTILITY = 0.5  # Importance of delaying or interfering with opponents
     BUILD_SPECIAL_UTILITY = 0.3  # Importance of special objectives (Longest Road, Largest Army)
+    OPPONENT_INTERFERENCE_LEADING = 0.8  # How much leading player is weighted when calculating interference
 
     # Longest Road utility weights
     LR_BASE = 0.2  # Baseline value of Longest Road progress
@@ -36,4 +37,18 @@ class Weight:
     # Time discount factor
     TIME_DISCOUNT_RATE = 0.1  # Discount rate for future actions (higher = prefer immediate gains)
 
-    OPPONENT_INTERFERENCE_LEADING = 0.8  # How much leading player is weighted when calculating interference
+    # Settlement strategy
+    MAX_SETTLEMENTS_FOR_CITY_UPGRADE = 2  # Max settlements to consider for city upgrade
+    MIN_CANDIDATES_FOR_ROAD = 3  # Min candidate actions before considering road building
+    MAX_ARMY_SIZE_FOR_KNIGHT_PURCHASE = 5  # Don't buy knights if army size exceeds this
+
+    # Knight evaluation
+    KNIGHT_DEFICIT_THRESHOLD = 2  # Knight deficit for reduced value
+    LOW_KNIGHT_VALUE = 0.1  # Value when far from the largest army
+    HIGH_KNIGHT_VALUE = 2.0  # Value when claiming the largest army
+    MEDIUM_KNIGHT_VALUE = 0.5  # Value when maintaining the largest army
+    MIN_EXPECTED_VP_FOR_KNIGHT = 0.2  # Minimum expected VP to consider knight purchase
+
+    # ETW (Estimated Time to Win) strategy
+    ETW_NO_ACTION_PENALTY = 50.0  # Penalty added when no actions available
+    ETW_MISSING_POINT_PENALTY = 10.0  # Penalty per missing victory point

@@ -1,5 +1,5 @@
-from ai.BasicAI import BasicAI
-from ai.RandomAI import RandomAI
+from ai.baseline_ais.BasicAI import BasicAI
+from ai.baseline_ais.RandomAI import RandomAI
 from ai.RuleBasedAI import RuleBasedAI
 from game.Game import PlayerConfig
 from game.Player import PlayerNumber
