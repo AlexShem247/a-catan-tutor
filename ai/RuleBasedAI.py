@@ -2,13 +2,13 @@ import random
 from typing import Optional, List, Dict, Tuple
 
 from ai.AI import AI
-from ai.EtwEstimator import EtwEstimator
-from ai.SimPlayerState import SimPlayerState, dice_probability
-from ai.actions import Phase, ActionType, Action
-from ai.baseline_ais.RandomAI import RandomAI
-from ai.board_sim_utils import get_legal_settlement_vertices, find_edge_toward_vertex, moves_toward_vertex, \
+from ai.ai_utils.EtwEstimator import EtwEstimator
+from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability
+from ai.ai_utils.actions import Phase, ActionType, Action
+from ai.RandomAI import RandomAI
+from ai.ai_utils.board_sim_utils import get_legal_settlement_vertices, find_edge_toward_vertex, moves_toward_vertex, \
     get_reachable_vertices, score_hex_for_opponent, find_gap_connection, find_edge_toward_vertex_from_any
-from ai.resource_utils import calc_step_resources
+from ai.ai_utils.resource_utils import calc_step_resources
 from config.StrategyWeights import StrategyWeights
 from game.Edge import Edge
 from game.Game import Game
@@ -260,16 +260,6 @@ class RuleBasedAI(AI):
         """Respond to a proposed trade using fallback random policy."""
         return self.random_policy.respond_to_trade(player, game, selling, buying)
 
-    def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:
-        """Determine the next action to take for the current phase of the game."""
-        if phase == Phase.PRE_ROLL:
-            return Action(ActionType.ROLL)
-
-        # Main Phase
-        best_action = self.etw_estimator.calculate_best_game_action(SimPlayerState(player), game, dev_played)
-
-        return best_action
-
     def road_building_placement(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
         """Select an edge for road building, prioritising network connections or high-utility settlements."""
         # 1. Try to connect disconnected parts of road network
@@ -292,3 +282,13 @@ class RuleBasedAI(AI):
 
         # 3. Random fallback
         return random.choice(available_edges) if available_edges else None
+
+    def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:
+        """Determine the next action to take for the current phase of the game."""
+        if phase == Phase.PRE_ROLL:
+            return Action(ActionType.ROLL)
+
+        # Main Phase
+        best_action = self.etw_estimator.calculate_best_game_action(SimPlayerState(player), game, dev_played)
+
+        return best_action

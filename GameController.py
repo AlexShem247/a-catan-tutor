@@ -1,6 +1,6 @@
 from typing import List, Tuple, Optional, Dict
 
-from ai.actions import ActionType, Phase
+from ai.ai_utils.actions import ActionType, Phase
 from config.view_constants import AI_DECISION_ANIMATION_DELAY, AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE, \
     SHOW_AI_BUILT_LOCATIONS
 from game.Edge import Edge, EdgeDirection

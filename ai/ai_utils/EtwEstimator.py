@@ -1,11 +1,11 @@
 from typing import List, Tuple, Dict
 
-from ai.SimPlayerState import SimPlayerState, dice_probability, SimGame
-from ai.action_utils import compute_k_la, distant_settlement_candidates, purchase_development_card_action, \
+from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability, SimGame
+from ai.ai_utils.action_utils import compute_k_la, distant_settlement_candidates, purchase_development_card_action, \
     choose_max_utility_action, play_development_card_action
-from ai.actions import ActionType, Action
-from ai.board_sim_utils import get_opponents
-from ai.resource_utils import expected_rolls_for_resource, get_bank_trade_ratio, calc_step_resources
+from ai.ai_utils.actions import ActionType, Action
+from ai.ai_utils.board_sim_utils import get_opponents
+from ai.ai_utils.resource_utils import expected_rolls_for_resource, get_bank_trade_ratio, calc_step_resources
 from config.StrategyWeights import StrategyWeights
 from config.performance_constants import ETW_MAX_DEPTH_OFFSET, MAX_ETB_THRESHOLD, MAX_EVALUATIONS, \
     MAX_SETTLEMENT_CANDIDATES, ROAD_ETB_THRESHOLD, ETW_ETB_THRESHOLD, ETW_SIMULATION_MAX_CANDIDATES

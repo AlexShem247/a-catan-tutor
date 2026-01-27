@@ -1,6 +1,6 @@
 from typing import List, Set, Dict, Optional
 
-from ai.SimPlayerState import SimPlayerState, dice_probability
+from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability
 from game.Edge import Edge
 from game.Game import Game
 from game.HexTile import HexTile

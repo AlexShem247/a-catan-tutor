@@ -1,9 +1,9 @@
 from typing import List, Tuple, Optional, TYPE_CHECKING
 
-from ai.SimPlayerState import SimPlayerState, dice_probability, SimGame
-from ai.actions import ActionType, Action
-from ai.board_sim_utils import legal_settlement_vertex, get_opponents
-from ai.resource_utils import calc_step_resources, get_bank_trade_ratio
+from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability, SimGame
+from ai.ai_utils.actions import ActionType, Action
+from ai.ai_utils.board_sim_utils import legal_settlement_vertex, get_opponents
+from ai.ai_utils.resource_utils import calc_step_resources, get_bank_trade_ratio
 from config.StrategyWeights import StrategyWeights
 from config.performance_constants import MAX_EXTRA_ROADS_FOR_SETTLEMENT, MAX_POTENTIAL_VERTICES, \
     DEV_CARD_ETB_THRESHOLD, EPSILON
@@ -12,7 +12,7 @@ from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
 
 if TYPE_CHECKING:
-    from ai.EtwEstimator import EtwEstimator
+    from ai.ai_utils.EtwEstimator import EtwEstimator
 
 
 def distant_settlement_candidates(player: SimPlayerState, sim_game: SimGame, etw_estimator: "EtwEstimator") \
