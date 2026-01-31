@@ -61,3 +61,5 @@ class StrategyWeights:
     ACCEPT_ETW_WEIGHT = 1.0  # How strongly opponent benefit drives acceptance
     ACCEPT_COST_WEIGHT = 0.5  # Penalty per card the opponent gives
     ACCEPT_HISTORY_WEIGHT = 0.3  # Influence of past acceptance behaviour
+    CLOSE_OPPONENT_VP_GAP = 2  # Opponent is considered close if within this VP gap of the agent
+    TRADE_LEADER_PENALTY = 0.5  # Small bias against trading with the current leader

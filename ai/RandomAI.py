@@ -33,9 +33,7 @@ class RandomAI(AI):
             result[r] = result.get(r, 0) + 1
         return result
 
-    def choose_trade_partner(self,
-                             player: Player,
-                             game: Game,
+    def choose_trade_partner(self, player: Player, game: "Game", selling: ResourceCount, buying: ResourceCount,
                              available_players: List[Tuple[Player, Optional[ResourceCount]]],
                              ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
         """Randomly select a trade partner from offers the AI can afford."""
@@ -82,15 +80,9 @@ class RandomAI(AI):
         """Randomly pick a resource to monopolise."""
         return random.choice(list(Resource))
 
-    def respond_to_trade(self,
-                         player: Player,
-                         game: Game,
-                         selling: ResourceCount,
-                         buying: ResourceCount,
-                         ) -> Tuple[bool, Optional[ResourceCount]]:
+    def respond_to_trade(self, player: Player, game: "Game", opponent: Player, selling: ResourceCount,
+                         buying: ResourceCount) -> Tuple[bool, Optional[ResourceCount]]:
         """Randomly accept or reject a trade, assuming AI can afford it."""
-
-        # Randomly decide to accept or reject the trade
         return random.choice([True, False]), None
 
     def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:

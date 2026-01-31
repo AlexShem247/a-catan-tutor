@@ -16,9 +16,7 @@ class AI(ABC):
     """Abstract interface for AI decision-making logic in the game."""
 
     @abstractmethod
-    def choose_trade_partner(self,
-                             player: Player,
-                             game: "Game",
+    def choose_trade_partner(self, player: Player, game: "Game", selling: ResourceCount, buying: ResourceCount,
                              available_players: List[Tuple[Player, Optional[ResourceCount]]],
                              ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
         """Pick a player to trade with and optionally propose a counteroffer."""
@@ -60,12 +58,8 @@ class AI(ABC):
         pass
 
     @abstractmethod
-    def respond_to_trade(self,
-                         player: Player,
-                         game: "Game",
-                         selling: ResourceCount,
-                         buying: ResourceCount,
-                         ) -> Tuple[bool, Optional[ResourceCount]]:
+    def respond_to_trade(self, player: Player, game: "Game", opponent: Player, selling: ResourceCount,
+                         buying: ResourceCount) -> Tuple[bool, Optional[ResourceCount]]:
         """Evaluate a trade offer and decide to accept, reject, or propose a counteroffer."""
         pass
 

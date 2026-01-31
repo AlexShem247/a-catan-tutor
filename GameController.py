@@ -125,7 +125,8 @@ class GameController:
                 else:
                     # AI can only respond if it has enough resources to give
                     if player.can_afford(buying):
-                        interested, counter = player.policy.respond_to_trade(player, self._game, selling, buying)
+                        interested, counter = player.policy.respond_to_trade(
+                            player, self._game, selling_player, selling, buying)
                     else:
                         interested, counter = False, None
 
@@ -347,7 +348,8 @@ class GameController:
                     ]
 
                     if affordable_offers:
-                        deal = player.policy.choose_trade_partner(player, self._game, affordable_offers)
+                        deal = player.policy.choose_trade_partner(player, self._game, selling, buying,
+                                                                  affordable_offers)
                         if deal is not None:
                             buying_player, counter = deal
                             if counter is not None:

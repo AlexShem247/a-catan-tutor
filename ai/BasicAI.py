@@ -100,9 +100,7 @@ class BasicAI(AI):
         weights = [self._player_trade_weight(p) for p in players]
         return random.choices(players, weights=weights, k=1)[0]
 
-    def choose_trade_partner(self,
-                             player: Player,
-                             game: Game,
+    def choose_trade_partner(self, player: Player, game: "Game", selling: ResourceCount, buying: ResourceCount,
                              available_players: List[Tuple[Player, Optional[ResourceCount]]],
                              ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
         """Select a trade partner or counteroffer from offers the AI can afford."""
@@ -314,12 +312,8 @@ class BasicAI(AI):
         """Select a resource for a Monopoly card."""
         return random.choice(list(Resource))
 
-    def respond_to_trade(self,
-                         player: Player,
-                         game: Game,
-                         selling: ResourceCount,
-                         buying: ResourceCount,
-                         ) -> Tuple[bool, Optional[ResourceCount]]:
+    def respond_to_trade(self, player: Player, game: "Game", opponent: Player, selling: ResourceCount,
+                         buying: ResourceCount) -> Tuple[bool, Optional[ResourceCount]]:
         """Decide whether to accept or counter a trade, assuming AI can afford it."""
 
         # 1. AI expected trade ratio for this round

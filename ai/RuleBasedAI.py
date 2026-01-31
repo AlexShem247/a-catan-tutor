@@ -3,12 +3,12 @@ from typing import Optional, List, Dict, Tuple
 
 from ai.AI import AI
 from ai.ai_utils.EtwEstimator import EtwEstimator
-from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability
+from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability, SimGame
 from ai.ai_utils.actions import Phase, ActionType, Action
-from ai.RandomAI import RandomAI
 from ai.ai_utils.board_sim_utils import get_legal_settlement_vertices, find_edge_toward_vertex, moves_toward_vertex, \
-    get_reachable_vertices, score_hex_for_opponent, find_gap_connection, find_edge_toward_vertex_from_any
+    get_reachable_vertices, score_hex_for_opponent, find_gap_connection, find_edge_toward_vertex_from_any, get_opponents
 from ai.ai_utils.resource_utils import calc_step_resources
+from ai.ai_utils.trade_utils import respond_to_trade_batna, select_best_trade_partner
 from config.StrategyWeights import StrategyWeights
 from game.Edge import Edge
 from game.Game import Game
@@ -20,7 +20,6 @@ from game.Vertex import Vertex
 
 class RuleBasedAI(AI):
     def __init__(self):
-        self.random_policy = RandomAI()
         self.etw_estimator = EtwEstimator()
 
     def new_turn(self):
@@ -140,11 +139,26 @@ class RuleBasedAI(AI):
 
         return utility
 
-    def choose_trade_partner(self, player: Player, game: Game,
-                             available_players: List[Tuple[Player, Optional[ResourceCount]]]) \
-            -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+    def choose_trade_partner(self, player: Player, game: "Game", selling: ResourceCount, buying: ResourceCount,
+                             available_players: List[Tuple[Player, Optional[ResourceCount]]],
+                             ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
         """Return the chosen trade partner using fallback random policy."""
-        return self.random_policy.choose_trade_partner(player, game, available_players)
+        sim_player = SimPlayerState(player)
+        selection = select_best_trade_partner(
+            player_sim=sim_player,
+            sim_game=SimGame(sim_player, game),
+            etw_estimator=self.etw_estimator,
+            selling_orig=selling,
+            buying=buying,
+            available_players=[(SimPlayerState(player), offer) for (player, offer) in available_players],
+        )
+
+        if selection is None:
+            return None
+        chosen_sim_player, counter = selection
+        chosen_player = next(p for p in game.players if p.player_number == chosen_sim_player.player_number)
+
+        return chosen_player, counter
 
     def select_robber_target(self, player: Player, game: Game, valid_hexes: List[HexTile]) \
             -> Tuple[HexTile, Optional[Player]]:
@@ -258,10 +272,19 @@ class RuleBasedAI(AI):
         candidates = [r for r, c in need_counts.items() if c == max_count]
         return random.choice(candidates)
 
-    def respond_to_trade(self, player: Player, game: Game, selling: ResourceCount, buying: ResourceCount) \
-            -> Tuple[bool, Optional[ResourceCount]]:
+    def respond_to_trade(self, player: Player, game: "Game", opponent: Player, selling: ResourceCount,
+                         buying: ResourceCount) -> Tuple[bool, Optional[ResourceCount]]:
         """Respond to a proposed trade using fallback random policy."""
-        return self.random_policy.respond_to_trade(player, game, selling, buying)
+        sim_player = SimPlayerState(player)
+        return respond_to_trade_batna(
+            player_sim=sim_player,
+            opponent_sim=SimPlayerState(opponent),
+            sim_game=SimGame(sim_player, game),
+            etw_estimator=self.etw_estimator,
+            selling_to_us=selling,
+            buying_from_us=buying,
+            opponents=get_opponents(sim_player, game),
+        )
 
     def road_building_placement(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
         """Select an edge for road building, prioritising network connections or high-utility settlements."""
