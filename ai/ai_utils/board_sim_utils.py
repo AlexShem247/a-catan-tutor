@@ -40,7 +40,7 @@ def legal_settlement_vertex(player: SimPlayerState, vertex: Vertex) -> bool:
     # Check 2-distance rule: no neighbor of this vertex has a building
     for edge in vertex.edges:
         neighbour = edge.get_other_vertex(vertex)
-        if neighbour in [player.settlements + player.cities] or neighbour.owner is not None:
+        if neighbour in (player.settlements + player.cities) or neighbour.owner is not None:
             # Neighbour owned
             return False
 

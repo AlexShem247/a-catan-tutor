@@ -44,7 +44,7 @@ class EtwEstimator:
         current = {r: player.resources.get(r, 0) for r in Resource}
 
         # Calculate production rates
-        production_rates = {
+        rolls_per_unit = {
             r: expected_rolls_for_resource(player, r)
             for r in Resource
         }
@@ -58,7 +58,7 @@ class EtwEstimator:
             opponents=get_opponents(player, game),
             deficits=deficits,
             excesses=excesses,
-            production_rates=production_rates,
+            rolls_per_unit=rolls_per_unit,
             bank_trade_ratio_func=lambda r: get_bank_trade_ratio(player.settlements + player.cities, r),
             include_player_trades=include_player_trades
         )
@@ -73,37 +73,46 @@ class EtwEstimator:
 
     def _calculate_trade_adjusted_rolls(self, player: SimPlayerState, opponents: List[SimPlayerState],
                                         deficits: Dict[Resource, int], excesses: Dict[Resource, int],
-                                        production_rates: Dict[Resource, float],
+                                        rolls_per_unit: Dict[Resource, float],
                                         bank_trade_ratio_func, include_player_trades: bool) -> Dict[Resource, float]:
         """Compute expected rolls for each resource, adjusted by bank/port trades and player trades."""
-        trade_adjusted = {}
+        trade_adjusted: Dict[Resource, float] = {}
 
         for resource_i in Resource:
+            # No time required if we already have enough of this resource
             if deficits[resource_i] <= 0:
                 trade_adjusted[resource_i] = 0.0
                 continue
 
-            # Direct production time
-            direct_rolls = deficits[resource_i] * production_rates[resource_i]
+            # Expected rolls to produce the missing amount of resource_i directly
+            direct_rolls = deficits[resource_i] * rolls_per_unit[resource_i]
 
-            # Bank/port trades
+            # Bank/port trades: convert excess resources into resource_i
+            # The trade ratio depends on the resource being sold (resource_j)
             bank_savings = 0.0
-            bank_ratio = bank_trade_ratio_func(resource_i)
             for resource_j, excess in excesses.items():
                 if resource_j == resource_i or excess <= 0:
                     continue
-                bank_savings += (excess / bank_ratio) * production_rates[resource_i]
 
-            # Player trades (assume reasonable trades always accepted)
+                sell_ratio = bank_trade_ratio_func(resource_j)
+                units_gained = excess / max(1, sell_ratio)
+                bank_savings += units_gained * rolls_per_unit[resource_i]
+
+            # Player trades: estimate savings from exchanging excess resources with opponents
+            # using the AI's fair trade ratio heuristic
             player_savings = 0.0
             if include_player_trades:
                 for resource_j, excess in excesses.items():
                     if resource_j == resource_i or excess <= 0:
                         continue
-                    # Use the “fair” trade ratio our AI would propose
-                    ratio = player_trade_ratio_func(resource_j, resource_i, player, opponents, production_rates)
-                    player_savings += (excess / ratio) * production_rates[resource_i]
 
+                    ratio = player_trade_ratio_func(
+                        resource_j, resource_i, player, opponents, rolls_per_unit
+                    )
+                    units_gained = excess / max(1, ratio)
+                    player_savings += units_gained * rolls_per_unit[resource_i]
+
+            # Net expected rolls after accounting for trade-based savings
             trade_adjusted[resource_i] = max(0.0, direct_rolls - bank_savings - player_savings)
 
         return trade_adjusted

@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 from GameController import GameController
 from ai.AI import AI
-from config.player_policies import RULE_BASED_VS_RANDOM
+from config.player_policies import RULE_BASED_VS_BASIC
 from game.Player import PlayerNumber
 from view.HeadlessView import HeadlessView
 
@@ -154,7 +154,7 @@ if __name__ == "__main__":
     print(f"CPU cores available: {NUM_PROCESSES}")
 
     use_tqdm = "--no-progress" not in sys.argv
-    policy = RULE_BASED_VS_RANDOM
+    policy = RULE_BASED_VS_BASIC
 
     # Warm up the pool (helps with accurate timing)
     print("Using parallel processing...")

@@ -209,15 +209,15 @@ def propose_trade(player: SimPlayerState, sim_game: SimGame, R_need: Resource, s
 
 
 def player_trade_ratio_func(resource_give: Resource, resource_need: Resource, player: SimPlayerState,
-                            opponents: List[SimPlayerState], production_rates: Dict[Resource, float],
+                            opponents: List[SimPlayerState], rolls_per_unit: Dict[Resource, float],
                             max_ratio: int = StrategyWeights.MAX_PLAYER_TRADE_GIVE_RATIO,
                             lambda_leader: float = StrategyWeights.LAMBDA_RISK_LEADER,
                             lambda_base: float = StrategyWeights.LAMBDA_RISK_BASE,
                             ) -> int:
     """Return an offered give:take ratio for resource_give -> resource_need based on scarcity and risk."""
     # production_rates[r] is "expected rolls per 1 unit" in your codebase (higher => slower/rarer)
-    give_r = production_rates.get(resource_give, math.inf)
-    need_r = production_rates.get(resource_need, math.inf)
+    give_r = rolls_per_unit.get(resource_give, math.inf)
+    need_r = rolls_per_unit.get(resource_need, math.inf)
 
     # If the needed resource is not producible (infinite rolls), we treat it as maximally scarce
     if math.isinf(need_r):
@@ -269,7 +269,7 @@ def _is_close_or_leading(opponent: SimPlayerState, us: SimPlayerState, all_playe
     return vp_gap >= -StrategyWeights.CLOSE_OPPONENT_VP_GAP  # e.g. allow small negative gap; tune weight
 
 
-def _generate_counter_payments_keep_offer_fixed(production_rates: Dict[Resource, float], selling_to_us: ResourceCount,
+def _generate_counter_payments_keep_offer_fixed(rolls_per_unit: Dict[Resource, float], selling_to_us: ResourceCount,
                                                 buying_from_us: ResourceCount) -> List[ResourceCount]:
     """Produce counter payments from us while keeping their offered selling_to_us fixed."""
     counters: List[ResourceCount] = []
@@ -283,9 +283,9 @@ def _generate_counter_payments_keep_offer_fixed(production_rates: Dict[Resource,
     take_rolls = 0.0
 
     for r, q in buying_from_us.items():
-        give_rolls += q * production_rates.get(r, math.inf)
+        give_rolls += q * rolls_per_unit.get(r, math.inf)
     for r, q in selling_to_us.items():
-        take_rolls += q * production_rates.get(r, math.inf)
+        take_rolls += q * rolls_per_unit.get(r, math.inf)
 
     # If defined and we appear to overpay, scale payment down
     if give_rolls > 0 and not math.isinf(give_rolls) and not math.isinf(take_rolls):
@@ -373,10 +373,10 @@ def respond_to_trade_batna(player_sim: SimPlayerState, opponent_sim: Optional[Si
         # “Too helpful” condition (your Eq 2.14 style)
         if close_or_leading and delta_opp >= lambda_risk * delta_ai:
             # Try counter-offers that keep overlap but improve our side.
-            production_rates = {r: expected_rolls_for_resource(player_sim, r) for r in Resource}
+            rolls_per_unit = {r: expected_rolls_for_resource(player_sim, r) for r in Resource}
 
             counters = _generate_counter_payments_keep_offer_fixed(
-                production_rates=production_rates,
+                rolls_per_unit=rolls_per_unit,
                 selling_to_us=selling_to_us,
                 buying_from_us=buying_from_us
             )
