@@ -104,6 +104,33 @@ def _predict_acceptance_prob(_: SimPlayerState, delta_etw: float, trade: Action)
     return 1.0 / (1.0 + math.exp(-score))
 
 
+def _apply_trade_copy(player: SimPlayerState, trade: Action) -> SimPlayerState:
+    selling, buying = trade.payload
+    p2 = player.copy()
+    p2.remove_resources(selling)
+    p2.add_resources(buying)
+    return p2
+
+
+def _cheap_score_offer(player: SimPlayerState, sim_game: SimGame, etw_estimator: "EtwEstimator",
+                       trade: Action, p_accept: float) -> float:
+    """
+    Cheap proxy score: ETB to obtain the requested resource quantity after the trade, adjusted by acceptance prob.
+    Lower is better.
+    """
+    selling, buying = trade.payload
+    target: ResourceCount = {r: q for r, q in buying.items()}
+
+    etb_before = etw_estimator.estimated_time_to_build(player, sim_game.game, target, include_player_trades=False)
+    p2 = _apply_trade_copy(player, trade)
+    etb_after = etw_estimator.estimated_time_to_build(p2, sim_game.game, target, include_player_trades=False)
+
+    if etb_after >= etb_before:
+        return float("inf")
+
+    return etb_after / max(p_accept, EPSILON)
+
+
 def propose_trade(player: SimPlayerState, sim_game: SimGame, R_need: Resource, surplus: ResourceCount,
                   opponents: List[SimPlayerState], etw_estimator: "EtwEstimator",
                   lambda_leader: float = StrategyWeights.LAMBDA_RISK_LEADER,
@@ -111,15 +138,21 @@ def propose_trade(player: SimPlayerState, sim_game: SimGame, R_need: Resource, s
     """BATNA-based trade module. Returns best trade if exists"""
     best_offer = None
     best_score = float("inf")  # We minimise expected net ETW (or ETW reduction is maximised)
+    shortlist_k = 6
+
     leading_player = max([player, *opponents], key=lambda p: p.victory_points())
     batna_etw = etw_estimator.estimated_time_to_win(player, sim_game, False, include_player_trades=False)
 
     # Generate candidate offers to j from surplus S towards R_need
     candidates = _generate_candidate_offers(R_need, surplus)
+    if not candidates:
+        return None
+
+    # Stage 1: cheap ranking (no ETW calls)
+    cheap_pool: List[Tuple[float, SimPlayerState, Action, float]] = []
+    # (cheap_score, opponent, offer, p_accept)
 
     for opponent in opponents:
-        lambda_risk = lambda_leader if opponent == leading_player else lambda_base
-
         for offer in candidates:
             surplus_offering, R_requesting = offer.payload
             assert all(player.resources.get(r, 0) >= q for r, q in surplus_offering.items())
@@ -128,31 +161,50 @@ def propose_trade(player: SimPlayerState, sim_game: SimGame, R_need: Resource, s
             if any(opponent.resources.get(r, 0) < q for r, q in R_requesting.items()):
                 continue
 
-            # Must beat BATNA for player
-            etw_after = _evaluate_etw_after_trade(player, sim_game, etw_estimator, offer)
-            if etw_after >= batna_etw:
-                continue  # Reject: not better than BATNA
-
-            # Estimate opponent impact - avoid helping too much
-            delta_etw_player = batna_etw - etw_after
-            delta_etw_opp = _estimate_opponent_benefit_etw(opponent, sim_game, etw_estimator, offer)
-
-            # Reject if opponent benefits "too much" relative to agent
-            if delta_etw_opp >= lambda_risk * delta_etw_player:
-                continue
-
             # Likely acceptable? (opponent model from history + observed resources)
-            p_accept = _predict_acceptance_prob(opponent, delta_etw_opp, offer)
+            # Use neutral benefit here; ETW-based benefit is deferred to stage 2
+            p_accept = _predict_acceptance_prob(opponent, 0.0, offer)
             if p_accept < StrategyWeights.MIN_TRADE_ACCEPT_PROB:
                 continue
 
-            # Score: best net ETW reduction, adjusted by accept likelihood
-            # Lower score is better
-            score = etw_after / max(p_accept, EPSILON)
+            # Cheap proxy: does this trade reduce ETB for the requested resource?
+            cheap_score = _cheap_score_offer(player, sim_game, etw_estimator, offer, p_accept)
+            if math.isinf(cheap_score):
+                continue
 
-            if score < best_score:
-                best_score = score
-                best_offer = offer
+            cheap_pool.append((cheap_score, opponent, offer, p_accept))
+
+    if not cheap_pool:
+        return None
+
+    # Keep only the top-K most promising offers
+    cheap_pool.sort(key=lambda x: x[0])
+    shortlisted = cheap_pool[:max(1, shortlist_k)]
+
+    # Stage 2: expensive ETW confirmation
+    for _, opponent, offer, p_accept in shortlisted:
+        lambda_risk = lambda_leader if opponent == leading_player else lambda_base
+
+        # Must beat BATNA for player
+        etw_after = _evaluate_etw_after_trade(player, sim_game, etw_estimator, offer)
+        if etw_after >= batna_etw:
+            continue  # Reject: not better than BATNA
+
+        # Estimate opponent impact - avoid helping too much
+        delta_etw_player = batna_etw - etw_after
+        delta_etw_opp = _estimate_opponent_benefit_etw(opponent, sim_game, etw_estimator, offer)
+
+        # Reject if opponent benefits "too much" relative to agent
+        if delta_etw_opp >= lambda_risk * delta_etw_player:
+            continue
+
+        # Score: best net ETW reduction, adjusted by accept likelihood
+        # Lower score is better
+        score = etw_after / max(p_accept, EPSILON)
+
+        if score < best_score:
+            best_score = score
+            best_offer = offer
 
     return best_offer
 
@@ -377,12 +429,12 @@ def respond_to_trade_batna(player_sim: SimPlayerState, opponent_sim: Optional[Si
 
 
 def select_best_trade_partner(
-    player_sim: SimPlayerState,
-    sim_game: SimGame,
-    etw_estimator,
-    selling_orig: ResourceCount,
-    buying: ResourceCount,
-    available_players: List[Tuple[SimPlayerState, Optional[ResourceCount]]],
+        player_sim: SimPlayerState,
+        sim_game: SimGame,
+        etw_estimator,
+        selling_orig: ResourceCount,
+        buying: ResourceCount,
+        available_players: List[Tuple[SimPlayerState, Optional[ResourceCount]]],
 ) -> Optional[Tuple[SimPlayerState, Optional[ResourceCount]]]:
     """Pick the partner (and optional counter) that yields the lowest ETW-after, subject to risk constraints."""
     if not available_players:
@@ -409,7 +461,7 @@ def select_best_trade_partner(
         # 1–2) Only accept if it improves our ETW vs BATNA
         sim_after = player_sim.copy()
         sim_after.remove_resources(selling)  # we pay
-        sim_after.add_resources(buying)      # we receive
+        sim_after.add_resources(buying)  # we receive
 
         etw_after = etw_estimator.estimated_time_to_win(
             sim_after, sim_game, False, include_player_trades=False
@@ -423,8 +475,8 @@ def select_best_trade_partner(
             opp_sim, sim_game, False, include_player_trades=False
         )
         sim_opp_after = opp_sim.copy()
-        sim_opp_after.add_resources(selling)   # they receive what we pay
-        sim_opp_after.remove_resources(buying) # they pay what we receive
+        sim_opp_after.add_resources(selling)  # they receive what we pay
+        sim_opp_after.remove_resources(buying)  # they pay what we receive
 
         etw_opp_after = etw_estimator.estimated_time_to_win(
             sim_opp_after, sim_game, False, include_player_trades=False
