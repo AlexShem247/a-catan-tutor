@@ -14,6 +14,9 @@ from game.Vertex import Vertex
 
 class RandomAI(AI):
     """Purely random Catan AI with no strategic logic."""
+    def new_turn(self):
+        pass
+
     def _choose_resources(self, player: Player, num_resources: int) -> ResourceCount:
         """Randomly select a number of resources from available ones."""
         # Flatten all available resources into a pool

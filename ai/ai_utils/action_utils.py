@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional, TYPE_CHECKING
 from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability, SimGame
 from ai.ai_utils.actions import ActionType, Action
 from ai.ai_utils.board_sim_utils import legal_settlement_vertex, get_opponents
-from ai.ai_utils.resource_utils import calc_step_resources, get_bank_trade_ratio
+from ai.ai_utils.resource_utils import get_bank_trade_ratio
 from config.StrategyWeights import StrategyWeights
 from config.performance_constants import MAX_EXTRA_ROADS_FOR_SETTLEMENT, MAX_POTENTIAL_VERTICES, \
     DEV_CARD_ETB_THRESHOLD, EPSILON
@@ -50,7 +50,7 @@ def distant_settlement_candidates(player: SimPlayerState, sim_game: SimGame, etw
 
         if legal_settlement_vertex(player, vertex):
             actions = [Action(ActionType.BUILD, (Buildable.SETTLEMENT, vertex))]
-            etb = etw_estimator.calc_etb_actions(player, actions)
+            etb = etw_estimator.calc_etb_actions(player, sim_game.game, actions)
             candidate_actions.append((actions, etb, 1))
 
     if max_extra_roads == 0:
@@ -84,7 +84,7 @@ def distant_settlement_candidates(player: SimPlayerState, sim_game: SimGame, etw
                             Action(ActionType.BUILD, (Buildable.ROAD, edge)),
                             Action(ActionType.BUILD, (Buildable.SETTLEMENT, vertex))
                         ]
-                        etb = etw_estimator.calc_etb_actions(player, actions)
+                        etb = etw_estimator.calc_etb_actions(player, sim_game.game, actions)
                         candidate_actions.append((actions, etb, 1))
                         break
             else:
@@ -122,7 +122,8 @@ def purchase_development_card_action(player: SimPlayerState, game: Game, etw_est
         return []
 
     deck_actions: List[Tuple[List[Action], float, float]] = []
-    card_purchase_etb = etw_estimator.estimated_time_to_build(player, Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD])
+    card_purchase_etb = etw_estimator.estimated_time_to_build(player, game,
+                                                              Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD])
 
     if card_purchase_etb > DEV_CARD_ETB_THRESHOLD:
         return deck_actions
@@ -146,38 +147,7 @@ def purchase_development_card_action(player: SimPlayerState, game: Game, etw_est
     return deck_actions
 
 
-def choose_max_utility_action(player: SimPlayerState, utilities: List[Tuple[Action, float]],
-                              ignore_affordability: bool = False) -> Action:
-    """Select the action with maximum utility, considering affordability and bank trades."""
-    best_action = None
-    best_utility = float("-inf")
-
-    for action, utility in utilities:
-        # Check if player can afford this action directly
-        cost = calc_step_resources(action)
-
-        if player.can_afford(cost) or ignore_affordability:
-            # Directly affordable
-            if utility > best_utility:
-                best_utility = utility
-                best_action = action
-        else:
-            # Check if we can afford it with bank trades
-            bank_trade_action = _get_bank_trade_for_action(player, cost)
-            if bank_trade_action:
-                # The action + bank trade is affordable
-                if utility > best_utility:
-                    best_utility = utility
-                    best_action = bank_trade_action
-
-    if best_action:
-        return best_action
-
-    # No affordable actions even with bank trades
-    return Action(ActionType.END_TURN)
-
-
-def _get_bank_trade_for_action(player: SimPlayerState, cost: ResourceCount) -> Optional[Action]:
+def get_bank_trade_for_action(player: SimPlayerState, cost: ResourceCount) -> Optional[Action]:
     """Return a single bank trade action to make an unaffordable action feasible, or None."""
 
     # Find first resource we're short on

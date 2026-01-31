@@ -16,7 +16,6 @@ from game.HexTile import HexTile
 
 class BasicAI(AI):
     """Baseline Catan AI using mostly random decisions with simple heuristic bias."""
-
     TOTAL_ROUNDS = 20
     MAX_RATIO = 4
     HUMAN_BIAS_WEIGHT, AI_BIAS_WEIGHT = 1.2, 1.0
@@ -37,6 +36,9 @@ class BasicAI(AI):
     def __init__(self):
         self.build_target: Optional[Buildable | False] = None  # None = not yet initialised, False = no target
         self.turn_state: Optional[BasicAI._State] = None
+
+    def new_turn(self):
+        pass
 
     def _get_required_trade_ratio(self, round_num: int) -> int:
         """Compute AI's required trade ratio based on the round number."""

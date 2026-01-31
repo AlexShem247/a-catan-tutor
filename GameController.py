@@ -300,6 +300,8 @@ class GameController:
 
     def make_round_move_ai(self, player: Player):
         """AI turn driven by policy-selected actions."""
+        player.policy.new_turn()
+
         used_dev_card = False
         messages = []
 

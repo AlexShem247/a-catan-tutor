@@ -52,3 +52,12 @@ class StrategyWeights:
     # ETW (Estimated Time to Win) strategy
     ETW_NO_ACTION_PENALTY = 50.0  # Penalty added when no actions available
     ETW_MISSING_POINT_PENALTY = 10.0  # Penalty per missing victory point
+
+    # Player Trades configuration
+    LAMBDA_RISK_LEADER = 0.5  # Risk-aversion weight for player trades: limits how much we are willing to help leader
+    LAMBDA_RISK_BASE = 0.3  # Risk-aversion weight for player trades: limits how much we are willing to help an opponent
+    MAX_PLAYER_TRADE_GIVE_RATIO = 4  # Maximum cards we are willing to give for one in a player trade
+    MIN_TRADE_ACCEPT_PROB = 0.1  # Minimum estimated acceptance probability for proposing a trade
+    ACCEPT_ETW_WEIGHT = 1.0  # How strongly opponent benefit drives acceptance
+    ACCEPT_COST_WEIGHT = 0.5  # Penalty per card the opponent gives
+    ACCEPT_HISTORY_WEIGHT = 0.3  # Influence of past acceptance behaviour

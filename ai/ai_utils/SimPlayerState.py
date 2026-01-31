@@ -124,6 +124,11 @@ class SimPlayerState:
         for r, c in resources.items():
             self.resources[r] = self.resources.get(r, 0) + c
 
+    def remove_resources(self, resources: ResourceCount) -> None:
+        """Remove resources."""
+        for r, c in resources.items():
+            self.resources[r] = max(0, self.resources.get(r, 0) - c)
+
     def build_settlement(self, vertex: Vertex) -> None:
         """Add a settlement (no legality checking)."""
         self.settlements.append(vertex)

@@ -76,6 +76,11 @@ class AI(ABC):
 
         Returns:
             Action: the chosen action to execute
-            None or Action(ActionType.END_TURN): no further actions this turn
+            Action(ActionType.END_TURN): no further actions this turn
         """
+        pass
+
+    @abstractmethod
+    def new_turn(self):
+        """Method called at the beginning of every round"""
         pass

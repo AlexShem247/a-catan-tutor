@@ -23,6 +23,9 @@ class RuleBasedAI(AI):
         self.random_policy = RandomAI()
         self.etw_estimator = EtwEstimator()
 
+    def new_turn(self):
+        self.etw_estimator.new_turn()
+
     def select_initial_settlement_location(self, player: Player, game: Game, available_vertices: List[Vertex]) \
             -> Optional[Vertex]:
         """Return the best initial settlement vertex based on utility evaluation."""
@@ -290,5 +293,13 @@ class RuleBasedAI(AI):
 
         # Main Phase
         best_action = self.etw_estimator.calculate_best_game_action(SimPlayerState(player), game, dev_played)
+
+        # Keep track on success of player trades
+        if best_action.type == ActionType.TRADE_WITH_PLAYER:
+            self.etw_estimator._last_trade_proposed = True
+            self.etw_estimator._last_trade_resources = player.resources.copy()
+        else:
+            self.etw_estimator._last_trade_proposed = False
+            self.etw_estimator._last_trade_resources = None
 
         return best_action
