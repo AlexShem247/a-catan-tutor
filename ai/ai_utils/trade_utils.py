@@ -5,7 +5,7 @@ from ai.ai_utils.SimPlayerState import SimPlayerState, SimGame
 from ai.ai_utils.actions import Action, ActionType
 from ai.ai_utils.resource_utils import expected_rolls_for_resource
 from config.StrategyWeights import StrategyWeights
-from config.performance_constants import EPSILON
+from config.performance_constants import EPSILON, TRADE_ETW_SHORTLIST_K
 from game.Resources import Resource, ResourceCount
 
 if TYPE_CHECKING:
@@ -138,7 +138,6 @@ def propose_trade(player: SimPlayerState, sim_game: SimGame, R_need: Resource, s
     """BATNA-based trade module. Returns best trade if exists"""
     best_offer = None
     best_score = float("inf")  # We minimise expected net ETW (or ETW reduction is maximised)
-    shortlist_k = 6
 
     leading_player = max([player, *opponents], key=lambda p: p.victory_points())
     batna_etw = etw_estimator.estimated_time_to_win(player, sim_game, False, include_player_trades=False)
@@ -179,7 +178,7 @@ def propose_trade(player: SimPlayerState, sim_game: SimGame, R_need: Resource, s
 
     # Keep only the top-K most promising offers
     cheap_pool.sort(key=lambda x: x[0])
-    shortlisted = cheap_pool[:max(1, shortlist_k)]
+    shortlisted = cheap_pool[:max(1, TRADE_ETW_SHORTLIST_K)]
 
     # Stage 2: expensive ETW confirmation
     for _, opponent, offer, p_accept in shortlisted:
