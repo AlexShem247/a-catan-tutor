@@ -1,9 +1,8 @@
 from collections import Counter
 from functools import lru_cache
-from typing import List, TYPE_CHECKING, Dict, Tuple, NamedTuple
+from typing import List, TYPE_CHECKING, Dict, Tuple
 
 from game.Board import Board
-from game.Game import Game
 from game.Edge import Edge
 from game.PlayerAssets import DevelopmentCardType
 from game.Resources import ResourceCount, Resource
@@ -145,20 +144,23 @@ class SimPlayerState:
         self._production_cache.clear()
 
     def build_road(self, edge: Edge, opponent_road_length: List[int]) -> None:
-        """Add a road and updated the longest road length."""
+        """Add a road and update the longest road state."""
         self.roads.append(edge)
         self.longest_road_length = Board.calculate_longest_road_length(self.roads)
-        if self.longest_road_length > 5 and self.longest_road_length > max(opponent_road_length):
+
+        opp_best = max(opponent_road_length, default=0)
+        if self.longest_road_length >= 5 and self.longest_road_length > opp_best:
             self.has_longest_road = True
 
     def add_knight(self, opponent_army_size: List[int]) -> None:
-        """Simulate playing a knight."""
+        """Simulate playing a knight and update the largest army state."""
         self.army_size += 1
-        if self.army_size >= 3 and self.army_size > max(opponent_army_size):
+        opp_best = max(opponent_army_size, default=0)
+        if self.army_size >= 3 and self.army_size > opp_best:
             self.has_largest_army = True
 
     def remove_card(self, ctype: DevelopmentCardType) -> None:
-        """Simulate gaining a VP development card."""
+        """Remove one development card of the given type from the sim state."""
         self.dev_cards[ctype] = max(0, self.dev_cards[ctype] - 1)
 
     def get_production_rate(self, resource: Resource) -> float:
@@ -178,8 +180,3 @@ class SimPlayerState:
             self._production_cache[resource] = fr
 
         return self._production_cache[resource]
-
-
-class SimGame(NamedTuple):
-    player_state: SimPlayerState
-    game: Game

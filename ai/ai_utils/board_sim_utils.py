@@ -1,18 +1,20 @@
 from typing import List, Set, Dict, Optional
 
 from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability
+from ai.ai_utils.SimGame import SimGame
 from game.Edge import Edge
-from game.Game import Game
 from game.HexTile import HexTile
-from game.Player import Player
+from game.Player import PlayerNumber
 from game.Resources import Resource
 from game.Vertex import Vertex
 
 
-def get_reachable_vertices(start_vertex: Vertex, player: Player, available_vertices: List[Vertex]) -> Set[Vertex]:
-    """Return all vertices reachable by the player from start_vertex along their roads."""
+def get_reachable_vertices(start_vertex: Vertex, player_number: PlayerNumber, sim_game: SimGame,
+                           available_vertices: List[Vertex]) -> Set[Vertex]:
+    """Return all vertices reachable from start_vertex along roads owned by player_number."""
     visited: Set[Vertex] = set()
     stack: List[Vertex] = [start_vertex]
+    ov = sim_game.overlay
 
     while stack:
         v = stack.pop()
@@ -20,35 +22,34 @@ def get_reachable_vertices(start_vertex: Vertex, player: Player, available_verti
             continue
         visited.add(v)
 
-        # Check neighbouring vertices connected by player's roads
         for edge in v.edges:
-            if edge.owner == player:
-                neighbour = edge.get_other_vertex(v)
-                # Must be empty and obey distance rule
-                if neighbour not in visited and neighbour in available_vertices:
-                    stack.append(neighbour)
+            if ov.get_edge_owner_num(edge) != player_number:
+                continue
+
+            neighbour = edge.get_other_vertex(v)
+            if neighbour not in visited and neighbour in available_vertices:
+                stack.append(neighbour)
 
     return visited
 
 
-def legal_settlement_vertex(player: SimPlayerState, vertex: Vertex) -> bool:
-    """Check if a settlement can legally be placed on the given vertex."""
-    if vertex in (player.settlements + player.cities) or vertex.owner is not None:
-        # Vertex already built on
+def legal_settlement_vertex(player: SimPlayerState, vertex: Vertex, sim_game: SimGame) -> bool:
+    """Return True if a settlement could be placed on vertex under overlay-aware rules."""
+    ov = sim_game.overlay
+
+    if ov.is_vertex_taken(vertex) or vertex in (player.settlements + player.cities):
         return False
 
-    # Check 2-distance rule: no neighbor of this vertex has a building
     for edge in vertex.edges:
         neighbour = edge.get_other_vertex(vertex)
-        if neighbour in (player.settlements + player.cities) or neighbour.owner is not None:
-            # Neighbour owned
+        if ov.is_vertex_taken(neighbour) or neighbour in (player.settlements + player.cities):
             return False
 
     return True
 
 
 def find_edge_toward_vertex(from_vertex: Vertex, target_vertex: Vertex, available_edges: List[Edge]) -> Optional[Edge]:
-    """Find the available edge that moves closer from from_vertex to target_vertex."""
+    """Return the available edge adjacent to from_vertex that minimises estimated distance to target_vertex."""
     best_edge = None
     best_distance = float("inf")
 
@@ -57,8 +58,6 @@ def find_edge_toward_vertex(from_vertex: Vertex, target_vertex: Vertex, availabl
             continue
 
         other_vertex = edge.get_other_vertex(from_vertex)
-
-        # Estimate distance from this vertex to target
         distance = estimate_distance(other_vertex, target_vertex)
 
         if distance < best_distance:
@@ -69,82 +68,72 @@ def find_edge_toward_vertex(from_vertex: Vertex, target_vertex: Vertex, availabl
 
 
 def estimate_distance(v1: Vertex, v2: Vertex) -> int:
-    """Estimate the distance in vertices between two vertices (1, 2, or 3)."""
+    """Return a small discrete estimate of vertex-graph distance (0, 1, 2, or 3)."""
     if v1 == v2:
         return 0
 
-    # Check direct connection
     for edge in v1.edges:
         if edge.get_other_vertex(v1) == v2:
             return 1
 
-    # Check if they share a neighbor (distance = 2)
     v1_neighbors = {edge.get_other_vertex(v1) for edge in v1.edges}
     v2_neighbors = {edge.get_other_vertex(v2) for edge in v2.edges}
 
     if v1_neighbors & v2_neighbors:
         return 2
 
-    return 3  # Further away
+    return 3
 
 
 def moves_toward_vertex(from_vertex: Vertex, target_vertex: Vertex) -> bool:
-    """Return True if moving from from_vertex brings us closer to target_vertex."""
+    """Return True if from_vertex is estimated within distance 2 of target_vertex."""
     return estimate_distance(from_vertex, target_vertex) <= 2
 
 
-def find_gap_connection(player: Player, available_edges: List[Edge]) -> Optional[Edge]:
-    """Find an edge that connects disconnected roads or links a settlement to a road network."""
+def find_gap_connection(player_number: PlayerNumber, sim_game: SimGame, available_edges: List[Edge]) -> Optional[Edge]:
+    """Return an edge that connects a structure to the road network or joins disconnected road segments."""
+    ov = sim_game.overlay
+    sp = ov.get_sim_player(player_number)
 
-    # Get all vertices connected by our roads
-    road_vertices = set()
-    for road in player.roads:
+    road_vertices: Set[Vertex] = set()
+    for road in sp.roads:
         road_vertices.update(road.vertices)
 
-    # Check each available edge
+    structures = list(sp.settlements + sp.cities)
+
     for edge in available_edges:
         v1, v2 = edge.vertices
 
-        # Check if this connects a settlement/city to road network
-        for structure in player.settlements + player.cities:
-            if (structure == v1 and v2 not in road_vertices) or \
-                    (structure == v2 and v1 not in road_vertices):
+        for structure in structures:
+            if (structure == v1 and v2 not in road_vertices) or (structure == v2 and v1 not in road_vertices):
                 return edge
 
-        # Check if this connects two disconnected road segments
         v1_has_road = v1 in road_vertices
         v2_has_road = v2 in road_vertices
-
-        if v1_has_road != v2_has_road:  # One has road, one doesn't
+        if v1_has_road != v2_has_road:
             return edge
 
     return None
 
 
-def find_edge_toward_vertex_from_any(player: Player, target_vertex: Vertex,
+def find_edge_toward_vertex_from_any(player_number: PlayerNumber, sim_game: SimGame, target_vertex: Vertex,
                                      available_edges: List[Edge]) -> Optional[Edge]:
-    """Find an edge extending from any player structure toward the target vertex."""
+    """Return the edge extending from any player structure/endpoint that minimises estimated distance to target."""
+    ov = sim_game.overlay
+    sp = ov.get_sim_player(player_number)
 
-    # Get all our structures (settlements, cities, road endpoints)
-    our_structures = list(player.settlements + player.cities)
-    for road in player.roads:
+    our_structures: List[Vertex] = list(sp.settlements + sp.cities)
+    for road in sp.roads:
         our_structures.extend(road.vertices)
 
-    # Find edge that gets us closest to target from any structure
     best_edge = None
     best_distance = float("inf")
 
     for edge in available_edges:
         v1, v2 = edge.vertices
-
-        # Check if edge connects to one of our structures
         if v1 in our_structures or v2 in our_structures:
-            # Get the vertex that's NOT our structure (the new extension)
             new_vertex = v2 if v1 in our_structures else v1
-
-            # Estimate distance from new vertex to target
             distance = estimate_distance(new_vertex, target_vertex)
-
             if distance < best_distance:
                 best_distance = distance
                 best_edge = edge
@@ -152,41 +141,39 @@ def find_edge_toward_vertex_from_any(player: Player, target_vertex: Vertex,
     return best_edge
 
 
-def score_hex_for_opponent(opponent: Player, game: Game, hex_tile: HexTile, importance: Dict[Resource, float]) \
-        -> float:
-    """Compute the strategic value of a hex tile for an opponent based on resource and production."""
-
+def score_hex_for_opponent(opponent_number: PlayerNumber, sim_game: SimGame, hex_tile: HexTile,
+                           importance: Dict[Resource, float]) -> float:
+    """Return a heuristic score of blocking hex_tile for opponent_number given resource importance weights."""
     resource = hex_tile.resource
-
-    # Resource not needed
     if resource not in importance:
         return 0.0
 
     imp = importance[resource]
 
-    # Expected production
     production = (
-            dice_probability(hex_tile.production_number)
-            * game.count_player_buildings(opponent, hex_tile)
+        dice_probability(hex_tile.production_number)
+        * sim_game.game.count_player_buildings(
+            next(p for p in sim_game.game.players if p.player_number == opponent_number),
+            hex_tile
+        )
     )
 
     return imp * production
 
 
-def get_legal_settlement_vertices(game: Game) -> List[Vertex]:
-    """Get all vertices where settlement could be legally placed."""
-    legal_vertices = []
+def get_legal_settlement_vertices(sim_game: SimGame) -> List[Vertex]:
+    """Return vertices that satisfy the distance rule under overlay-aware occupancy."""
+    ov = sim_game.overlay
+    legal_vertices: List[Vertex] = []
 
-    for vertex in game.get_all_vertices():
-        # Skip if already occupied
-        if vertex.owner is not None:
+    for vertex in sim_game.game.get_all_vertices():
+        if ov.is_vertex_taken(vertex):
             continue
 
-        # Check distance rule
         valid = True
         for edge in vertex.edges:
             neighbor = edge.get_other_vertex(vertex)
-            if neighbor.owner is not None:
+            if ov.is_vertex_taken(neighbor):
                 valid = False
                 break
 
@@ -196,6 +183,9 @@ def get_legal_settlement_vertices(game: Game) -> List[Vertex]:
     return legal_vertices
 
 
-def get_opponents(player: SimPlayerState, game: Game) -> List[SimPlayerState]:
-    """Return a list of opponent player states for the given player."""
-    return [SimPlayerState(p, opponent=True) for p in game.players if p.player_number != player.player_number]
+def get_opponents(sim_game: SimGame, player_number) -> List[SimPlayerState]:
+    """Return opponent SimPlayerStates from the overlay."""
+    return [
+        sp for num, sp in sim_game.overlay.sim_players.items()
+        if num != player_number
+    ]
