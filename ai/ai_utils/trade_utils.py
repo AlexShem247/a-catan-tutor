@@ -115,12 +115,10 @@ def _predict_acceptance_prob(_: SimPlayerState, delta_etw: float, trade: Action)
     """Estimate probability that an opponent accepts a proposed trade."""
     _, buying_from_them = trade.payload
     opp_cost = sum(buying_from_them.values())
-    history_bias = 0.0
 
     score = (
         StrategyWeights.ACCEPT_ETW_WEIGHT * delta_etw
         - StrategyWeights.ACCEPT_COST_WEIGHT * opp_cost
-        + StrategyWeights.ACCEPT_HISTORY_WEIGHT * history_bias
     )
     return 1.0 / (1.0 + math.exp(-score))
 
@@ -202,16 +200,24 @@ def propose_trade(
     cheap_pool: List[Tuple[float, SimPlayerState, Action, float]] = []
 
     for opponent in opponents:
+        rolls_per_unit = {r: expected_rolls_for_resource(opponent, r) for r in Resource}
         for offer in candidates:
-            surplus_offering, requesting = offer.payload
-            if any(player.resources.get(r, 0) < q for r, q in surplus_offering.items()):
+            selling_by_us, buying_from_them = offer.payload
+            if any(player.resources.get(r, 0) < q for r, q in selling_by_us.items()):
                 continue
 
             if CHECK_INVALID_TRADES_EARLY:
-                if any(opponent.resources.get(r, 0) < q for r, q in requesting.items()):
+                if any(opponent.resources.get(r, 0) < q for r, q in buying_from_them.items()):
                     continue
 
-            p_accept = _predict_acceptance_prob(opponent, 0.0, offer)
+            benefit = (
+                    sum(q * rolls_per_unit[r] for r, q in selling_by_us.items())
+                    - sum(q * rolls_per_unit[r] for r, q in buying_from_them.items())
+            )
+            benefit = max(0.0, benefit)
+
+            p_accept = _predict_acceptance_prob(opponent, benefit, offer)
+
             if p_accept < StrategyWeights.MIN_TRADE_ACCEPT_PROB:
                 continue
 

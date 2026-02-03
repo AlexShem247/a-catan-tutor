@@ -56,7 +56,12 @@ class EtwEstimator:
     ) -> float:
         """Estimate ETB for a resource target with caching."""
         target_key = tuple((r.value, R_target.get(r, 0)) for r in Resource)
-        player_key = (player.player_number, tuple(player.settlements), tuple(player.cities))
+        player_key = (
+            player.player_number,
+            tuple(player.settlements),
+            tuple(player.cities),
+            tuple((r.value, player.resources.get(r, 0)) for r in Resource),
+        )
         cache_key = (player_key, target_key, include_player_trades)
 
         if cache_key in player.etb_cache:
