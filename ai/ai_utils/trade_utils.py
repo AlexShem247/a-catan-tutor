@@ -6,7 +6,7 @@ from ai.ai_utils.SimPlayerState import SimPlayerState
 from ai.ai_utils.actions import Action, ActionType
 from ai.ai_utils.resource_utils import expected_rolls_for_resource
 from config.StrategyWeights import StrategyWeights
-from config.performance_constants import EPSILON, TRADE_ETW_SHORTLIST_K
+from config.performance_constants import EPSILON, TRADE_ETW_SHORTLIST_K, CHECK_INVALID_TRADES_EARLY
 from game.Resources import Resource, ResourceCount
 
 if TYPE_CHECKING:
@@ -200,8 +200,10 @@ def propose_trade(
             surplus_offering, requesting = offer.payload
             if any(player.resources.get(r, 0) < q for r, q in surplus_offering.items()):
                 continue
-            if any(opponent.resources.get(r, 0) < q for r, q in requesting.items()):
-                continue
+
+            if CHECK_INVALID_TRADES_EARLY:
+                if any(opponent.resources.get(r, 0) < q for r, q in requesting.items()):
+                    continue
 
             p_accept = _predict_acceptance_prob(opponent, 0.0, offer)
             if p_accept < StrategyWeights.MIN_TRADE_ACCEPT_PROB:

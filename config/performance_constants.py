@@ -22,9 +22,11 @@ ETW_ETB_THRESHOLD = 20.0               # ETB threshold to abort ETW simulation
 ETW_MAX_DEPTH_OFFSET = 5               # Offset added to WIN_POINTS for simulation depth limit
 MAX_EVALUATIONS = 5                    # Maximum number of candidate actions to evaluate per turn
 MAX_ETB_THRESHOLD = 15.0               # Maximum ETB value to consider an action (higher = ignore)
+EVAL_UTIL_MAX_DEPTH = 3                # Maximum depth for evaluating utilities
 
 # Trade limits
 TRADE_ETW_SHORTLIST_K = 6              # Number of top-ranked trade offers to evaluate with full ETW.
+CHECK_INVALID_TRADES_EARLY = True      # Reads opponents hand to see if the trade will be invalid for opponents
 
 # Small value to avoid division by zero
 EPSILON = 1e-6

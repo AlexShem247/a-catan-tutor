@@ -21,7 +21,7 @@ from config.performance_constants import (
     MAX_SETTLEMENT_CANDIDATES,
     ROAD_ETB_THRESHOLD,
     ETW_ETB_THRESHOLD,
-    ETW_SIMULATION_MAX_CANDIDATES,
+    ETW_SIMULATION_MAX_CANDIDATES, EVAL_UTIL_MAX_DEPTH,
 )
 from game.Game import Game
 from game.Player import PlayerNumber
@@ -395,7 +395,8 @@ class EtwEstimator:
                 self._simulate_step(sim_game_copy, player_copy, s)
 
             # Self utility: ETW improvement after executing the whole plan
-            etw_after = self.estimated_time_to_win(player_copy, sim_game_copy, dev_played, max_depth_override=3)
+            etw_after = self.estimated_time_to_win(player_copy, sim_game_copy, dev_played,
+                                                   max_depth_override=EVAL_UTIL_MAX_DEPTH)
 
             if etw_before <= 0:
                 u_self = 0.0
@@ -417,7 +418,8 @@ class EtwEstimator:
                 opp_state = sim_game_copy.overlay.get_sim_player(leading_opp_num).copy()
                 sim_game_opp = _sim_game_with_replaced_player(sim_game_copy, opp_state)
 
-                opp_etw_after = self.estimated_time_to_win(opp_state, sim_game_opp, False, max_depth_override=3)
+                opp_etw_after = self.estimated_time_to_win(opp_state, sim_game_opp, False,
+                                                           max_depth_override=EVAL_UTIL_MAX_DEPTH)
 
                 if opp_etw_before > 0:
                     delay_caused = (opp_etw_after - opp_etw_before) / opp_etw_before * 100.0
