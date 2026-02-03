@@ -128,7 +128,7 @@ class RuleBasedAI(AI):
 
         sim_game = _make_sim_game_for_player(game, player)
 
-        blocking_penalty = 0.0
+        blocking_penalty = 1.0
         for opp in game.players:
             if opp == player:
                 continue
@@ -141,10 +141,10 @@ class RuleBasedAI(AI):
                     available_vertices=available_vertices,
                 )
                 if vertex in reachable:
-                    blocking_penalty = 1.0
+                    blocking_penalty = 0.0
                     break
 
-            if blocking_penalty == 1.0:
+            if blocking_penalty == 0.0:
                 break
 
         utility = (

@@ -159,16 +159,27 @@ class EtwEstimator:
         return base_ratio
 
     def estimated_time_to_win(
-        self,
-        player: SimPlayerState,
-        sim_game: SimGame,
-        dev_played: bool,
-        include_player_trades: bool = True,
+            self,
+            player: SimPlayerState,
+            sim_game: SimGame,
+            dev_played: bool,
+            include_player_trades: bool = True,
+            max_depth_override: Optional[int] = None,
     ) -> float:
-        """Estimate ETW with caching, simulation, and early pruning."""
+        """
+        Estimate ETW (expected turns to reach 10 VP) via a greedy forward simulation.
+
+        Speed knob:
+          - max_depth_override limits the number of greedy steps simulated.
+            Use a small value (e.g., 2 or 3) inside utility evaluation to get a much
+            faster but still rank-useful ETW approximation.
+        """
+        # Cache key must include the override depth; otherwise you mix "fast" and "full" ETW values.
         cache_key = (
             player.player_number,
             dev_played,
+            include_player_trades,
+            max_depth_override,
             len(player.settlements),
             len(player.cities),
             len(player.roads),
@@ -185,14 +196,29 @@ class EtwEstimator:
 
         etw = 0.0
         iterations = 0
-        max_depth = min(Game.VICTORY_POINTS_TO_WIN + ETW_MAX_DEPTH_OFFSET - points, ETW_MAX_DEPTH_OFFSET)
+
+        # Default depth behaviour (existing)
+        default_depth = min(
+            Game.VICTORY_POINTS_TO_WIN + ETW_MAX_DEPTH_OFFSET - points,
+            ETW_MAX_DEPTH_OFFSET,
+        )
+
+        # Apply optional override (must be >= 1 to do any work)
+        if max_depth_override is not None:
+            max_depth = max(1, int(max_depth_override))
+            max_depth = min(max_depth, default_depth)
+        else:
+            max_depth = default_depth
 
         sim_player = player.copy()
         sim_game_local = _sim_game_with_replaced_player(sim_game, sim_player)
 
         while points < Game.VICTORY_POINTS_TO_WIN and iterations < max_depth:
             candidate_actions = self._get_candidate_actions(
-                sim_player, sim_game_local, dev_played, include_player_trades
+                sim_player,
+                sim_game_local,
+                dev_played,
+                include_player_trades,
             )
 
             if not candidate_actions:
@@ -208,12 +234,15 @@ class EtwEstimator:
             etw += etb
             points += vp_inc
 
+            # Roll out the whole chosen plan step-by-step
             for step in actions:
                 self._simulate_step(sim_game_local, sim_player, step)
 
             iterations += 1
 
-        if points < Game.VICTORY_POINTS_TO_WIN:
+        # Only apply the "missing points" penalty if we were doing a full estimate.
+        # In fast mode, we want relative ranking, not absolute ETW magnitude inflation.
+        if max_depth_override is None and points < Game.VICTORY_POINTS_TO_WIN:
             etw += (Game.VICTORY_POINTS_TO_WIN - points) * StrategyWeights.ETW_MISSING_POINT_PENALTY
 
         player.etw_cache[cache_key] = etw
@@ -334,78 +363,113 @@ class EtwEstimator:
         self._eval_stats["evaluations"] += 1
 
         utilities: List[Tuple[Action, float]] = []
-        candidates.sort(key=lambda x: x[1])
+        candidates.sort(key=lambda x: x[1])  # Prefer cheaper (lower ETB) plans first for pruning
         max_eval = min(MAX_EVALUATIONS, len(candidates))
 
+        leading_opp_num = None
+        opp_etw_before = None
+
+        if opponents_etw_before and len(opponents_etw_before) > 0:
+            leading_opp_num = min(opponents_etw_before, key=opponents_etw_before.get)
+            opp_etw_before = opponents_etw_before.get(leading_opp_num, None)
+
         for actions, etb, _ in candidates[:max_eval]:
-            if etb > MAX_ETB_THRESHOLD:
+            if etb > MAX_ETB_THRESHOLD or not actions:
                 continue
 
-            step = actions[0]
+            next_step = actions[0]  # the actual action we will take this turn
 
+            # Roll out the entire candidate plan into a counterfactual state
             player_copy = player.copy()
             sim_game_copy = _sim_game_with_replaced_player(sim_game, player_copy)
 
-            self._simulate_step(sim_game_copy, player_copy, step)
+            did_build_road = False
+            did_play_knight = False
 
-            etw_after = self.estimated_time_to_win(player_copy, sim_game_copy, dev_played)
+            for s in actions:
+                if s.type == ActionType.BUILD and s.payload[0] == Buildable.ROAD:
+                    did_build_road = True
+                elif s.type == ActionType.PLAY_DEV_CARD and s.payload == DevelopmentCardType.KNIGHT:
+                    did_play_knight = True
 
-            if etw_before == 0:
+                self._simulate_step(sim_game_copy, player_copy, s)
+
+            # Self utility: ETW improvement after executing the whole plan
+            etw_after = self.estimated_time_to_win(player_copy, sim_game_copy, dev_played, max_depth_override=3)
+
+            if etw_before <= 0:
                 u_self = 0.0
             else:
                 u_self = max(0.0, (etw_before - etw_after) / etw_before * 100.0)
 
-            u_opp = 0.0
-            leading_opp_num: Optional[PlayerNumber] = None
-            if opponents_etw_before:
-                leading_opp_num = min(opponents_etw_before, key=opponents_etw_before.get)
-
-            for opp_num, opp_etw_before in opponents_etw_before.items():
-                opp_state = sim_game_copy.overlay.get_sim_player(opp_num).copy()
-                sim_game_opp = _sim_game_with_replaced_player(sim_game_copy, opp_state)
-
-                opp_etw_after = self.estimated_time_to_win(opp_state, sim_game_opp, False)
-
-                if opp_etw_before == 0:
-                    delay_caused = 0.0
-                else:
-                    delay_caused = max(0.0, (opp_etw_after - opp_etw_before) / opp_etw_before * 100.0)
-
-                if leading_opp_num is not None and opp_num == leading_opp_num:
-                    u_opp += StrategyWeights.OPPONENT_INTERFERENCE_LEADING * delay_caused
-                else:
-                    u_opp += (1.0 - StrategyWeights.OPPONENT_INTERFERENCE_LEADING) / 2.0 * delay_caused
-
-            u_special = 0.0
-            if step.type == ActionType.BUILD and step.payload[0] == Buildable.ROAD:
-                if player.longest_road_length >= StrategyWeights.LR_ROAD_THRESHOLD:
-                    delta = max(0, player_copy.longest_road_length - player.longest_road_length)
-                    u_special += StrategyWeights.LR_UTILITY_MULTIPLIER * delta
-
-            if step.type == ActionType.PLAY_DEV_CARD and step.payload == DevelopmentCardType.KNIGHT:
-                if player.army_size >= StrategyWeights.LA_ARMY_THRESHOLD:
-                    u_special += compute_k_la(player_copy, sim_game) * 1.0
-
-            discount_rate = StrategyWeights.TIME_DISCOUNT_RATE
-            eu = (
-                (
-                    StrategyWeights.BUILD_SELF_UTILITY * u_self
-                    + StrategyWeights.BUILD_OPPONENT_UTILITY * u_opp
-                    + StrategyWeights.BUILD_SPECIAL_UTILITY * u_special
-                )
-                / ((1.0 + discount_rate) ** max(1.0, etb))
+            # Opponent utility: delay caused to the leading opponent (lowest ETW-before)
+            affects_board = any(
+                s.type == ActionType.BUILD and s.payload[0] in (Buildable.ROAD, Buildable.SETTLEMENT)
+                for s in actions
             )
 
-            utilities.append((step, eu))
+            u_opp = 0.0
+            if affects_board and leading_opp_num is not None and opp_etw_before is not None and opp_etw_before > 0:
+                opp_etw_before = opponents_etw_before[leading_opp_num]
+
+                # Use the already-mutated sim_game_copy (our plan has been applied to the overlay),
+                # then evaluate opponent ETW in that counterfactual world.
+                opp_state = sim_game_copy.overlay.get_sim_player(leading_opp_num).copy()
+                sim_game_opp = _sim_game_with_replaced_player(sim_game_copy, opp_state)
+
+                opp_etw_after = self.estimated_time_to_win(opp_state, sim_game_opp, False, max_depth_override=3)
+
+                if opp_etw_before > 0:
+                    delay_caused = (opp_etw_after - opp_etw_before) / opp_etw_before * 100.0
+                    u_opp = StrategyWeights.OPPONENT_INTERFERENCE_LEADING * delay_caused
+
+            # Special utility: Longest Road / Largest Army bonuses based on FINAL rollout state
+            u_special = 0.0
+
+            # Longest Road: reward any plan that increases longest road length
+            if did_build_road:
+                delta_lr = max(0, player_copy.longest_road_length - player.longest_road_length)
+
+                # Gate on *post*-plan threshold so "crossing the threshold this plan" counts
+                if delta_lr > 0 and player_copy.longest_road_length >= StrategyWeights.LR_ROAD_THRESHOLD:
+                    u_special += StrategyWeights.LR_UTILITY_MULTIPLIER * delta_lr
+
+            # Largest Army: reward plans that play a knight (and thus move toward / secure LA)
+            if did_play_knight:
+                # Gate on post-plan army size so "reaching threshold this plan" counts
+                if player_copy.army_size >= StrategyWeights.LA_ARMY_THRESHOLD:
+                    u_special += compute_k_la(player_copy, sim_game) * 1.0
+
+            # Time discounting: prefer faster-to-complete plans
+            discount_rate = StrategyWeights.TIME_DISCOUNT_RATE
+            eu = (
+                    (
+                            StrategyWeights.BUILD_SELF_UTILITY * u_self
+                            + StrategyWeights.BUILD_OPPONENT_UTILITY * u_opp
+                            + StrategyWeights.BUILD_SPECIAL_UTILITY * u_special
+                    )
+                    / ((1.0 + discount_rate) ** max(1.0, etb))
+            )
+
+            utilities.append((next_step, eu))
 
         return utilities
 
     def _simulate_step(self, sim_game: SimGame, player: SimPlayerState, step: Action):
-        """Apply an action to SimPlayerState and BoardOverlay."""
+        """Apply an action to SimPlayerState and BoardOverlay (including resource costs)."""
         overlay = sim_game.overlay
+
+        # Helper: pay cost safely (don't go negative if something slips through)
+        def _pay(cost: ResourceCount) -> None:
+            for r, c in cost.items():
+                if c <= 0:
+                    continue
+                player.resources[r] = max(0, player.resources.get(r, 0) - c)
 
         if step.type == ActionType.BUILD:
             building, loc = step.payload
+
+            _pay(Game.BUILDING_COST[building])
 
             if building == Buildable.ROAD:
                 opp_lengths = [
@@ -424,6 +488,9 @@ class EtwEstimator:
                 player.build_city(loc)
                 overlay.claim_vertex(loc, player.player_number)
 
+        elif step.type == ActionType.BUY_DEV_CARD:
+            _pay(Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD])
+
         elif step.type == ActionType.PLAY_DEV_CARD:
             ctype = step.payload
             player.remove_card(ctype)
@@ -435,6 +502,18 @@ class EtwEstimator:
                     if num != player.player_number
                 ]
                 player.add_knight(opp_armies)
+
+        elif step.type == ActionType.TRADE_WITH_BANK:
+            # Optional: simulate bank trade if you want rollouts to reflect it
+            selling, buying = step.payload
+            player.remove_resources(selling)
+            player.add_resources(buying)
+
+        elif step.type == ActionType.TRADE_WITH_PLAYER:
+            # Optional: from our perspective, we give "selling" and receive "buying"
+            selling, buying = step.payload
+            player.remove_resources(selling)
+            player.add_resources(buying)
 
     def last_trade_rejected(self, player: SimPlayerState) -> bool:
         """Return True if the last trade was proposed but resources did not change."""

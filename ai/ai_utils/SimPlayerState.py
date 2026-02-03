@@ -85,7 +85,7 @@ class SimPlayerState:
         new.etw_cache = {}
         new.etb_cache = {}
         new.candidate_cache = {}
-        new._production_cache = {}
+        new._production_cache = dict(self._production_cache)
 
         return new
 
