@@ -55,6 +55,7 @@ class SimPlayerState:
 
         self.army_size: int = player.army_size
         self.has_largest_army: bool = player.has_largest_army
+        self.vp_ev_bonus: float = 0.0
 
         # Caches for performance optimization
         self.etw_cache: Dict[Tuple, float] = {}
@@ -80,6 +81,7 @@ class SimPlayerState:
 
         new.army_size = self.army_size
         new.has_largest_army = self.has_largest_army
+        new.vp_ev_bonus = self.vp_ev_bonus
 
         # Create fresh caches for the copy
         new.etw_cache = {}
@@ -89,23 +91,21 @@ class SimPlayerState:
 
         return new
 
-    def victory_points(self) -> int:
-        """Return total victory points (including hidden VP cards)."""
-        points = 0
-
-        # Buildings
+    def victory_points(self) -> float:
+        """Return total victory points"""
+        points = 0.0
         points += len(self.settlements)
         points += 2 * len(self.cities)
 
-        # Achievements
         if self.has_longest_road:
             points += 2
-
         if self.has_largest_army:
             points += 2
 
-        # Hidden VP cards
         points += self.dev_cards.get(DevelopmentCardType.VICTORY_POINT, 0)
+
+        # EV from dev-card purchases
+        points += self.vp_ev_bonus
 
         return points
 

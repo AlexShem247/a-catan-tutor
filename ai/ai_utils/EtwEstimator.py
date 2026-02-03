@@ -373,7 +373,7 @@ class EtwEstimator:
             leading_opp_num = min(opponents_etw_before, key=opponents_etw_before.get)
             opp_etw_before = opponents_etw_before.get(leading_opp_num, None)
 
-        for actions, etb, _ in candidates[:max_eval]:
+        for actions, etb, vp_inc in candidates[:max_eval]:
             if etb > MAX_ETB_THRESHOLD or not actions:
                 continue
 
@@ -491,8 +491,19 @@ class EtwEstimator:
         elif step.type == ActionType.BUY_DEV_CARD:
             _pay(Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD])
 
+            # EV: buying a dev card gives some probability of +1 VP
+            deck = sim_game.game.development_deck
+            if not deck.empty():
+                vp_prob = deck.get_probability(DevelopmentCardType.VICTORY_POINT, player.dev_cards)
+                player.vp_ev_bonus += vp_prob
+
         elif step.type == ActionType.PLAY_DEV_CARD:
             ctype = step.payload
+
+            # Don't allow playing cards you don't have in sim rollouts
+            if player.dev_cards.get(ctype, 0) <= 0:
+                return
+
             player.remove_card(ctype)
 
             if ctype == DevelopmentCardType.KNIGHT:

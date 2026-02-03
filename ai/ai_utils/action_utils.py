@@ -243,34 +243,25 @@ def purchase_development_card_action(player: SimPlayerState, sim_game: SimGame, 
     if deck.empty():
         return []
 
-    deck_actions: List[Tuple[List[Action], float, float]] = []
     card_purchase_etb = etw_estimator.estimated_time_to_build(
         player, sim_game, Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD]
     )
-
     if card_purchase_etb > DEV_CARD_ETB_THRESHOLD:
-        return deck_actions
+        return []
 
     actions = [Action(ActionType.BUY_DEV_CARD)]
 
+    # Expected VP from drawing a VP card
     vp_prob = deck.get_probability(DevelopmentCardType.VICTORY_POINT, player.dev_cards)
-    if vp_prob > 0:
-        deck_actions.append((actions, card_purchase_etb, vp_prob))
+    expected_vp = vp_prob * 1.0  # VP card is worth +1 VP
 
+    # Optional EV: value of drawing a Knight in terms of expected VP progress toward LA
+    # (This is still interpretable, and does not require stochastic simulation.)
     if player.army_size < StrategyWeights.MAX_ARMY_SIZE_FOR_KNIGHT_PURCHASE:
         knight_prob = deck.get_probability(DevelopmentCardType.KNIGHT, player.dev_cards)
-        vp_gain_knight = expected_vp_from_knight(player, sim_game)
-        if knight_prob * vp_gain_knight > StrategyWeights.MIN_EXPECTED_VP_FOR_KNIGHT:
-            deck_actions.append(
-                (
-                    actions + [Action(ActionType.END_TURN),
-                               Action(ActionType.PLAY_DEV_CARD, DevelopmentCardType.KNIGHT)],
-                    card_purchase_etb + 1,
-                    knight_prob * vp_gain_knight,
-                )
-            )
+        expected_vp += knight_prob * expected_vp_from_knight(player, sim_game)
 
-    return deck_actions
+    return [(actions, card_purchase_etb, expected_vp)]
 
 
 def get_bank_trade_for_action(player: SimPlayerState, cost: ResourceCount) -> Optional[Action]:
