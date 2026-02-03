@@ -261,7 +261,7 @@ def purchase_development_card_action(player: SimPlayerState, sim_game: SimGame, 
         knight_prob = deck.get_probability(DevelopmentCardType.KNIGHT, player.dev_cards)
         expected_vp += knight_prob * expected_vp_from_knight(player, sim_game)
 
-    return [(actions, card_purchase_etb, expected_vp)]
+    return [(actions, card_purchase_etb, 0.0)]
 
 
 def get_bank_trade_for_action(player: SimPlayerState, cost: ResourceCount) -> Optional[Action]:

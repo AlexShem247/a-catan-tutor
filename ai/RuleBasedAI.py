@@ -240,8 +240,6 @@ class RuleBasedAI(AI):
                     importance=opponent_importance.get(p.player_number, {}),
                 ) * p.calc_victory_points()[0]
 
-            score *= dice_probability(h.production_number)
-
             if h in our_resource_tiles:
                 score *= StrategyWeights.ROBBER_OWN_HEX_PENALTY
 

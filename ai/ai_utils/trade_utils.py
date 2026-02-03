@@ -181,7 +181,13 @@ def propose_trade(
     best_offer = None
     best_score = float("inf")
 
-    leading_player = max([player, *opponents], key=lambda p: p.victory_points())
+    all_players = [player, *opponents]
+    etw_by_player = {
+        p: etw_estimator.estimated_time_to_win(p.copy(), sim_game, False, include_player_trades=False)
+        for p in all_players
+    }
+    leading_player = min(etw_by_player, key=etw_by_player.get)
+
     batna_etw = etw_estimator.estimated_time_to_win(
         player,
         sim_game,
@@ -242,37 +248,6 @@ def propose_trade(
     return best_offer
 
 
-def player_trade_ratio_func(
-    resource_give: Resource,
-    resource_need: Resource,
-    player: SimPlayerState,
-    opponents: List[SimPlayerState],
-    rolls_per_unit: Dict[Resource, float],
-    max_ratio: int = StrategyWeights.MAX_PLAYER_TRADE_GIVE_RATIO,
-    lambda_leader: float = StrategyWeights.LAMBDA_RISK_LEADER,
-    lambda_base: float = StrategyWeights.LAMBDA_RISK_BASE,
-) -> int:
-    """Return give:take ratio for resource_give -> resource_need based on scarcity and risk."""
-    give_r = rolls_per_unit.get(resource_give, math.inf)
-    need_r = rolls_per_unit.get(resource_need, math.inf)
-
-    if math.isinf(need_r):
-        base_ratio = max_ratio
-    else:
-        if give_r <= 0 or math.isinf(give_r):
-            base_ratio = 1
-        else:
-            base_ratio = int(math.ceil(need_r / give_r))
-            base_ratio = max(1, min(max_ratio, base_ratio))
-
-    leading = max([player, *opponents], key=lambda p: p.victory_points())
-    if leading is not player and base_ratio < max_ratio:
-        bump = 1 if lambda_leader < lambda_base else 0
-        base_ratio = min(max_ratio, max(base_ratio, 1 + bump))
-
-    return base_ratio
-
-
 def _apply_trade_to_sim(sim_p: SimPlayerState, selling_to_us: ResourceCount, buying_from_us: ResourceCount) -> None:
     """Apply the trade from our perspective."""
     sim_p.add_resources(selling_to_us)
@@ -309,11 +284,17 @@ def _opponent_delta_etw_if_accepts(
     return max(0.0, etw_before - etw_after)
 
 
-def _is_close_or_leading(opponent: SimPlayerState, us: SimPlayerState, all_players: List[SimPlayerState]) -> bool:
-    """Return True if opponent is leading or close by victory points."""
-    leading = max(all_players, key=lambda p: p.victory_points())
+def _is_close_or_leading(opponent: SimPlayerState, us: SimPlayerState,
+                         all_players: List[SimPlayerState], sim_game: SimGame, etw_estimator) -> bool:
+    """True if opponent is ETW-leader or close by VP."""
+    etw_by_p = {
+        p: etw_estimator.estimated_time_to_win(p.copy(), sim_game, False, include_player_trades=False)
+        for p in all_players
+    }
+    leading = min(etw_by_p, key=etw_by_p.get)
     if opponent == leading:
         return True
+
     vp_gap = opponent.victory_points() - us.victory_points()
     return vp_gap >= -StrategyWeights.CLOSE_OPPONENT_VP_GAP
 
@@ -400,11 +381,15 @@ def respond_to_trade_batna(
         return False, None
 
     all_players = [player_sim, *opponents]
-    leading = max(all_players, key=lambda p: p.victory_points())
+    etw_by_p = {
+        p: etw_estimator.estimated_time_to_win(p.copy(), sim_game, False, include_player_trades=False)
+        for p in all_players
+    }
+    leading = min(etw_by_p, key=etw_by_p.get)
 
     if opponent_sim is not None:
         lambda_risk = lambda_leader if opponent_sim == leading else lambda_base
-        close_or_leading = _is_close_or_leading(opponent_sim, player_sim, all_players)
+        close_or_leading = _is_close_or_leading(opponent_sim, player_sim, all_players, sim_game, etw_estimator)
 
         delta_opp = _opponent_delta_etw_if_accepts(
             opponent_sim=opponent_sim,
@@ -483,7 +468,11 @@ def select_best_trade_partner(
         return None
 
     all_sims = [player_sim] + [opp for opp, _ in available_players]
-    leading_sim = max(all_sims, key=lambda ps: ps.victory_points())
+    etw_by_p = {
+        p: etw_estimator.estimated_time_to_win(p.copy(), sim_game, False, include_player_trades=False)
+        for p in all_sims
+    }
+    leading_sim = min(etw_by_p, key=etw_by_p.get)
 
     batna_etw = etw_estimator.estimated_time_to_win(player_sim, sim_game, False, include_player_trades=False)
 
