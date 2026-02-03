@@ -232,11 +232,13 @@ class EtwEstimator:
                 break
 
             etw += etb
-            points += vp_inc
 
             # Roll out the whole chosen plan step-by-step
             for step in actions:
                 self._simulate_step(sim_game_local, sim_player, step)
+
+            # Recompute points from the updated simulated state
+            points = sim_player.victory_points()
 
             iterations += 1
 
