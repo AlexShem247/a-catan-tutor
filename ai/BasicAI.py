@@ -15,7 +15,7 @@ from game.Edge import Edge
 from game.HexTile import HexTile
 
 
-USE_OPTIMUM_SETTLEMENT_LOCATION = True
+USE_OPTIMUM_SETTLEMENT_LOCATION = False
 
 
 class BasicAI(AI):

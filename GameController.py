@@ -263,7 +263,7 @@ class GameController:
             msg += f" Took {resource_list} from the bank."
 
         elif card_type == DevelopmentCardType.MONOPOLY:
-            # MONOPOLY: Player chooses a single resource type; all other players give all of that resource to the player
+            # MONOPOLY: Player chooses a single resource type - other players give all of that resource to the player
             if player.is_human:
                 chosen = self.view.show_resource_chooser(
                     player, 1, "Monopoly: choose a resource to get from the other players.",

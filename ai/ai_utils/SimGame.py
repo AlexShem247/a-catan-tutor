@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 from game.Game import Game
-from game.Player import PlayerNumber
+from game.Player import PlayerNumber, Player
 from game.Vertex import Vertex
 from game.Edge import Edge
 
@@ -91,3 +91,14 @@ class SimGame:
         new_overlay = self.overlay.copy()
         new_overlay.sim_players = dict(sim_players)
         return SimGame(game=self.game, overlay=new_overlay)
+
+
+def make_sim_game_for_player(game: Game, player: Player) -> SimGame:
+    """Create a SimGame and ensure `player` is a full-information SimPlayerState in the overlay."""
+    sim_game = SimGame.from_real_game(game, hide_opponent_dev_cards=True)
+
+    sim_us = SimPlayerState(player, opponent=False)
+    overlay2 = sim_game.overlay.copy()
+    overlay2.set_sim_player(sim_us)
+
+    return SimGame(game=sim_game.game, overlay=overlay2)

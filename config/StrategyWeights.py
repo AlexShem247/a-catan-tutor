@@ -41,6 +41,8 @@ class StrategyWeights:
     MAX_SETTLEMENTS_FOR_CITY_UPGRADE = 2  # Max settlements to consider for city upgrade
     MIN_CANDIDATES_FOR_ROAD = 3  # Min candidate actions before considering road building
     MAX_ARMY_SIZE_FOR_KNIGHT_PURCHASE = 5  # Don't buy knights if army size exceeds this
+    START_VERTEX_EXPANSION_BONUS = 0.05  # Small bonus for vertices with multiple outward road expansion options.
+    ATTENTION_LR_VP_THRESHOLD = 7  # VP below which revealing Longest Road is considered "too early"
 
     # Knight evaluation
     KNIGHT_DEFICIT_THRESHOLD = 2  # Knight deficit for reduced value
@@ -65,6 +67,6 @@ class StrategyWeights:
     TRADE_LEADER_PENALTY = 0.5  # Small bias against trading with the current leader
 
     # Attention management
-    ATTENTION_LR_EARLY_PENALTY = 15.0   # Discourages claiming Longest Road too early to avoid signalling leadership.
-    DEV_CLOSE_THRESHOLD = 0.08          # Dev card allowed if close in utility to best build.
-    DIVERSION_BOOST = 1.25              # Robber diversion boost when tied for the VP lead.
+    ATTENTION_LR_EARLY_PENALTY = 15.0  # Discourages claiming Longest Road too early to avoid signalling leadership.
+    DEV_CLOSE_THRESHOLD = 0.08  # Dev card allowed if close in utility to best build.
+    DIVERSION_BOOST = 1.25  # Robber diversion boost when tied for the VP lead.

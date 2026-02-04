@@ -35,6 +35,7 @@ def calc_step_resources(step: Action) -> ResourceCount:
 
 def get_bank_trade_ratio(buildings: List[Vertex], resource: Resource) -> int:
     """Determine the best trade ratio for a resource given a player's controlled ports."""
+
     # Get all ports the player controls
     controlled_ports = {v.port for v in buildings if v.port}
 

@@ -198,7 +198,7 @@ class PlayerTests(unittest.TestCase):
         # Give player 1 wood first
         player.resources[Resource.WOOD] = 1
 
-        # Try to remove 5 resources; only 1 should be removed
+        # Try to remove 5 resources, only 1 should be removed
         player.remove_resource(Resource.WOOD, 5)
 
         # Player should only lose 1, and bank gets it back
