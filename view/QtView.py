@@ -11,7 +11,7 @@ from game.Resources import ResourceCount
 from game.Vertex import Vertex
 from view.MainWindow import MainWindow
 from view.View import View
-from view.constants import AI_DECISION_ANIMATION_DELAY, WINDOW_WIDTH, WINDOW_HEIGHT
+from config.view_constants import AI_DECISION_ANIMATION_DELAY, WINDOW_WIDTH, WINDOW_HEIGHT
 
 
 class QtView(View):

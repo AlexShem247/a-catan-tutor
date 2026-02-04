@@ -1,40 +1,40 @@
 from typing import List, Tuple, Optional, Dict
 
-from AI import AI
+from ai.ai_utils.actions import ActionType, Phase
+from config.view_constants import AI_DECISION_ANIMATION_DELAY, AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE, \
+    SHOW_AI_BUILT_LOCATIONS
 from game.Edge import Edge, EdgeDirection
-from game.Game import Game
+from game.Game import Game, PlayerConfig
 from game.HexTile import HexTile
 from game.Player import Player
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import ResourceCount, Resource
 from game.Vertex import Vertex, Port, VertexDirection
 from view.View import View
-from view.constants import AI_DECISION_ANIMATION_DELAY, AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE, \
-    SHOW_AI_BUILT_LOCATIONS
 from view.display_utils import resource_dict_to_str
 
 
 class GameController:
     """Controls the flow of a Catan game using a pure Game model."""
     _game: Game
-    round_num: int
 
-    def __init__(self):
+    def __init__(self, game_players: PlayerConfig, simulation_players: PlayerConfig):
         self.view: View | None = None
+        self.game_players = game_players
+        self.simulation_players = simulation_players
         self.reset_game(True)
 
-    def reset_game(self, human_player_one: bool):
+    def reset_game(self, game_mode: bool):
         """Reset the game to a fresh state and reset round counter."""
-        self._game = Game(human_player_one=human_player_one)
-        self.round_num = 1
+        self._game = Game(self.game_players if game_mode else self.simulation_players)
         if self.view is not None:
-            self.view.ai_decision_animation_delay = (AI_DECISION_ANIMATION_DELAY if human_player_one
+            self.view.ai_decision_animation_delay = (AI_DECISION_ANIMATION_DELAY if game_mode
                                                      else AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE)
 
     def start_game(self):
         """Run initial placement, then loop turns until game over."""
-        human_player_one = self.view.display_start_screen()
-        self.reset_game(human_player_one)
+        game_mode = self.view.display_start_screen()
+        self.reset_game(game_mode)
 
         self.run_initial_placement()
         while not self._game.game_over:
@@ -51,7 +51,7 @@ class GameController:
                 if self._game.game_over:
                     break
 
-            self.round_num += 1
+            self._game.round_num += 1
 
         self.view.display_results()
 
@@ -76,7 +76,7 @@ class GameController:
                 self.view.display_board()
                 self.view.draw_selectable_vertices(available_vertices, disable_interactivity=True)
                 self.view.display_board_ai(player, "Select a position to build your settlement")
-                vertex = AI.choose_random_settlement(available_vertices)
+                vertex = player.policy.select_initial_settlement_location(player, self._game, available_vertices)
             self._game.try_build_settlement(player, vertex, use_resources=False,
                                             road_restriction=False, gain_resources=gain_resource)
 
@@ -113,7 +113,7 @@ class GameController:
         self.view.draw_selectable_edges(available_edges, disable_interactivity=True)
         self.view.display_board_ai(player, "Select a position to build your road")
 
-        return AI.choose_random_road(available_edges)
+        return player.policy.select_initial_road_location(player, self._game, available_edges)
 
     def trade_with_players(self, selling_player, selling, buying) -> List[Tuple[Player, Optional[ResourceCount]]]:
         """Sees which players are willing to trade"""
@@ -123,7 +123,12 @@ class GameController:
                 if player.is_human:
                     interested, counter = self.view.display_trade_manager(player, selling, buying, selling_player)
                 else:
-                    interested, counter = AI.trade_manager_ai_logic(player.resources, selling, buying, self.round_num)
+                    # AI can only respond if it has enough resources to give
+                    if player.can_afford(buying):
+                        interested, counter = player.policy.respond_to_trade(
+                            player, self._game, selling_player, selling, buying)
+                    else:
+                        interested, counter = False, None
 
                 if interested:
                     results.append((player, counter))
@@ -145,11 +150,12 @@ class GameController:
             for p in self._game.players:
                 discard_count = p.calculate_discard_count()
                 if discard_count > 0:
+                    resources_to_discard = {}
                     if p.is_human:
                         resources_to_discard = self.view.show_resource_chooser(
                             p, discard_count, "The robber has been rolled!", p.resources)
-                    else:
-                        resources_to_discard = AI.decide_robber_discard(player.resources, discard_count)
+                    elif player.policy is not None:
+                        resources_to_discard = player.policy.select_discard_resources(player, self._game, discard_count)
                     p.remove_resources(resources_to_discard)
 
             # 2. Player who rolled dice can move robber and collect resources
@@ -191,12 +197,7 @@ class GameController:
                 hex_tile for hex_tile in self._game.get_all_hexes()
                 if not hex_tile.robber
             ]
-            tile, steal_from = AI.decide_robber_placement(
-                valid_hexes,
-                player,
-                lambda h: self._game.get_players_on_hex(h),
-                lambda p: any(v > 0 for v in p.resources.values())
-            )
+            tile, steal_from = player.policy.select_robber_target(player, self._game, valid_hexes)
 
         # Move the robber
         self._game.set_robber(tile)
@@ -204,6 +205,9 @@ class GameController:
         # If there is a player to steal from, handle the discard
         if steal_from is not None:
             resource = steal_from.random_resource()
+            if not resource:
+                return None
+
             self._game.trade_between_players(player, {}, steal_from, resource)
 
             return steal_from, next(iter(resource.keys()))
@@ -211,6 +215,7 @@ class GameController:
     def play_development_card(self, player: Player, card_type: DevelopmentCardType) -> str:
         """Plays the development card for a player and returns a descriptive message."""
         msg = f"{player.name} played {card_type.name.replace('_', ' ').title()}."
+        self._game.development_deck.play(card_type)
 
         if card_type == DevelopmentCardType.KNIGHT:
             # KNIGHT: Move the robber and steal one resource from a player adjacent to the new robber location
@@ -251,14 +256,14 @@ class GameController:
                 resources = self.view.show_resource_chooser(
                     player, 2, "Year of Plenty: choose any two resources from the bank.", self._game.bank_resources)
             else:
-                resources = AI.decide_year_of_plenty_resources(self._game.bank_resources)
+                resources = player.policy.select_year_of_plenty_resources(player, self._game)
             player.add_resources(resources)
             resource_list = ", ".join(
                 f"{amt} {res.name.replace('_', ' ').title()}" for res, amt in resources.items() if amt > 0)
             msg += f" Took {resource_list} from the bank."
 
         elif card_type == DevelopmentCardType.MONOPOLY:
-            # MONOPOLY: Player chooses a single resource type; all other players give all of that resource to the player
+            # MONOPOLY: Player chooses a single resource type - other players give all of that resource to the player
             if player.is_human:
                 chosen = self.view.show_resource_chooser(
                     player, 1, "Monopoly: choose a resource to get from the other players.",
@@ -266,7 +271,7 @@ class GameController:
                 # Extract the single Resource enum
                 resource = next(iter(chosen.keys()))
             else:
-                resource = AI.decide_monopoly_resource(self._game.bank_resources)
+                resource = player.policy.select_monopoly_resource(player, self._game)
             total_taken = 0
             for p in self._game.players:
                 if p == player:
@@ -296,109 +301,94 @@ class GameController:
         self.view.display_board_turn(player, (d1, d2, total), played_dev_card)
 
     def make_round_move_ai(self, player: Player):
-        """AI turn: decides what to build, trades if helpful, then attempts the build."""
-        used_dev_card = False
-        card_msg = ""
-        playable_cards = [c.card_type for c in player.development_cards if c.playable]
+        """AI turn driven by policy-selected actions."""
+        player.policy.new_turn()
 
-        # Decide whether to play a development card
-        card_to_play = AI.decide_dev_card_usage(playable_cards, used_dev_card)
-        if card_to_play:
-            card_msg = self.play_development_card(player, card_to_play) + " (Pre-roll)"
+        used_dev_card = False
+        messages = []
+
+        # Pre-roll phase: maybe play a dev card
+        action = player.policy.next_action(player, self._game, phase=Phase.PRE_ROLL, dev_played=used_dev_card)
+        if action and action.type == ActionType.PLAY_DEV_CARD:
+            messages.append(self.play_development_card(player, action.payload))
             used_dev_card = True
 
+        # Roll dice
         d1, d2, total, roll_msg = self.roll_dice(player)
 
-        # 1. AI chooses what it wants to build
-        chosen_action = AI.choose_build_action()
+        # Main decision loop
+        while True:
+            action = player.policy.next_action(player, self._game, phase=Phase.MAIN, dev_played=used_dev_card)
+            if action.type == ActionType.END_TURN:
+                break
 
-        # 2. Try a bank trade if needed
-        trade_msg = None
-        if chosen_action != "NOTHING":
-            trade_msg = self.ai_attempt_trade(player, chosen_action)
+            match action.type:
+                case ActionType.BUILD:
+                    buildable, location = action.payload
+                    msg = self.ai_attempt_build(player, buildable, location)
+                    if msg:
+                        messages.append(msg)
 
-        # 3. Attempt the build
-        build_msg = self.ai_attempt_build(player, chosen_action)
+                case ActionType.TRADE_WITH_BANK:
+                    selling, buying = action.payload
+                    success = self._game.try_trade_with_bank(player, selling, buying)
+                    if success:
+                        messages.append(
+                            f"{player.name} trades {resource_dict_to_str(selling)} with the bank "
+                            f"for {resource_dict_to_str(buying)}."
+                        )
 
-        # 4. Use playable development card if AI has one and hasn't used it
-        card_to_play = AI.decide_post_roll_dev_card_usage(playable_cards, used_dev_card)
-        if card_to_play:
-            card_msg = self.play_development_card(player, card_to_play) + " (Post-roll)"
+                case ActionType.TRADE_WITH_PLAYER:
+                    selling, buying = action.payload
+                    willing_players = self.trade_with_players(player, selling, buying)
 
-        # 5. Display results
-        msg = "\n".join(msg for msg in [trade_msg, build_msg, card_msg, roll_msg] if msg)
-        self.view.display_board_turn_ai(player, (d1, d2, total), msg)
+                    # Only keep offers the AI can afford
+                    affordable_offers = [
+                        (p, counter) for (p, counter) in willing_players
+                        if counter is None or player.can_afford(counter)
+                    ]
 
-    def ai_attempt_trade(self, player: Player, desired_build: Buildable):
-        """Try one bank trade to help the AI reach the resources needed for a desired build."""
-        cost = Game.BUILDING_COST[desired_build]
+                    if affordable_offers:
+                        deal = player.policy.choose_trade_partner(player, self._game, selling, buying,
+                                                                  affordable_offers)
+                        if deal is not None:
+                            buying_player, counter = deal
+                            if counter is not None:
+                                selling = counter
+                            self._game.trade_between_players(player, selling, buying_player, buying)
+                            messages.append(
+                                f"{player.name} trades {resource_dict_to_str(selling)} with "
+                                f"{buying_player.name} for {resource_dict_to_str(buying)}."
+                            )
 
-        # Use pure logic to decide trade strategy
-        buying_resource, selling_resource, bank_rate, ai_buying_rate = AI.decide_trade_strategy(
-            player.resources,
-            cost,
-            self.round_num,
-            bank_rate=4  # Default bank rate
-        )
+                case ActionType.BUY_DEV_CARD:
+                    success, _ = self._game.try_buy_development_card(player)
+                    if success:
+                        messages.append(f"{player.name} bought a development card.")
 
-        if buying_resource is None or selling_resource is None:
-            return None
+                case ActionType.PLAY_DEV_CARD:
+                    if not used_dev_card:
+                        messages.append(self.play_development_card(player, action.payload))
+                        used_dev_card = True
 
-        buying = {r: 0 for r in Resource}
-        buying[buying_resource] = 1
+        # Display turn results
+        if roll_msg:
+            messages.append(roll_msg)
 
-        # Case 1: Prefer player trade if better rate
-        if AI.should_trade_with_player(ai_buying_rate, bank_rate):
-            selling = AI.pick_random_resources(
-                {selling_resource: player.resources.get(selling_resource, 0)},
-                ai_buying_rate
-            )
-            if selling is None:
-                return None
+        self.view.display_board_turn_ai(player, (d1, d2, total), "\n".join(messages))
 
-            willing_players = self.trade_with_players(player, selling, buying)
-            deal = AI.pick_trade_partner(willing_players, ai_buying_rate)
-            if deal is not None:
-                buying_player, counter = deal
-
-                if counter is not None:
-                    selling = counter
-
-                self._game.trade_between_players(player, selling, buying_player, buying)
-                return (
-                    f"{player.name} trades {resource_dict_to_str(selling)} with "
-                    f"{buying_player.name} for {resource_dict_to_str(buying)} "
-                    f"to work towards a {desired_build.name.replace('_', ' ').lower()}."
-                )
-
-        # Case 2: Bank trade
-        selling = {r: 0 for r in Resource}
-        selling[selling_resource] = bank_rate
-
-        success = self._game.try_trade_with_bank(player, selling, buying)
-        if not success:
-            return None
-
-        return (
-            f"{player.name} trades {resource_dict_to_str(selling)} with the bank "
-            f"for {resource_dict_to_str(buying)} to work towards a {desired_build.name.replace('_', ' ').lower()}."
-        )
-
-    def ai_attempt_build(self, player: Player, action: Buildable):
+    def ai_attempt_build(self, player: Player, action: Buildable, location):
         """Attempt a build action and return the resulting message."""
         buildable = self._game.get_buildable_options(player)
 
         # Special handling for development card
         if action == Buildable.DEVELOPMENT_CARD:
-            if AI.can_build_development_card(buildable):
+            if buildable.get(Buildable.DEVELOPMENT_CARD, False):
                 success, _ = self._game.try_buy_development_card(player)
                 msg = f"{player.name} bought a development card."
                 return msg
             else:
                 return f"{player.name} chooses to do nothing."
-
-        # For other actions, get location
-        location = AI.choose_random_build_location(buildable, action)
 
         if action not in buildable or location is None:
             return f"{player.name} chooses to do nothing."

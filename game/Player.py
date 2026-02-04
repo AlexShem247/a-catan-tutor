@@ -1,11 +1,14 @@
 import random
 from enum import Enum
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TYPE_CHECKING
 
 from game.Edge import Edge
 from game.PlayerAssets import DevelopmentCard, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex, Port
+
+if TYPE_CHECKING:
+    from ai.AI import AI
 
 
 class PlayerNumber(Enum):
@@ -16,12 +19,13 @@ class PlayerNumber(Enum):
 
 
 class Player:
-    def __init__(self, is_human: bool, playerNumber: PlayerNumber, bank_resources: ResourceCount,
-                 name: Optional[str] = None):
+    def __init__(self, is_human: bool, player_number: PlayerNumber, bank_resources: ResourceCount,
+                 name: Optional[str] = None, policy: Optional["AI"] = None):
         self.is_human = is_human
-        self.name = playerNumber.name if name is None else name
-        self.playerNumber = playerNumber
+        self.name = player_number.name if name is None else name
+        self.player_number = player_number
         self.bank_resources = bank_resources
+        self.policy = policy
 
         # Resources (0 for each)
         self.resources: ResourceCount = {
@@ -91,6 +95,14 @@ class Player:
         """Removes multiple resources."""
         for resource, amount in resources.items():
             self.remove_resource(resource, amount)
+
+    def can_afford(self, resources: ResourceCount) -> bool:
+        """Return True if the player has enough resources for the given cost dict."""
+        return all(self.resources.get(res, 0) >= amt for res, amt in resources.items())
+
+    def has_resources(self) -> bool:
+        """Return True if the player has at least one resource of any type."""
+        return any(amount > 0 for amount in self.resources.values())
 
     def add_settlement(self, vertex) -> None:
         """Add a settlement at the given vertex."""

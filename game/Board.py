@@ -183,7 +183,7 @@ class Board:
 
             # Block this edge ±2 to enforce 2-edge spacing
             blocked_edges.update({i, (i - 1) % num_edges, (i + 1) % num_edges,
-                                  (i - 2) % num_edges, (i + 2) % num_edges,})
+                                  (i - 2) % num_edges, (i + 2) % num_edges, })
 
             available_edges.remove(i)
 
@@ -195,21 +195,18 @@ class Board:
                 if neighbor:
                     hex_tile.neighbors.append(neighbor)
 
-    @staticmethod
-    def build_settlement(vertex: Vertex, player: Player) -> None:
+    def build_settlement(self, vertex: Vertex, player: Player) -> None:
         """Directly build a settlement at the vertex, ignoring validation."""
         vertex.owner = player
         vertex.building = Building.SETTLEMENT
         player.add_settlement(vertex)
 
-    @staticmethod
-    def build_city(vertex: Vertex, player: Player) -> None:
+    def build_city(self, vertex: Vertex, player: Player) -> None:
         """Directly upgrade a settlement to a city, ignoring validation."""
         vertex.building = Building.CITY
         player.add_city(vertex)
 
-    @staticmethod
-    def build_road(edge: Edge, player: Player) -> None:
+    def build_road(self, edge: Edge, player: Player) -> None:
         """Directly assign ownership of a road, ignoring validation."""
         edge.owner = player
         player.add_road(edge)

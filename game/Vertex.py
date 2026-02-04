@@ -1,8 +1,9 @@
 from enum import IntEnum, Enum
-from typing import List, Optional, TYPE_CHECKING, Tuple
+from typing import List, Optional, TYPE_CHECKING, Tuple, Set
 
 from game.HexTile import HexTile
 from game.PlayerAssets import Building
+from game.Resources import Resource
 
 if TYPE_CHECKING:
     from game.Player import Player
@@ -26,6 +27,18 @@ class Port(Enum):
     ORE = 4
     THREE_TO_ONE = 5
 
+    @classmethod
+    def resource_to_port(cls, resource: Resource) -> Optional["Port"]:
+        """Convert a Resource to its corresponding 2:1 Port, if any."""
+        resource_to_port = {
+            Resource.WOOD: cls.WOOD,
+            Resource.BRICK: cls.BRICK,
+            Resource.SHEEP: cls.SHEEP,
+            Resource.WHEAT: cls.WHEAT,
+            Resource.ORE: cls.ORE,
+        }
+        return resource_to_port.get(resource)
+
 
 class Vertex:
     def __init__(self, pos: Tuple[int, int, VertexDirection]):
@@ -39,6 +52,24 @@ class Vertex:
     def get_pos(self) -> str:
         q, r, direction = self.pos
         return f"{q}, {r}, {direction.name.title().replace('_', ' ')}"
+
+    def get_neighbours(self) -> Set["Vertex"]:
+        """Returns the set of vertices that share an edge with this vertex."""
+        neighbor_vertices = set()
+        for edge in self.edges:
+            # Add the other vertex of the edge
+            if edge.vertices[0] != self:
+                neighbor_vertices.add(edge.vertices[0])
+            if edge.vertices[1] != self:
+                neighbor_vertices.add(edge.vertices[1])
+        return neighbor_vertices
+
+    def get_edge_between(self, neighbour: "Vertex") -> Optional["Edge"]:
+        """Returns the Edge object connecting this vertex to the neighbour, if it exists."""
+        for edge in self.edges:
+            if edge.vertices[0] == neighbour or edge.vertices[1] == neighbour:
+                return edge
+        return None
 
     def __repr__(self) -> str:
         if not self.owner:

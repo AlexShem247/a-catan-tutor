@@ -11,7 +11,7 @@ from game.HexTile import HexTile
 from game.PlayerAssets import Buildable
 from game.Resources import HexType
 from view.board_geometry import hex_center, vertex_xy
-from view.constants import WINDOW_HEIGHT, BOARD_BG_COLOR, HEX_TILE_RADIUS, SETTLEMENT_ICONS, hex_to_filepath, \
+from config.view_constants import WINDOW_HEIGHT, BOARD_BG_COLOR, HEX_TILE_RADIUS, SETTLEMENT_ICONS, hex_to_filepath, \
     EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON, HIGHLIGHT_COLOR, OUTLINE_COLOR, \
     PORT_EDGE_COLOR, PORT_ICONS, TITLE_COLOR, SEA_BACKGROUND
 from view.shapes import HexTileShape, VertexShape, LineShape, InteractiveShape, InteractiveCircle, PixmapShape, \
@@ -233,7 +233,7 @@ class SquareCanvas(QWidget):
             x1, y1 = vertex_xy(v1, cx, cy, HEX_TILE_RADIUS)
             x2, y2 = vertex_xy(v2, cx, cy, HEX_TILE_RADIUS)
 
-            color = PLAYER_COLORS[edge.owner.playerNumber] if edge.owner else EDGE_COLOR
+            color = PLAYER_COLORS[edge.owner.player_number] if edge.owner else EDGE_COLOR
             self.add_shape(LineShape(x1, y1, x2, y2, ROAD_THICKNESS, color))
 
         # Draw ports
@@ -334,7 +334,7 @@ class SquareCanvas(QWidget):
         self.add_shape(TextShape(w * 0.5, h * 0.35, "Catan",
                                  TITLE_COLOR, 200, outline_width=2, bold=True))
 
-        self.add_shape(TextShape(w * 0.5, h * 0.55, "Adaptable Explainable AI Tutor",
+        self.add_shape(TextShape(w * 0.5, h * 0.55, "Explainable AI Tutor",
                                  TITLE_COLOR.lighter(150), 40, outline_width=1, bold=True))
 
         self.add_shape(TextShape(w * 0.5, h * 0.65,

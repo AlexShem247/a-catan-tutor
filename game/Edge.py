@@ -26,6 +26,13 @@ class Edge:
         q, r, direction = self.pos
         return f"{q}, {r}, {direction.name.title().replace('_', ' ')}"
 
+    def get_other_vertex(self, vertex: Vertex) -> Vertex:
+        """Given one vertex, return the other vertex of this edge."""
+        if vertex == self.vertices[0]:
+            return self.vertices[1]
+
+        return self.vertices[0]
+
     def __repr__(self) -> str:
         if not self.owner:
             return f"PATH({self.get_pos()})"

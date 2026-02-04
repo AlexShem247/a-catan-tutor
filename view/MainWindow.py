@@ -16,7 +16,7 @@ from game.PlayerAssets import Buildable, DevelopmentCardType, DevelopmentCard
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
 from view.SquareCanvas import SquareCanvas
-from view.constants import CROWN_SYM
+from config.view_constants import CROWN_SYM
 from view.display_utils import format_counter_offer, get_player_lead_status
 
 
@@ -78,8 +78,7 @@ class MainWindow(QMainWindow):
         self.verticalSpacer = self.find_last_vertical_spacer()
         self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(True))
 
-    @staticmethod
-    def word_wrap(msg: str, limit=LABEL_LINE_LENGTH) -> str:
+    def word_wrap(self, msg: str, limit=LABEL_LINE_LENGTH) -> str:
         out = []
         for raw in msg.split("\n"):
             line = ""
@@ -89,8 +88,7 @@ class MainWindow(QMainWindow):
             out.append(line)
         return "\n".join(out)
 
-    @staticmethod
-    def safe_connect(button: QToolButton | QPushButton, slot: Callable):
+    def safe_connect(self, button: QToolButton | QPushButton, slot: Callable):
         try:
             button.clicked.disconnect()  # type: ignore[attr-defined]
         except TypeError:
@@ -190,7 +188,7 @@ class MainWindow(QMainWindow):
         }
 
         for player in controller.get_all_players():
-            num = player.playerNumber
+            num = player.player_number
             if num == PlayerNumber.P1:
                 for res, label in player_labels.items():
                     label.setText(str(player.resources[res]))
@@ -257,8 +255,8 @@ class MainWindow(QMainWindow):
             controller, player, played_dev_card,
             lambda played: self.display_round_info(controller, player, dice_info, played)))
 
-    @staticmethod
     def create_quantity_handlers(
+            self,
             current_counts: ResourceCount,
             quantity_btns: Dict[Resource, Tuple[QLabel, QToolButton, QToolButton]],
             caps: ResourceCount | None = None,
@@ -293,8 +291,8 @@ class MainWindow(QMainWindow):
 
         # Connect buttons
         for res, (_, dec_btn, inc_btn) in quantity_btns.items():
-            MainWindow.safe_connect(inc_btn, lambda _, r=res: increase(r))
-            MainWindow.safe_connect(dec_btn, lambda _, r=res: decrease(r))
+            self.safe_connect(inc_btn, lambda _, r=res: increase(r))
+            self.safe_connect(dec_btn, lambda _, r=res: decrease(r))
 
         # Initialise labels
         for res in current_counts:

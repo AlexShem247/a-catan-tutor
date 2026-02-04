@@ -84,7 +84,7 @@ ROBBER_SYM = colorise("R", Color.WHITE, bold=True)
 
 
 def get_player_color(player: Player) -> Color:
-    return [Color.BLUE, Color.RED, Color.GREEN, Color.YELLOW][player.playerNumber.value]
+    return [Color.BLUE, Color.RED, Color.GREEN, Color.YELLOW][player.player_number.value]
 
 
 def clear_screen():

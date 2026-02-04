@@ -17,7 +17,7 @@ Make sure you are using Python 3.12 or higher for compatibility.
 The game by default run with the PyQt GUI. To run the CLI version instead, use the `--cli` flag:
 
 ```bash
-python main.py --cli
+python play_game.py --cli
 ```
 
 ## Running Tests

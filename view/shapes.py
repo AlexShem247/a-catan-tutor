@@ -6,7 +6,7 @@ from typing import Dict
 from PyQt6.QtCore import QPointF, Qt, QPoint
 from PyQt6.QtGui import QPolygonF, QPixmap, QPen, QColor, QFontMetrics
 
-from view.constants import TERRAIN_COLORS, TOKEN_COMMON_COLOR, TOKEN_COLOR, TOKEN_OUTLINE_COLOR, EDGE_COLOR, \
+from config.view_constants import TERRAIN_COLORS, TOKEN_COMMON_COLOR, TOKEN_COLOR, TOKEN_OUTLINE_COLOR, EDGE_COLOR, \
     hex_to_filepath, SETTLEMENT_ICONS, PLAYER_COLORS, ROBBER_ICON, HIGHLIGHT_ANIMATION
 from game.HexTile import HexTile
 from game.Vertex import Vertex
@@ -267,12 +267,12 @@ class VertexShape(Shape):
         self.shapes = []
 
         if vertex.building and vertex.owner:
-            pixmap = icons[SETTLEMENT_ICONS[vertex.owner.playerNumber, vertex.building]]
+            pixmap = icons[SETTLEMENT_ICONS[vertex.owner.player_number, vertex.building]]
             icon_size = 4.0 * radius
             self.shapes.append(PixmapShape(x, y, icon_size, icon_size, pixmap))
         else:
             color = next(
-                (PLAYER_COLORS[p.playerNumber] for p, c in Counter(e.owner for e in vertex.edges if e.owner).items() if
+                (PLAYER_COLORS[p.player_number] for p, c in Counter(e.owner for e in vertex.edges if e.owner).items() if
                  c >= 2),
                 EDGE_COLOR
             )
