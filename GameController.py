@@ -150,10 +150,11 @@ class GameController:
             for p in self._game.players:
                 discard_count = p.calculate_discard_count()
                 if discard_count > 0:
+                    resources_to_discard = {}
                     if p.is_human:
                         resources_to_discard = self.view.show_resource_chooser(
                             p, discard_count, "The robber has been rolled!", p.resources)
-                    else:
+                    elif player.policy is not None:
                         resources_to_discard = player.policy.select_discard_resources(player, self._game, discard_count)
                     p.remove_resources(resources_to_discard)
 

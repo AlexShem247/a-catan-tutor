@@ -4,6 +4,7 @@ from math import ceil
 from typing import Optional, List, Tuple, Dict
 
 from ai.AI import AI
+from ai.RuleBasedAI import RuleBasedAI
 from ai.ai_utils.actions import Phase, Action, ActionType
 from game.Game import Game
 from game.PlayerAssets import Buildable, DevelopmentCardType
@@ -12,6 +13,9 @@ from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
 from game.Edge import Edge
 from game.HexTile import HexTile
+
+
+USE_OPTIMUM_SETTLEMENT_LOCATION = True
 
 
 class BasicAI(AI):
@@ -211,13 +215,34 @@ class BasicAI(AI):
         if not available_vertices:
             return None
 
-        existing_resources = {tile.resource for settlement in player.settlements for tile
-                              in settlement.hexes if tile.resource}
+        if USE_OPTIMUM_SETTLEMENT_LOCATION:
+            # Optimum settlement location heuristic:
+            return max(
+                available_vertices,
+                key=lambda v: RuleBasedAI.vertex_utility(
+                    vertex=v,
+                    player=player,
+                    game=game,
+                    available_vertices=available_vertices,
+                    first_settlement=(len(player.settlements) == 0),
+                ),
+                default=None,
+            )
 
-        missing_resources = {r for r in Resource if r is not None} - existing_resources
+        # Fallback: prefer vertices that add missing resources
+        existing_resources = {
+            tile.resource
+            for settlement in player.settlements
+            for tile in settlement.hexes
+            if tile.resource
+        }
 
-        candidates = [v for v in available_vertices if
-                      any(tile.resource in missing_resources for tile in v.hexes if tile.resource)]
+        missing_resources = {r for r in Resource} - existing_resources
+
+        candidates = [
+            v for v in available_vertices
+            if any(tile.resource in missing_resources for tile in v.hexes if tile.resource)
+        ]
 
         return random.choice(candidates if candidates else available_vertices)
 

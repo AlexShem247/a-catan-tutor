@@ -449,6 +449,14 @@ class EtwEstimator:
                 if player_copy.army_size >= StrategyWeights.LA_ARMY_THRESHOLD:
                     u_special += compute_k_la(player_copy, sim_game) * 1.0
 
+            # Attention management: avoid taking Longest Road too early ---
+            took_lr_now = (not player.has_longest_road) and player_copy.has_longest_road
+            vp_after = player_copy.victory_points()
+
+            u_attention = 0.0
+            if took_lr_now and vp_after < 7 and vp_after < Game.VICTORY_POINTS_TO_WIN:
+                u_attention -= StrategyWeights.ATTENTION_LR_EARLY_PENALTY
+
             # Time discounting: prefer faster-to-complete plans
             discount_rate = StrategyWeights.TIME_DISCOUNT_RATE
             eu = (
@@ -456,6 +464,7 @@ class EtwEstimator:
                             StrategyWeights.BUILD_SELF_UTILITY * u_self
                             + StrategyWeights.BUILD_OPPONENT_UTILITY * u_opp
                             + StrategyWeights.BUILD_SPECIAL_UTILITY * u_special
+                            + u_attention
                     )
                     / ((1.0 + discount_rate) ** max(1.0, etb))
             )
@@ -621,6 +630,23 @@ class EtwEstimator:
         )
         if not utilities:
             return Action(ActionType.END_TURN)
+
+        # Prefer buying a development card if it is close in utility to the best build action
+        best_build = max(
+            (u for u in utilities if u[0].type != ActionType.BUY_DEV_CARD),
+            default=None,
+            key=lambda x: x[1],
+        )
+
+        best_dev = max(
+            (u for u in utilities if u[0].type == ActionType.BUY_DEV_CARD),
+            default=None,
+            key=lambda x: x[1],
+        )
+
+        if (not ignore_affordability) and best_build is not None and best_dev is not None:
+            if best_dev[1] >= best_build[1] * (1.0 - StrategyWeights.DEV_CLOSE_THRESHOLD):
+                utilities = [best_dev]
 
         return self._choose_max_utility_action(
             sim_player,

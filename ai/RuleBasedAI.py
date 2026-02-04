@@ -59,7 +59,7 @@ class RuleBasedAI(AI):
 
         best_vertex = max(
             available_vertices,
-            key=lambda v: self._vertex_utility(v, player, game, available_vertices, first_settlement),
+            key=lambda v: self.vertex_utility(v, player, game, available_vertices, first_settlement),
             default=None,
         )
         return best_vertex
@@ -85,7 +85,7 @@ class RuleBasedAI(AI):
         if len(player.settlements) == 1:
             best_vertex = max(
                 legal_vertices,
-                key=lambda v: self._vertex_utility(v, player, game, legal_vertices, first_settlement=False),
+                key=lambda v: self.vertex_utility(v, player, game, legal_vertices, first_settlement=False),
                 default=None,
             )
             if best_vertex:
@@ -100,7 +100,7 @@ class RuleBasedAI(AI):
 
             best_vertex = max(
                 legal_vertices,
-                key=lambda v: self._vertex_utility(v, player, game, legal_vertices, first_settlement=False),
+                key=lambda v: self.vertex_utility(v, player, game, legal_vertices, first_settlement=False),
                 default=None,
             )
             if best_vertex:
@@ -108,8 +108,8 @@ class RuleBasedAI(AI):
 
         return random.choice(available_edges) if available_edges else None
 
-    def _vertex_utility(
-        self,
+    @staticmethod
+    def vertex_utility(
         vertex: Vertex,
         player: Player,
         game: Game,
@@ -206,6 +206,14 @@ class RuleBasedAI(AI):
 
         sim_game_for_robber = _make_sim_game_for_player(game, player)
 
+        # Diversion: if we're tied (or near) the VP lead, bias robber toward the apparent leader
+        our_vp = player.calc_victory_points()[0]
+        opp_vps = [p.calc_victory_points()[0] for p in game.players if p != player]
+        best_opp_vp = max(opp_vps, default=0)
+
+        tied_or_near_lead = (our_vp >= best_opp_vp)  # "tied for lead" heuristic
+        diversion_boost = StrategyWeights.DIVERSION_BOOST if tied_or_near_lead else 1.0
+
         opponent_importance: Dict[PlayerNumber, Dict[Resource, float]] = {}
         for opponent in game.players:
             if opponent == player:
@@ -238,7 +246,7 @@ class RuleBasedAI(AI):
                     sim_game=sim_game_for_robber,
                     hex_tile=h,
                     importance=opponent_importance.get(p.player_number, {}),
-                ) * p.calc_victory_points()[0]
+                ) * (p.calc_victory_points()[0] * diversion_boost)
 
             if h in our_resource_tiles:
                 score *= StrategyWeights.ROBBER_OWN_HEX_PENALTY
@@ -254,7 +262,10 @@ class RuleBasedAI(AI):
         if not players_on_best_hex:
             return best_hex, None
 
-        best_player = max(players_on_best_hex, key=lambda pl: sum(pl.resources.values()) * pl.calc_victory_points()[0])
+        best_player = max(
+            players_on_best_hex,
+            key=lambda pl: sum(pl.resources.values()) * pl.calc_victory_points()[0],
+        )
         return best_hex, best_player
 
     def select_discard_resources(self, player: Player, game: Game, num_resources: int) -> ResourceCount:
@@ -363,7 +374,7 @@ class RuleBasedAI(AI):
         if legal_vertices:
             best_vertex = max(
                 legal_vertices,
-                key=lambda v: self._vertex_utility(v, player, game, legal_vertices, first_settlement=False),
+                key=lambda v: self.vertex_utility(v, player, game, legal_vertices, first_settlement=False),
                 default=None,
             )
             if best_vertex:

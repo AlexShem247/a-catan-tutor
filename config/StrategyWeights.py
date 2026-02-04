@@ -63,3 +63,8 @@ class StrategyWeights:
     ACCEPT_HISTORY_WEIGHT = 0.3  # Influence of past acceptance behaviour
     CLOSE_OPPONENT_VP_GAP = 2  # Opponent is considered close if within this VP gap of the agent
     TRADE_LEADER_PENALTY = 0.5  # Small bias against trading with the current leader
+
+    # Attention management
+    ATTENTION_LR_EARLY_PENALTY = 15.0   # Discourages claiming Longest Road too early to avoid signalling leadership.
+    DEV_CLOSE_THRESHOLD = 0.08          # Dev card allowed if close in utility to best build.
+    DIVERSION_BOOST = 1.25              # Robber diversion boost when tied for the VP lead.
