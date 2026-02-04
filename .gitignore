@@ -1,5 +1,7 @@
-*.png
 *.pdf
 __pycache__/
 .idea/
 .pytest_cache/
+Coordinates.png
+Ref.png
+Screenshot.png
