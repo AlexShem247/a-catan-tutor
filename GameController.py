@@ -13,6 +13,8 @@ from game.Vertex import Vertex, Port, VertexDirection
 from view.View import View
 from view.display_utils import resource_dict_to_str
 
+START_LAST = False
+
 
 class GameController:
     """Controls the flow of a Catan game using a pure Game model."""
@@ -60,7 +62,10 @@ class GameController:
         Each player places two settlements and two roads in order:
         forward + reverse order for second placement.
         """
-        players_order = [(p, False) for p in self._game.players] + [(p, True) for p in reversed(self._game.players)]
+        players = self._game.players
+        first, second = (reversed(players), players) if START_LAST else (players, reversed(players))
+        players_order = ([(p, False) for p in first] + [(p, True) for p in second])
+
         for player, gain_resource in players_order:
             # Settlement
             if player.is_human:
