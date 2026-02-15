@@ -1,6 +1,6 @@
 from collections import defaultdict
 from random import Random
-from typing import List, Optional, Dict, Tuple, Set
+from typing import List, Optional, Dict, Tuple
 
 from game.Edge import Edge, EdgeDirection
 from game.HexTile import HexTile, HexType
@@ -162,8 +162,8 @@ class Board:
         water_edges = self._get_water_edges()
         num_edges = len(water_edges)
 
-        available_edges = set(range(num_edges))
-        blocked_edges = set()
+        available_edges = list(range(num_edges))
+        blocked_edges = []
 
         ports = PORT_TYPES[:]
         self.rng.shuffle(ports)
@@ -182,11 +182,13 @@ class Board:
             v1.port = v2.port = port
             self.port_vertices.append((port, v1, v2))
 
-            # Block this edge ±2 to enforce 2-edge spacing
-            blocked_edges.update({i, (i - 1) % num_edges, (i + 1) % num_edges,
-                                  (i - 2) % num_edges, (i + 2) % num_edges, })
+            # Block this edge ±2 to enforce 2-edge spacing (append unique indices)
+            for idx in {i, (i - 1) % num_edges, (i + 1) % num_edges, (i - 2) % num_edges, (i + 2) % num_edges}:
+                if idx not in blocked_edges:
+                    blocked_edges.append(idx)
 
-            available_edges.remove(i)
+            if i in available_edges:
+                available_edges.remove(i)
 
     def assign_neighbors(self) -> None:
         directions: List[Tuple[int, int]] = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]
@@ -231,7 +233,7 @@ class Board:
         # Try starting from each road and find the longest path
         for start_road in roads:
             for start_vertex in start_road.vertices:
-                visited_roads = set()
+                visited_roads = []
                 length = Board._dfs_longest_path(start_road, start_vertex, road_graph, visited_roads)
                 max_length = max(max_length, length)
 
@@ -239,9 +241,11 @@ class Board:
 
     @staticmethod
     def _dfs_longest_path(current_road: Edge, current_vertex: Vertex,
-                          road_graph: Dict, visited_roads: Set) -> int:
+                          road_graph: Dict, visited_roads: List) -> int:
         """DFS to find the longest path from current position."""
-        visited_roads.add(current_road)
+        # Use list for visited roads to preserve deterministic behavior
+        if current_road not in visited_roads:
+            visited_roads.append(current_road)
         max_length = 1  # Current road counts as 1
 
         # Get the other vertex of current road

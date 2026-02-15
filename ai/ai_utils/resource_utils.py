@@ -36,8 +36,11 @@ def calc_step_resources(step: Action) -> ResourceCount:
 def get_bank_trade_ratio(buildings: List[Vertex], resource: Resource) -> int:
     """Determine the best trade ratio for a resource given a player's controlled ports."""
 
-    # Get all ports the player controls
-    controlled_ports = {v.port for v in buildings if v.port}
+    # Get all ports the player controls (deterministic order)
+    controlled_ports = []
+    for v in buildings:
+        if v.port and v.port not in controlled_ports:
+            controlled_ports.append(v.port)
 
     # Check for specific 2:1 port for this resource
     specific_port = Port.resource_to_port(resource)

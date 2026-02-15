@@ -48,11 +48,11 @@ class TestBoard(unittest.TestCase):
 
     def test_edge_count_and_uniqueness(self):
         # All edges are unique and properly connect two vertices
-        seen = set()
+        seen = []
         for edge in self.board.edges:
             verts = tuple(sorted(edge.vertices, key=id))
             self.assertNotIn(verts, seen)
-            seen.add(verts)
+            seen.append(verts)
             self.assertEqual(len(edge.vertices), 2)
             for v in edge.vertices:
                 self.assertIn(edge, v.edges)

@@ -13,10 +13,10 @@ from config.player_policies import RULE_BASED_VS_BASIC
 from game.Player import PlayerNumber
 from view.HeadlessView import HeadlessView
 
-NUM_SIMULATIONS = 1
+NUM_SIMULATIONS = 100
 SHUFFLE_ORDER = True
 NUM_PROCESSES = mp.cpu_count()
-SEED = 69
+SEED = 1234
 
 
 def run_single_game(args):
@@ -83,10 +83,8 @@ def run_simulations_parallel(player_policies: Dict[PlayerNumber, Type[AI]],
     if use_progress:
         from tqdm import tqdm
         with mp.Pool(processes=NUM_PROCESSES) as pool:
-            results = []
-            for result in tqdm(pool.imap_unordered(run_single_game, args_list),
-                               total=num_runs, desc="Simulating games"):
-                results.append(result)
+            # Use ordered imap to keep results deterministic with respect to args_list
+            results = list(tqdm(pool.imap(run_single_game, args_list), total=num_runs, desc="Simulating games"))
     else:
         with mp.Pool(processes=NUM_PROCESSES) as pool:
             results = pool.map(run_single_game, args_list)

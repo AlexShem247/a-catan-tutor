@@ -15,7 +15,7 @@ from game.Edge import Edge
 from game.HexTile import HexTile
 
 
-USE_OPTIMUM_SETTLEMENT_LOCATION = False
+USE_OPTIMUM_SETTLEMENT_LOCATION = True
 
 
 class BasicAI(AI):
@@ -231,14 +231,13 @@ class BasicAI(AI):
             )
 
         # Fallback: prefer vertices that add missing resources
-        existing_resources = {
-            tile.resource
-            for settlement in player.settlements
-            for tile in settlement.hexes
-            if tile.resource
-        }
+        existing_resources = []
+        for settlement in player.settlements:
+            for tile in settlement.hexes:
+                if tile.resource and tile.resource not in existing_resources:
+                    existing_resources.append(tile.resource)
 
-        missing_resources = {r for r in Resource} - existing_resources
+        missing_resources = [r for r in Resource if r not in existing_resources]
 
         candidates = [
             v for v in available_vertices

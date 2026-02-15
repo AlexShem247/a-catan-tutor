@@ -78,7 +78,10 @@ class CLIView(View):
 
             # Add development card options
             if not played_dev_card:
-                playable_cards = set([c.card_type for c in player.development_cards if c.playable])
+                playable_cards = []
+                for c in player.development_cards:
+                    if c.playable and c.card_type not in playable_cards:
+                        playable_cards.append(c.card_type)
                 for card_type in playable_cards:
                     options[str(option_number)] = f"Use '{card_type.name.title()}' card"
 

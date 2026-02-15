@@ -1,4 +1,4 @@
-from typing import List, Set, Dict, Optional
+from typing import List, Dict, Optional
 
 from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability
 from ai.ai_utils.SimGame import SimGame
@@ -10,9 +10,9 @@ from game.Vertex import Vertex
 
 
 def get_reachable_vertices(start_vertex: Vertex, player_number: PlayerNumber, sim_game: SimGame,
-                           available_vertices: List[Vertex]) -> Set[Vertex]:
+                           available_vertices: List[Vertex]) -> List[Vertex]:
     """Return all vertices reachable from start_vertex along roads owned by player_number."""
-    visited: Set[Vertex] = set()
+    visited: List[Vertex] = []
     stack: List[Vertex] = [start_vertex]
     ov = sim_game.overlay
 
@@ -20,7 +20,7 @@ def get_reachable_vertices(start_vertex: Vertex, player_number: PlayerNumber, si
         v = stack.pop()
         if v in visited:
             continue
-        visited.add(v)
+        visited.append(v)
 
         for edge in v.edges:
             if ov.get_edge_owner_num(edge) != player_number:
@@ -76,10 +76,11 @@ def estimate_distance(v1: Vertex, v2: Vertex) -> int:
         if edge.get_other_vertex(v1) == v2:
             return 1
 
-    v1_neighbors = {edge.get_other_vertex(v1) for edge in v1.edges}
-    v2_neighbors = {edge.get_other_vertex(v2) for edge in v2.edges}
+    v1_neighbors = [edge.get_other_vertex(v1) for edge in v1.edges]
+    v2_neighbors = [edge.get_other_vertex(v2) for edge in v2.edges]
 
-    if v1_neighbors & v2_neighbors:
+    # Check for intersection deterministically
+    if any(n in v2_neighbors for n in v1_neighbors):
         return 2
 
     return 3
@@ -95,9 +96,11 @@ def find_gap_connection(player_number: PlayerNumber, sim_game: SimGame, availabl
     ov = sim_game.overlay
     sp = ov.get_sim_player(player_number)
 
-    road_vertices: Set[Vertex] = set()
+    road_vertices: List[Vertex] = []
     for road in sp.roads:
-        road_vertices.update(road.vertices)
+        for vert in road.vertices:
+            if vert not in road_vertices:
+                road_vertices.append(vert)
 
     structures = list(sp.settlements + sp.cities)
 

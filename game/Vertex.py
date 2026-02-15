@@ -1,5 +1,5 @@
 from enum import IntEnum, Enum
-from typing import List, Optional, TYPE_CHECKING, Tuple, Set
+from typing import List, Optional, TYPE_CHECKING, Tuple
 
 from game.HexTile import HexTile
 from game.PlayerAssets import Building
@@ -53,15 +53,15 @@ class Vertex:
         q, r, direction = self.pos
         return f"{q}, {r}, {direction.name.title().replace('_', ' ')}"
 
-    def get_neighbours(self) -> Set["Vertex"]:
-        """Returns the set of vertices that share an edge with this vertex."""
-        neighbor_vertices = set()
+    def get_neighbours(self) -> List["Vertex"]:
+        """Returns the list of vertices that share an edge with this vertex."""
+        neighbor_vertices: List["Vertex"] = []
         for edge in self.edges:
-            # Add the other vertex of the edge
-            if edge.vertices[0] != self:
-                neighbor_vertices.add(edge.vertices[0])
-            if edge.vertices[1] != self:
-                neighbor_vertices.add(edge.vertices[1])
+            # Add the other vertex of the edge (preserve order, avoid duplicates)
+            if edge.vertices[0] != self and edge.vertices[0] not in neighbor_vertices:
+                neighbor_vertices.append(edge.vertices[0])
+            if edge.vertices[1] != self and edge.vertices[1] not in neighbor_vertices:
+                neighbor_vertices.append(edge.vertices[1])
         return neighbor_vertices
 
     def get_edge_between(self, neighbour: "Vertex") -> Optional["Edge"]:

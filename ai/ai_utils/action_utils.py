@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Tuple, Optional, TYPE_CHECKING, Set, Dict, Any
+from typing import List, Tuple, Optional, TYPE_CHECKING, Dict, Any
 
 from ai.ai_utils.SimGame import SimGame, BoardOverlay
 from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability
@@ -43,8 +43,12 @@ def distant_settlement_candidates(
     if max_extra_roads_override is not None:
         max_extra_roads = min(max_extra_roads, max_extra_roads_override)
 
-    player_roads_set = set(player.roads)
-    all_player_vertices = set(player.settlements) | set(player.cities)
+    player_roads_list = list(player.roads)
+    # Combine settlements and cities into a deterministic list without duplicates
+    all_player_vertices: List[Vertex] = list(player.settlements)
+    for v in player.cities:
+        if v not in all_player_vertices:
+            all_player_vertices.append(v)
 
     # Vertices we can expand from: road endpoints and existing structures.
     network_vertices = _get_network_vertices(player)
@@ -55,7 +59,7 @@ def distant_settlement_candidates(
     _, vertex_score = _vertex_score_fn()
 
     # Predicate for whether a road edge is buildable.
-    road_edge_available = _road_edge_available_fn(player_roads_set, ov)
+    road_edge_available = _road_edge_available_fn(player_roads_list, ov)
 
     # Pick a small set of good starting points for expansion to keep the search bounded.
     start_vertices = _select_start_vertices(
@@ -284,13 +288,16 @@ def expected_vp_from_knight(player: SimPlayerState, sim_game: SimGame) -> float:
     return 0.0
 
 
-def _get_network_vertices(player: SimPlayerState) -> Set[Vertex]:
+def _get_network_vertices(player: SimPlayerState) -> List[Vertex]:
     """Vertices we can expand from (road endpoints + existing structures)."""
-    network: Set[Vertex] = set()
+    network: List[Vertex] = []
     for road in player.roads:
-        network.update(road.vertices)
-    network.update(player.settlements)
-    network.update(player.cities)
+        for v in road.vertices:
+            if v not in network:
+                network.append(v)
+    for v in player.settlements + player.cities:
+        if v not in network:
+            network.append(v)
     return network
 
 
@@ -313,11 +320,11 @@ def _vertex_score_fn() -> Tuple[Dict[Vertex, float], Any]:
     return cache, score
 
 
-def _road_edge_available_fn(player_roads_set: Set, ov: BoardOverlay):
+def _road_edge_available_fn(player_roads: List, ov: BoardOverlay):
     """Return a predicate for whether an edge is available for building."""
 
     def ok(edge) -> bool:
-        if edge in player_roads_set:
+        if edge in player_roads:
             return False
         if ov.is_edge_taken(edge):
             return False
@@ -352,7 +359,7 @@ def _calc_etb_actions_fast(
 
 
 def _select_start_vertices(
-        network_vertices: Set[Vertex],
+    network_vertices: List[Vertex],
         vertex_score,
         road_edge_available,
 ) -> List[Vertex]:
@@ -369,17 +376,18 @@ def _select_start_vertices(
 
     # Fallback: if everything is blocked, expand from anywhere.
     if not start_scored:
-        return list(network_vertices)
+        # Return a deterministic ordering of network vertices when no scoring exists.
+        return sorted(network_vertices, key=lambda v: (v.pos[0], v.pos[1], int(v.pos[2])))
 
     start_scored.sort(key=lambda x: x[0], reverse=True)
     return [v for _, v in start_scored[:START_LIMIT]]
 
 
 def _direct_settlement_candidates(
-        player: SimPlayerState,
-        sim_game: SimGame,
-        network_vertices: Set[Vertex],
-        all_player_vertices: Set[Vertex],
+    player: SimPlayerState,
+    sim_game: SimGame,
+    network_vertices: List[Vertex],
+    all_player_vertices: List[Vertex],
         vertex_score,
         etw_estimator: "EtwEstimator",
 ) -> List[Tuple[List[Action], float, float]]:
@@ -416,7 +424,7 @@ def _beam_search_settlement_candidates(
         player: SimPlayerState,
         sim_game: SimGame,
         start_vertices: List[Vertex],
-        all_player_vertices: Set[Vertex],
+    all_player_vertices: List[Vertex],
         max_extra_roads: int,
         vertex_score,
         road_edge_available,

@@ -119,7 +119,10 @@ class RuleBasedAI(AI):
         dice_sum = sum(dice_probability(h.production_number) for h in vertex.hexes)
 
         # Count distinct resource types for early-game flexibility.
-        resources = {h.resource for h in vertex.hexes if h.resource is not None}
+        resources: List[Resource] = []
+        for h in vertex.hexes:
+            if h.resource is not None and h.resource not in resources:
+                resources.append(h.resource)
         diversity = len(resources)
 
         # Estimate how much this vertex blocks opponent expansion.
@@ -154,13 +157,18 @@ class RuleBasedAI(AI):
 
         # For the second settlement, reward complementary resources across both placements.
         if not first_settlement:
-            first_resources = {
-                h.resource
-                for s in player.settlements
-                for h in s.hexes
-                if h.resource is not None
-            }
-            combined_diversity = len(resources | first_resources)
+            first_resources: List[Resource] = []
+            for s in player.settlements:
+                for h in s.hexes:
+                    if h.resource is not None and h.resource not in first_resources:
+                        first_resources.append(h.resource)
+
+            # Compute combined unique resources deterministically
+            combined = list(resources)
+            for r in first_resources:
+                if r not in combined:
+                    combined.append(r)
+            combined_diversity = len(combined)
             utility += StrategyWeights.INIT_PLACE_DIVERSITY * (combined_diversity - diversity)
 
         return utility
@@ -209,7 +217,11 @@ class RuleBasedAI(AI):
         best_hex: Optional[HexTile] = None
 
         # Used to avoid blocking ourselves unless it's clearly worth it.
-        our_resource_tiles = {h for v in (player.settlements + player.cities) for h in v.hexes}
+        our_resource_tiles: List[HexTile] = []
+        for v in (player.settlements + player.cities):
+            for h in v.hexes:
+                if h not in our_resource_tiles:
+                    our_resource_tiles.append(h)
 
         sim_game_for_robber = make_sim_game_for_player(game, player)
 
