@@ -1,6 +1,6 @@
-import random
 from enum import Enum, auto
 from math import ceil
+from random import Random
 from typing import Optional, List, Tuple, Dict
 
 from ai.AI import AI
@@ -37,7 +37,8 @@ class BasicAI(AI):
         OPPORTUNISTIC_BUILD = auto()
         DEV_PLAYED = auto()
 
-    def __init__(self):
+    def __init__(self, rng: Random):
+        super().__init__(rng)
         self.build_target: Optional[Buildable | False] = None  # None = not yet initialised, False = no target
         self.turn_state: Optional[BasicAI._State] = None
 
@@ -63,7 +64,7 @@ class BasicAI(AI):
             weighted_actions.extend([action] * action_weights[action])
         weighted_actions.extend([False] * action_weights[False])
 
-        return random.choice(weighted_actions)
+        return self.rng.choice(weighted_actions)
 
     def _choose_resources(self, player: Player, num_resources: int) -> ResourceCount:
         """Randomly select a number of resources from available resources."""
@@ -77,7 +78,7 @@ class BasicAI(AI):
             for _ in range(count)
         ]
 
-        chosen = random.sample(pool, num_resources)
+        chosen = self.rng.sample(pool, num_resources)
 
         result: ResourceCount = {}
         for resource in chosen:
@@ -102,7 +103,7 @@ class BasicAI(AI):
     def _weighted_pick(self, players: List[Player]) -> Player:
         """Select a player randomly, weighted by human/AI bias."""
         weights = [self._player_trade_weight(p) for p in players]
-        return random.choices(players, weights=weights, k=1)[0]
+        return self.rng.choices(players, weights=weights, k=1)[0]
 
     def choose_trade_partner(self, player: Player, game: "Game", selling: ResourceCount, buying: ResourceCount,
                              available_players: List[Tuple[Player, Optional[ResourceCount]]],
@@ -135,7 +136,7 @@ class BasicAI(AI):
 
         # Acceptance probability
         over_cost = min_cost - self._get_required_trade_ratio(game.round_num)
-        if random.random() > self._accept_probability(over_cost):
+        if self.rng.random() > self._accept_probability(over_cost):
             return None
 
         # Bias toward human if tied
@@ -176,13 +177,13 @@ class BasicAI(AI):
         """Pick a missing resource to buy."""
         if not missing_resources:
             return None
-        return random.choice(list(missing_resources.keys()))
+        return self.rng.choice(list(missing_resources.keys()))
 
     def _select_selling_resource(self, spare_resources: Dict[Resource, int]) -> Optional[Resource]:
         """Pick a spare resource to sell."""
         if not spare_resources:
             return None
-        return random.choice(list(spare_resources.keys()))
+        return self.rng.choice(list(spare_resources.keys()))
 
     def determine_trade(self,
                         player: Player,
@@ -244,11 +245,11 @@ class BasicAI(AI):
             if any(tile.resource in missing_resources for tile in v.hexes if tile.resource)
         ]
 
-        return random.choice(candidates if candidates else available_vertices)
+        return self.rng.choice(candidates if candidates else available_vertices)
 
     def select_initial_road_location(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
         """Select a road location from available edges."""
-        return random.choice(available_edges) if available_edges else None
+        return self.rng.choice(available_edges) if available_edges else None
 
     def _select_build_location(self,
                                buildable_options: Dict[Buildable, List | bool],
@@ -266,7 +267,7 @@ class BasicAI(AI):
 
         # For other actions, expect a list of locations
         if isinstance(value, list) and value:
-            return random.choice(value)
+            return self.rng.choice(value)
 
         return None
 
@@ -274,8 +275,8 @@ class BasicAI(AI):
         """Decide which playable development card to use, if any."""
         playable_cards = [c.card_type for c in player.development_cards if c.playable]
 
-        if playable_cards and random.random() < 0.3:
-            return random.choice(playable_cards)
+        if playable_cards and self.rng.random() < 0.3:
+            return self.rng.choice(playable_cards)
         return None
 
     def select_robber_target(self,
@@ -295,18 +296,18 @@ class BasicAI(AI):
 
         if stealable_hexes:
             # Pick a random hex where stealing is possible
-            hex_tile = random.choice(stealable_hexes)
+            hex_tile = self.rng.choice(stealable_hexes)
 
             stealable_players = [
                 p for p in game.get_players_on_hex(hex_tile)
                 if p != player and p.has_resources()
             ]
 
-            target_player = random.choice(stealable_players)
+            target_player = self.rng.choice(stealable_players)
             return hex_tile, target_player
 
         # Otherwise, move robber to any other valid hex (no stealing)
-        hex_tile = random.choice(valid_hexes)
+        hex_tile = self.rng.choice(valid_hexes)
         return hex_tile, None
 
     def select_discard_resources(self, player: Player, game: Game, num_resources: int) -> ResourceCount:
@@ -319,7 +320,7 @@ class BasicAI(AI):
 
     def select_monopoly_resource(self, player: Player, game: Game) -> Resource:
         """Select a resource for a Monopoly card."""
-        return random.choice(list(Resource))
+        return self.rng.choice(list(Resource))
 
     def respond_to_trade(self, player: Player, game: "Game", opponent: Player, selling: ResourceCount,
                          buying: ResourceCount) -> Tuple[bool, Optional[ResourceCount]]:
@@ -337,7 +338,7 @@ class BasicAI(AI):
 
         # 3. Decide to accept probabilistically
         prob = self.ACCEPT_PROBABILITY_BY_OVERCOST.get(over_cost_int, 0.0)
-        if random.random() < prob:
+        if self.rng.random() < prob:
             return True, None  # Accept trade as-is
 
         # 4. Generate a simple counteroffer if AI wants more
@@ -418,7 +419,7 @@ class BasicAI(AI):
                 self.turn_state = self._State.BUILD_DONE
                 if buildable == Buildable.DEVELOPMENT_CARD:
                     return Action(ActionType.BUY_DEV_CARD)
-                loc = random.choice(locs) if isinstance(locs, list) else locs
+                loc = self.rng.choice(locs) if isinstance(locs, list) else locs
                 return Action(ActionType.BUILD, (buildable, loc))
 
         # 4. Dev card phase
@@ -426,7 +427,7 @@ class BasicAI(AI):
             self.turn_state = self._State.DEV_PLAYED
             playable_cards = [c.card_type for c in player.development_cards if c.playable]
             if playable_cards and not dev_played:
-                return Action(ActionType.PLAY_DEV_CARD, random.choice(playable_cards))
+                return Action(ActionType.PLAY_DEV_CARD, self.rng.choice(playable_cards))
 
         # 5. End turn
         return Action(ActionType.END_TURN)

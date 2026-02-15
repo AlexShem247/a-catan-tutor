@@ -1,7 +1,7 @@
 import sys
 import time
 from collections import defaultdict
-from random import shuffle, seed as set_seed
+from random import Random
 from typing import Dict, Type
 import multiprocessing as mp
 
@@ -13,39 +13,38 @@ from config.player_policies import RULE_BASED_VS_BASIC
 from game.Player import PlayerNumber
 from view.HeadlessView import HeadlessView
 
-NUM_SIMULATIONS = 100
-SHUFFLE_ORDER = True  # Randomise player order
-NUM_PROCESSES = mp.cpu_count()  # Use all CPU cores
+NUM_SIMULATIONS = 1
+SHUFFLE_ORDER = True
+NUM_PROCESSES = mp.cpu_count()
+SEED = 69
 
 
 def run_single_game(args):
     """Run a single game simulation - must be at module level for multiprocessing."""
-    seed, player_policies, first_policy_class, game_id = args
+    game_seed, player_policies, first_policy_class, game_id = args
 
-    # Set seed for reproducibility
-    set_seed(seed)
+    # RNG specific to THIS GAME only
+    rng = Random(game_seed)
 
     if SHUFFLE_ORDER:
         other_policies = list(player_policies.values())[1:]
         all_players = other_policies + [first_policy_class]
-        shuffle(all_players)
+        rng.shuffle(all_players)
         shuffled_config = {pn: pol for pn, pol in zip(player_policies.keys(), all_players)}
         first_player_number = [pn for pn, pol in shuffled_config.items() if pol == first_policy_class][0]
     else:
         shuffled_config = player_policies
         first_player_number = list(player_policies.keys())[0]
 
-    # Run the game
-    controller = GameController({}, shuffled_config)
+    # Important: use game_seed (NOT global SEED)
+    controller = GameController({}, shuffled_config, game_seed=game_seed)
     controller.view = HeadlessView()
     controller.start_game()
     game = controller.get_game_state()
 
-    # Get results
     sorted_players = sorted(game.players, key=lambda p: p.calc_victory_points()[1], reverse=True)
     winner = sorted_players[0]
 
-    # Collect data for all players
     player_data = []
     for player in game.players:
         policy_name = type(player.policy).__name__
@@ -70,29 +69,28 @@ def run_simulations_parallel(player_policies: Dict[PlayerNumber, Type[AI]],
     first_policy_class = list(player_policies.values())[0]
     first_policy_name = first_policy_class.__name__
 
-    # Prepare arguments for each game
-    seeds = [hash(time.time()) + i for i in range(num_runs)]  # Unique seeds
-    args_list = [(seeds[i], player_policies, first_policy_class, i)
-                 for i in range(num_runs)]
+    # Deterministic seed list from master SEED
+    master_rng = Random(SEED)
+    seeds = [master_rng.randrange(10**12) for _ in range(num_runs)]
 
-    # Run in parallel
+    args_list = [
+        (seeds[i], player_policies, first_policy_class, i)
+        for i in range(num_runs)
+    ]
+
     print(f"Running {num_runs} games using {NUM_PROCESSES} CPU cores...")
 
     if use_progress:
         from tqdm import tqdm
-
-        # Create a pool and process with progress bar
         with mp.Pool(processes=NUM_PROCESSES) as pool:
             results = []
             for result in tqdm(pool.imap_unordered(run_single_game, args_list),
                                total=num_runs, desc="Simulating games"):
                 results.append(result)
     else:
-        # Without progress bar
         with mp.Pool(processes=NUM_PROCESSES) as pool:
             results = pool.map(run_single_game, args_list)
 
-    # Aggregate results
     first_policy_wins = 0
     points_summary: Dict[str, list[int]] = defaultdict(list)
 
@@ -103,11 +101,9 @@ def run_simulations_parallel(player_policies: Dict[PlayerNumber, Type[AI]],
         for policy_name, points in result['player_data']:
             points_summary[policy_name].append(points)
 
-    # Build bar charts
-    vp_bins = list(range(1, 13))  # Victory points 1 to 12
+    vp_bins = list(range(1, 13))
     first_policy_points = points_summary[first_policy_name]
 
-    # Get first "Other" policy dynamically
     other_keys = [k for k in points_summary.keys() if k != first_policy_name]
     other_points = points_summary[other_keys[0]] if other_keys else []
 
@@ -122,14 +118,12 @@ def run_simulations_parallel(player_policies: Dict[PlayerNumber, Type[AI]],
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
 
-    # Policy under test
     axes[0].bar(vp_bins, first_counts, color='red', width=0.8, edgecolor='black')
     axes[0].set_xticks(vp_bins)
     axes[0].set_xlabel("Victory Points")
     axes[0].set_ylabel("% of games")
     axes[0].set_title(f"{first_policy_name}\nWin rate: {first_win_rate:.1f}% | Avg VP: {first_avg:.2f}")
 
-    # Other players
     axes[1].bar(vp_bins, [x / 3 for x in other_counts], color='red', width=0.8, edgecolor='black')
     axes[1].set_xticks(vp_bins)
     axes[1].set_xlabel("Victory Points")
@@ -156,9 +150,7 @@ if __name__ == "__main__":
     use_tqdm = "--no-progress" not in sys.argv
     policy = RULE_BASED_VS_BASIC
 
-    # Warm up the pool (helps with accurate timing)
     print("Using parallel processing...")
-    # Test a single game first to ensure everything loads
     test_args = (12345, policy, list(policy.values())[0], 0)
     run_single_game(test_args)
     print("Test game completed successfully, starting batch...")

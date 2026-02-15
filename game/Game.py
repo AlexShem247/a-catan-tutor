@@ -1,5 +1,5 @@
 from collections import defaultdict
-from random import randint
+from random import Random
 from typing import List, Optional, Dict, Tuple, Type
 
 from ai.AI import AI
@@ -32,21 +32,22 @@ class Game:
     VICTORY_POINTS_TO_WIN = 10
     ROBBER_DICE_NUM = 7
 
-    def __init__(self, player_config: PlayerConfig):
+    def __init__(self, player_config: PlayerConfig, game_rng: Random):
         self.bank_resources: Dict[Resource, int] = self.BANK_INITIAL_RESOURCES.copy()
+        self.game_rng = game_rng
 
         self.players = [
             Player(
                 is_human=policy_cls is None,
                 player_number=num,
                 bank_resources=self.bank_resources,
-                policy=None if policy_cls is None else policy_cls()
+                policy=None if policy_cls is None else policy_cls(Random(self.game_rng.randrange(2 ** 63)))
             )
             for num, policy_cls in player_config.items()
             ]
 
-        self._board = Board()
-        self.development_deck = DevelopmentDeck()
+        self._board = Board(self.game_rng)
+        self.development_deck = DevelopmentDeck(self.game_rng)
         self.game_over = False
         self.round_num = 1
 
@@ -57,7 +58,7 @@ class Game:
 
     def roll_dice(self) -> Tuple[int, int, int]:
         """Roll two dice and distribute resources to players."""
-        d1, d2 = randint(1, 6), randint(1, 6)
+        d1, d2 = self.game_rng.randint(1, 6), self.game_rng.randint(1, 6)
         total = d1 + d2
 
         # 1. Aggregate production demands per player per resource

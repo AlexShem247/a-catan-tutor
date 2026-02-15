@@ -1,5 +1,5 @@
-import random
 from enum import Enum
+from random import Random
 from typing import List, Optional, Tuple, TYPE_CHECKING
 
 from game.Edge import Edge
@@ -129,7 +129,7 @@ class Player:
             return 0
         return resource_count // 2
 
-    def random_resource(self) -> ResourceCount:
+    def random_resource(self, rng: Random) -> ResourceCount:
         """Returns a random resource the player has"""
         # Build a flat list where each card appears once per count
         pool = [
@@ -141,5 +141,5 @@ class Player:
         if not pool:
             return {}
 
-        resource_to_give = random.choice(pool)
+        resource_to_give = rng.choice(pool)
         return {resource_to_give: 1}

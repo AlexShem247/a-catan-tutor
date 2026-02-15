@@ -1,3 +1,4 @@
+from random import Random
 from typing import List, Tuple, Optional, Dict
 
 from ai.ai_utils.actions import ActionType, Phase
@@ -20,15 +21,16 @@ class GameController:
     """Controls the flow of a Catan game using a pure Game model."""
     _game: Game
 
-    def __init__(self, game_players: PlayerConfig, simulation_players: PlayerConfig):
+    def __init__(self, game_players: PlayerConfig, simulation_players: PlayerConfig, game_seed: Optional[int] = None):
         self.view: View | None = None
         self.game_players = game_players
         self.simulation_players = simulation_players
+        self.game_rng = Random(game_seed)
         self.reset_game(True)
 
     def reset_game(self, game_mode: bool):
         """Reset the game to a fresh state and reset round counter."""
-        self._game = Game(self.game_players if game_mode else self.simulation_players)
+        self._game = Game(self.game_players if game_mode else self.simulation_players, self.game_rng)
         if self.view is not None:
             self.view.ai_decision_animation_delay = (AI_DECISION_ANIMATION_DELAY if game_mode
                                                      else AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE)
@@ -209,7 +211,7 @@ class GameController:
 
         # If there is a player to steal from, handle the discard
         if steal_from is not None:
-            resource = steal_from.random_resource()
+            resource = steal_from.random_resource(self._game.game_rng)
             if not resource:
                 return None
 

@@ -1,6 +1,6 @@
-import random
 from dataclasses import dataclass
 from enum import Enum, auto
+from random import Random
 from typing import Dict
 
 
@@ -51,14 +51,14 @@ class DevelopmentDeck:
         DevelopmentCardType.VICTORY_POINT: 5,
     }
 
-    def __init__(self):
+    def __init__(self, rng: Random):
         self._deck: list[DevelopmentCard] = []
         self._played = {ctype: 0 for ctype in self.INITIAL_COUNTS}
 
         for card_type, count in self.INITIAL_COUNTS.items():
             self._add_cards(card_type, count)
 
-        random.shuffle(self._deck)
+        rng.shuffle(self._deck)
 
     def _add_cards(self, card_type: DevelopmentCardType, count: int):
         for _ in range(count):
