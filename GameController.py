@@ -57,6 +57,10 @@ class GameController:
 
             self._game.round_num += 1
 
+            if self._game.round_num > 100:
+                # Terminate early: Game has taken too long
+                break
+
         self.view.display_results()
 
     def run_initial_placement(self):
@@ -325,6 +329,7 @@ class GameController:
 
         # Main decision loop
         while True:
+            # TODO: Fix infinite loop
             action = player.policy.next_action(player, self._game, phase=Phase.MAIN, dev_played=used_dev_card)
             if action.type == ActionType.END_TURN:
                 break
@@ -332,7 +337,10 @@ class GameController:
             match action.type:
                 case ActionType.BUILD:
                     buildable, location = action.payload
-                    msg = self.ai_attempt_build(player, buildable, location)
+                    msg, success = self.ai_attempt_build(player, buildable, location)
+                    if not success:
+                        # Invalid move, prevents infinite cycles
+                        break
                     if msg:
                         messages.append(msg)
 
@@ -384,21 +392,22 @@ class GameController:
 
         self.view.display_board_turn_ai(player, (d1, d2, total), "\n".join(messages))
 
-    def ai_attempt_build(self, player: Player, action: Buildable, location):
+    def ai_attempt_build(self, player: Player, action: Buildable, location) -> Tuple[str, bool]:
         """Attempt a build action and return the resulting message."""
         buildable = self._game.get_buildable_options(player)
+        success = True
 
         # Special handling for development card
         if action == Buildable.DEVELOPMENT_CARD:
             if buildable.get(Buildable.DEVELOPMENT_CARD, False):
                 success, _ = self._game.try_buy_development_card(player)
                 msg = f"{player.name} bought a development card."
-                return msg
+                return msg, success
             else:
-                return f"{player.name} chooses to do nothing."
+                return f"{player.name} chooses to do nothing.", success
 
         if action not in buildable or location is None:
-            return f"{player.name} chooses to do nothing."
+            return f"{player.name} chooses to do nothing.", success
 
         if action == Buildable.ROAD:
             success, msg = self._game.try_build_road(player, location)
@@ -412,7 +421,7 @@ class GameController:
         if not SHOW_AI_BUILT_LOCATIONS:
             msg = msg.partition("built")[0] + f"built by {player.name}"
 
-        return msg
+        return msg, success
 
 # <editor-fold desc="Controller wrapper methods for model">
 

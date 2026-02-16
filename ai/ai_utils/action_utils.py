@@ -6,12 +6,14 @@ from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability
 from ai.ai_utils.actions import ActionType, Action
 from ai.ai_utils.board_sim_utils import legal_settlement_vertex, get_opponents
 from ai.ai_utils.resource_utils import get_bank_trade_ratio, calc_step_resources
+
 from config.StrategyWeights import StrategyWeights
 from config.performance_constants import (
     MAX_EXTRA_ROADS_FOR_SETTLEMENT,
     DEV_CARD_ETB_THRESHOLD,
     EPSILON, MAX_SETTLEMENT_CANDIDATES, MAX_EXPANSIONS_PER_STATE, MAX_BEAM_PER_DEPTH, DIRECT_LIMIT, ROAD_LEN_PENALTY,
     MAX_CHEAP_CANDIDATES_TOTAL, K_ETB_EVAL, START_LIMIT)
+
 from game.Game import Game
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
@@ -25,17 +27,16 @@ def distant_settlement_candidates(
         player: SimPlayerState,
         sim_game: SimGame,
         etw_estimator: "EtwEstimator",
+        weights: StrategyWeights,
         max_extra_roads_override: Optional[int] = None,
 ) -> List[Tuple[List[Action], float, float]]:
     """Return settlement candidates reachable via up to k extra roads using a bounded beam search."""
 
-    # Can't build more settlements.
     if len(player.settlements) >= Buildable.SETTLEMENT.max_on_board:
         return []
 
     ov = sim_game.overlay
 
-    # Limit how many extra roads we are willing to consider for expansion.
     max_extra_roads = min(
         Buildable.ROAD.max_on_board - len(player.roads),
         MAX_EXTRA_ROADS_FOR_SETTLEMENT,
@@ -44,32 +45,26 @@ def distant_settlement_candidates(
         max_extra_roads = min(max_extra_roads, max_extra_roads_override)
 
     player_roads_list = list(player.roads)
-    # Combine settlements and cities into a deterministic list without duplicates
     all_player_vertices: List[Vertex] = list(player.settlements)
     for v in player.cities:
         if v not in all_player_vertices:
             all_player_vertices.append(v)
 
-    # Vertices we can expand from: road endpoints and existing structures.
     network_vertices = _get_network_vertices(player)
     if not network_vertices:
         return []
 
-    # Cheap yield heuristic (cached) used to guide search without ETB calls.
     _, vertex_score = _vertex_score_fn()
 
-    # Predicate for whether a road edge is buildable.
     road_edge_available = _road_edge_available_fn(player_roads_list, ov)
 
-    # Pick a small set of good starting points for expansion to keep the search bounded.
     start_vertices = _select_start_vertices(
         network_vertices,
         vertex_score,
         road_edge_available,
+        weights,
     )
 
-    # First, consider settlements that are already directly reachable
-    # (i.e. no extra roads required).
     direct_candidates = _direct_settlement_candidates(
         player=player,
         sim_game=sim_game,
@@ -77,14 +72,13 @@ def distant_settlement_candidates(
         all_player_vertices=all_player_vertices,
         vertex_score=vertex_score,
         etw_estimator=etw_estimator,
+        weights=weights,
     )
 
-    # If we are not allowed to extend the road network, stop here.
     if max_extra_roads <= 0:
         direct_candidates.sort(key=lambda x: x[1])
         return direct_candidates[:MAX_SETTLEMENT_CANDIDATES]
 
-    # Otherwise, explore road extensions using a bounded beam search.
     bfs_candidates = _beam_search_settlement_candidates(
         player=player,
         sim_game=sim_game,
@@ -94,9 +88,9 @@ def distant_settlement_candidates(
         vertex_score=vertex_score,
         road_edge_available=road_edge_available,
         etw_estimator=etw_estimator,
+        weights=weights,
     )
 
-    # Merge direct and distant candidates and keep only the fastest to build.
     all_candidates = direct_candidates + bfs_candidates
     if not all_candidates:
         return []
@@ -105,23 +99,24 @@ def distant_settlement_candidates(
     return all_candidates[:MAX_SETTLEMENT_CANDIDATES]
 
 
-def play_development_card_action(player: SimPlayerState, sim_game: SimGame) -> List[Tuple[List[Action], float, float]]:
+def play_development_card_action(
+        player: SimPlayerState,
+        sim_game: SimGame,
+        weights: StrategyWeights,
+) -> List[Tuple[List[Action], float, float]]:
     """Return playable development card actions and expected VP gains."""
     actions: List[Tuple[List[Action], float, float]] = []
-    etb = 0.0  # Playing a dev card is instantaneous (no build time)
+    etb = 0.0
 
     for card_type, qty in player.dev_cards.items():
-        # Skip unavailable cards and hidden VP cards (they are scored passively).
         if qty <= 0 or card_type == DevelopmentCardType.VICTORY_POINT:
             continue
 
-        # Each copy of a dev card is treated as a separate playable action.
         for _ in range(qty):
             action = Action(ActionType.PLAY_DEV_CARD, payload=card_type)
 
-            # Knights may yield future VP via Largest Army, others have no direct VP value.
             if card_type == DevelopmentCardType.KNIGHT:
-                expected_vp = expected_vp_from_knight(player, sim_game)
+                expected_vp = expected_vp_from_knight(player, sim_game, weights)
             else:
                 expected_vp = 0.0
 
@@ -134,39 +129,36 @@ def purchase_development_card_action(
         player: SimPlayerState,
         sim_game: SimGame,
         etw_estimator: "EtwEstimator",
+        weights: StrategyWeights,
 ) -> List[Tuple[List[Action], float, float]]:
     """Return candidate actions for buying development cards with ETB and expected VP consideration."""
     deck = sim_game.game.development_deck
     if deck.empty():
         return []
 
-    # Only consider dev cards if they are reasonably quick to acquire (keeps search cheap and realistic).
     card_purchase_etb = etw_estimator.estimated_time_to_build(
         player,
         sim_game,
         Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD],
+        weights,
     )
     if card_purchase_etb > DEV_CARD_ETB_THRESHOLD:
         return []
 
     actions = [Action(ActionType.BUY_DEV_CARD)]
 
-    # Expected hidden VP from the probability of drawing a VP card.
     vp_prob = deck.get_probability(DevelopmentCardType.VICTORY_POINT, player.dev_cards)
     expected_vp = vp_prob * 1.0
 
-    # Also credit some expected value for Knights via progress toward Largest Army.
-    if player.army_size < StrategyWeights.MAX_ARMY_SIZE_FOR_KNIGHT_PURCHASE:
+    if player.army_size < weights.MAX_ARMY_SIZE_FOR_KNIGHT_PURCHASE:
         knight_prob = deck.get_probability(DevelopmentCardType.KNIGHT, player.dev_cards)
-        expected_vp += knight_prob * expected_vp_from_knight(player, sim_game)
+        expected_vp += knight_prob * expected_vp_from_knight(player, sim_game, weights)
 
     return [(actions, card_purchase_etb, expected_vp)]
 
 
 def get_bank_trade_for_action(player: SimPlayerState, cost: ResourceCount) -> Optional[Action]:
     """Return a single bank trade action to make an unaffordable action feasible, or None."""
-
-    # Find the first resource we are short on, then see if we can convert a surplus via bank/ports.
     for needed_resource, needed_amount in cost.items():
         have = player.resources.get(needed_resource, 0)
         if have >= needed_amount:
@@ -180,7 +172,6 @@ def get_bank_trade_for_action(player: SimPlayerState, cost: ResourceCount) -> Op
             if have_sell <= 0:
                 continue
 
-            # Use the best available trade ratio (2:1/3:1 port, otherwise 4:1 bank).
             trade_ratio = get_bank_trade_ratio(player.settlements + player.cities, sell_resource)
             if have_sell >= trade_ratio:
                 return Action(
@@ -191,14 +182,11 @@ def get_bank_trade_for_action(player: SimPlayerState, cost: ResourceCount) -> Op
                     ),
                 )
 
-    # No single trade can fix affordability.
     return None
 
 
-def compute_k_lr(player: SimPlayerState, sim_game: SimGame) -> float:
+def compute_k_lr(player: SimPlayerState, sim_game: SimGame, weights: StrategyWeights) -> float:
     """Calculate Longest Road scaling factor for utility computations."""
-
-    # As we get closer to 10 VP, Longest Road becomes more valuable.
     vp = player.victory_points()
     f_phase = min(vp / 10.0, 1.0)
 
@@ -208,32 +196,26 @@ def compute_k_lr(player: SimPlayerState, sim_game: SimGame) -> float:
         default=0,
     )
 
-    # Aim to (at least) reach the current best + 1, or a minimum LR-relevant length.
     longest_road = max(my_len, opponent_best)
-    target = max(StrategyWeights.LR_MIN_ROAD_LENGTH, longest_road + 1)
+    target = max(weights.LR_MIN_ROAD_LENGTH, longest_road + 1)
 
-    # Reward being close to the target length (fewer roads needed).
     dist = max(0, target - my_len)
     f_dist = 1.0 / (1.0 + dist)
 
-    # Reward contested situations: if we're not clearly ahead, LR is more "worth fighting for".
     gap = my_len - opponent_best
     f_contest = 1.0 / (1.0 + max(gap, 0) + EPSILON)
 
-    # Weighted combination of phase / distance-to-target / contest.
     k = (
-            StrategyWeights.LR_BASE
-            + StrategyWeights.LR_PHASE * f_phase
-            + StrategyWeights.LR_DISTANCE * f_dist
-            + StrategyWeights.LR_CONTEST * f_contest
+            weights.LR_BASE
+            + weights.LR_PHASE * f_phase
+            + weights.LR_DISTANCE * f_dist
+            + weights.LR_CONTEST * f_contest
     )
     return max(k, 0.0)
 
 
-def compute_k_la(player: SimPlayerState, sim_game: SimGame) -> float:
+def compute_k_la(player: SimPlayerState, sim_game: SimGame, weights: StrategyWeights) -> float:
     """Calculate Largest Army scaling factor for utility computations."""
-
-    # As we approach 10 VP, Largest Army becomes more valuable as a fast +2 VP swing.
     vp = player.victory_points()
     f_phase = min(vp / 10.0, 1.0)
 
@@ -243,48 +225,40 @@ def compute_k_la(player: SimPlayerState, sim_game: SimGame) -> float:
         default=0,
     )
 
-    # Aim to (at least) reach the current best + 1, or the minimum LA threshold.
     largest_army = max(my_knights, opponent_best)
-    target = max(StrategyWeights.LA_MIN_KNIGHTS, largest_army + 1)
+    target = max(weights.LA_MIN_KNIGHTS, largest_army + 1)
 
-    # Reward being close to the target (fewer knights needed).
     dist = max(0, target - my_knights)
     f_dist = 1.0 / (1.0 + dist)
 
-    # Reward contested situations: if we aren't safely ahead, LA is more worth pursuing.
     gap = my_knights - opponent_best
     f_contest = 1.0 / (1.0 + max(gap, 0) + EPSILON)
 
-    # Weighted combination of phase / distance-to-target / contest.
     k = (
-            StrategyWeights.LA_BASE
-            + StrategyWeights.LA_PHASE * f_phase
-            + StrategyWeights.LA_KNIGHT_DIST * f_dist
-            + StrategyWeights.LA_CONTEST * f_contest
+            weights.LA_BASE
+            + weights.LA_PHASE * f_phase
+            + weights.LA_KNIGHT_DIST * f_dist
+            + weights.LA_CONTEST * f_contest
     )
     return max(k, 0.0)
 
 
-def expected_vp_from_knight(player: SimPlayerState, sim_game: SimGame) -> float:
+def expected_vp_from_knight(player: SimPlayerState, sim_game: SimGame, weights: StrategyWeights) -> float:
     """Estimate expected victory points from playing a Knight card based on army comparison."""
     my_knights = player.army_size
     opponents = get_opponents(sim_game, player.player_number)
     opponent_best = max((p.army_size for p in opponents), default=0)
 
-    # If we're far behind in knights, a single Knight has low immediate value.
-    if my_knights + StrategyWeights.KNIGHT_DEFICIT_THRESHOLD < opponent_best:
-        return StrategyWeights.LOW_KNIGHT_VALUE
+    if my_knights + weights.KNIGHT_DEFICIT_THRESHOLD < opponent_best:
+        return weights.LOW_KNIGHT_VALUE
 
-    # Check whether playing a Knight would immediately secure Largest Army.
     target = max(3, opponent_best + 1)
     if my_knights + 1 >= target and not player.has_largest_army:
-        return StrategyWeights.HIGH_KNIGHT_VALUE
+        return weights.HIGH_KNIGHT_VALUE
 
-    # If we already have the Largest Army, extra Knights help maintain the lead.
     if player.has_largest_army and my_knights + 1 > opponent_best:
-        return StrategyWeights.MEDIUM_KNIGHT_VALUE
+        return weights.MEDIUM_KNIGHT_VALUE
 
-    # Otherwise, the Knight provides no direct VP benefit right now.
     return 0.0
 
 
@@ -320,11 +294,11 @@ def _vertex_score_fn() -> Tuple[Dict[Vertex, float], Any]:
     return cache, score
 
 
-def _road_edge_available_fn(player_roads: List, ov: BoardOverlay):
+def _road_edge_available_fn(player_roads_list: List, ov: BoardOverlay):
     """Return a predicate for whether an edge is available for building."""
 
     def ok(edge) -> bool:
-        if edge in player_roads:
+        if edge in player_roads_list:
             return False
         if ov.is_edge_taken(edge):
             return False
@@ -338,10 +312,9 @@ def _calc_etb_actions_fast(
         player: SimPlayerState,
         sim_game: SimGame,
         actions: List[Action],
+        weights: StrategyWeights,
 ) -> float:
     """ETB for an action list using bank/port trades only (no player trades)."""
-
-    # Aggregate total resources required for the full action sequence.
     total_resources: ResourceCount = {res: 0 for res in Resource}
 
     for a in actions:
@@ -349,51 +322,46 @@ def _calc_etb_actions_fast(
         for res, cost in step_resources.items():
             total_resources[res] = total_resources.get(res, 0) + cost
 
-    # Use bank/port trades only to avoid expensive opponent trade modelling here.
     return etw_estimator.estimated_time_to_build(
         player,
         sim_game,
         total_resources,
+        weights,
         include_player_trades=False,
     )
 
 
 def _select_start_vertices(
-    network_vertices: List[Vertex],
+        network_vertices: List[Vertex],
         vertex_score,
         road_edge_available,
+        weights: StrategyWeights,
 ) -> List[Vertex]:
     """Pick a small set of promising vertices to start beam expansion from."""
-
-    # Rank starting points by local yield and how many directions they can expand.
     start_scored: List[Tuple[float, Vertex]] = []
 
     for v in network_vertices:
         free_out = sum(1 for e in v.edges if road_edge_available(e))
         if free_out > 0:
-            # Slight bonus for vertices with multiple expansion options.
-            start_scored.append((vertex_score(v) + StrategyWeights.START_VERTEX_EXPANSION_BONUS * free_out, v))
+            start_scored.append((vertex_score(v) + weights.START_VERTEX_EXPANSION_BONUS * free_out, v))
 
-    # Fallback: if everything is blocked, expand from anywhere.
     if not start_scored:
-        # Return a deterministic ordering of network vertices when no scoring exists.
-        return sorted(network_vertices, key=lambda v: (v.pos[0], v.pos[1], int(v.pos[2])))
+        return sorted(network_vertices, key=lambda ve: (ve.pos[0], ve.pos[1], int(ve.pos[2])))
 
     start_scored.sort(key=lambda x: x[0], reverse=True)
     return [v for _, v in start_scored[:START_LIMIT]]
 
 
 def _direct_settlement_candidates(
-    player: SimPlayerState,
-    sim_game: SimGame,
-    network_vertices: List[Vertex],
-    all_player_vertices: List[Vertex],
+        player: SimPlayerState,
+        sim_game: SimGame,
+        network_vertices: List[Vertex],
+        all_player_vertices: List[Vertex],
         vertex_score,
         etw_estimator: "EtwEstimator",
+        weights: StrategyWeights,
 ) -> List[Tuple[List[Action], float, float]]:
     """Candidate settlements already on the connected network (no extra roads)."""
-
-    # First consider settlements that can be placed immediately without road extensions.
     direct_vertices: List[Tuple[float, Vertex]] = []
 
     for v in network_vertices:
@@ -402,13 +370,12 @@ def _direct_settlement_candidates(
         if legal_settlement_vertex(player, v, sim_game):
             direct_vertices.append((vertex_score(v), v))
 
-    # Prefer high-yield spots.
     direct_vertices.sort(key=lambda x: x[0], reverse=True)
 
     direct_candidates: List[Tuple[List[Action], float, float]] = []
     for _, v in direct_vertices[:DIRECT_LIMIT]:
         actions = [Action(ActionType.BUILD, (Buildable.SETTLEMENT, v))]
-        etb = _calc_etb_actions_fast(etw_estimator, player, sim_game, actions)
+        etb = _calc_etb_actions_fast(etw_estimator, player, sim_game, actions, weights)
         direct_candidates.append((actions, etb, 1.0))
 
     return direct_candidates
@@ -424,21 +391,16 @@ def _beam_search_settlement_candidates(
         player: SimPlayerState,
         sim_game: SimGame,
         start_vertices: List[Vertex],
-    all_player_vertices: List[Vertex],
+        all_player_vertices: List[Vertex],
         max_extra_roads: int,
         vertex_score,
         road_edge_available,
         etw_estimator: "EtwEstimator",
+        weights: StrategyWeights,
 ) -> List[Tuple[List[Action], float, float]]:
     """Beam BFS over road expansions, ETB-evaluate only top cheap candidates."""
-
-    # Track the shallowest depth at which each vertex has been reached.
     visited_best_depth: Dict[Vertex, int] = {}
-
-    # Store promising endpoints keyed by (vertex, road_path).
     cheap_pool: Dict[Tuple[Vertex, Tuple], float] = {}
-
-    # Initialise beam frontier from selected starting vertices.
     frontier: List[_PathState] = [_PathState(v, tuple()) for v in start_vertices]
 
     for depth in range(1, max_extra_roads + 1):
@@ -448,7 +410,6 @@ def _beam_search_settlement_candidates(
             from_v = state.vertex
             possible_moves: List[Tuple[float, Vertex, Any]] = []
 
-            # Expand along available road edges.
             for edge in from_v.edges:
                 if not road_edge_available(edge):
                     continue
@@ -457,7 +418,6 @@ def _beam_search_settlement_candidates(
                 if to_v in all_player_vertices:
                     continue
 
-                # Prune paths that reach a vertex no better than before.
                 prev_depth = visited_best_depth.get(to_v)
                 if prev_depth is not None and prev_depth <= depth:
                     continue
@@ -467,25 +427,21 @@ def _beam_search_settlement_candidates(
             if not possible_moves:
                 continue
 
-            # Keep only the best few expansions per state.
             possible_moves.sort(key=lambda x: x[0], reverse=True)
             possible_moves = possible_moves[:MAX_EXPANSIONS_PER_STATE]
 
             for score, to_v, edge in possible_moves:
                 visited_best_depth[to_v] = depth
                 new_edges = state.edges + (edge,)
-                # Penalise longer road chains to avoid overextension.
                 beam_score = score - ROAD_LEN_PENALTY * len(new_edges)
                 next_states_scored.append((-beam_score, _PathState(to_v, new_edges)))
 
         if not next_states_scored:
             break
 
-        # Keep only the strongest beam states.
         next_states_scored.sort(key=lambda x: x[0])
         frontier = [st for _, st in next_states_scored[:MAX_BEAM_PER_DEPTH]]
 
-        # From the frontier, collect legal settlement endpoints.
         for st in frontier:
             v = st.vertex
             if v in all_player_vertices:
@@ -499,7 +455,6 @@ def _beam_search_settlement_candidates(
             if prev is None or cheap_score > prev:
                 cheap_pool[key] = cheap_score
 
-            # Stop once we have enough candidates to evaluate precisely.
             if len(cheap_pool) >= MAX_CHEAP_CANDIDATES_TOTAL:
                 break
 
@@ -511,7 +466,6 @@ def _beam_search_settlement_candidates(
     if not cheap_pool:
         return []
 
-    # Perform expensive ETB evaluation only on the best cheap candidates.
     shortlisted = sorted(
         cheap_pool.items(),
         key=lambda kv: kv[1],
@@ -522,7 +476,7 @@ def _beam_search_settlement_candidates(
     for (v, edges), _ in shortlisted:
         actions = [Action(ActionType.BUILD, (Buildable.ROAD, e)) for e in edges]
         actions.append(Action(ActionType.BUILD, (Buildable.SETTLEMENT, v)))
-        etb = _calc_etb_actions_fast(etw_estimator, player, sim_game, actions)
+        etb = _calc_etb_actions_fast(etw_estimator, player, sim_game, actions, weights)
         bfs_candidates.append((actions, etb, 1.0))
 
     return bfs_candidates

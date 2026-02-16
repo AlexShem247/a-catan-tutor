@@ -31,7 +31,6 @@ from game.Resources import Resource, ResourceCount
 
 
 def _sim_game_with_replaced_player(sim_game: SimGame, sim_player: SimPlayerState) -> SimGame:
-    """Return a SimGame with one SimPlayerState replaced in the overlay."""
     overlay2 = sim_game.overlay.copy()
     overlay2.set_sim_player(sim_player)
     return SimGame(game=sim_game.game, overlay=overlay2)
@@ -44,7 +43,6 @@ class EtwEstimator:
         self._last_trade_proposed: bool = False
 
     def new_turn(self):
-        """Clear previous turn trade info."""
         self._last_trade_proposed = False
         self._last_trade_resources = None
 
@@ -53,11 +51,9 @@ class EtwEstimator:
         player: SimPlayerState,
         sim_game: SimGame,
         R_target: ResourceCount,
+        weights: StrategyWeights,
         include_player_trades: bool = True,
     ) -> float:
-        """Estimate ETB for a resource target with caching."""
-
-        # Cache key captures player state, target resources, and trade assumptions.
         target_key = tuple((r.value, R_target.get(r, 0)) for r in Resource)
         player_key = (
             player.player_number,
@@ -70,14 +66,11 @@ class EtwEstimator:
         if cache_key in player.etb_cache:
             return player.etb_cache[cache_key]
 
-        # Current holdings and expected rolls per resource.
         current = {r: player.resources.get(r, 0) for r in Resource}
         rolls_per_unit = {r: self._expected_rolls_for_resource(player, r) for r in Resource}
 
-        # Split target into shortages and surplus.
         deficits, excesses = self._calculate_deficits_and_excesses(current, R_target)
 
-        # Adjust expected rolls using bank/port trades and (optionally) player trades.
         opponents = get_opponents(sim_game, player.player_number)
         trade_adjusted_rolls = self._calculate_trade_adjusted_rolls(
             player=player,
@@ -85,17 +78,16 @@ class EtwEstimator:
             deficits=deficits,
             excesses=excesses,
             rolls_per_unit=rolls_per_unit,
+            weights=weights,
             bank_trade_ratio_func=lambda r: get_bank_trade_ratio(player.settlements + player.cities, r),
             include_player_trades=include_player_trades,
         )
 
-        # ETB is governed by the slowest required resource.
         etb = max(trade_adjusted_rolls.values())
         player.etb_cache[cache_key] = etb
         return etb
 
     def _expected_rolls_for_resource(self, player: SimPlayerState, resource: Resource) -> float:
-        """Return expected rolls to gain one unit of resource based on production rate."""
         fr = player.get_production_rate(resource)
         if fr <= 0.0:
             return float("inf")
@@ -108,22 +100,19 @@ class EtwEstimator:
         deficits: Dict[Resource, int],
         excesses: Dict[Resource, int],
         rolls_per_unit: Dict[Resource, float],
+        weights: StrategyWeights,
         bank_trade_ratio_func,
         include_player_trades: bool,
     ) -> Dict[Resource, float]:
-        """Compute expected rolls per resource after bank/port and optional player-trade conversions."""
         trade_adjusted: Dict[Resource, float] = {}
 
         for resource_i in Resource:
-            # No shortage → no time required.
             if deficits[resource_i] <= 0:
                 trade_adjusted[resource_i] = 0.0
                 continue
 
-            # Base time from direct production only.
             direct_rolls = deficits[resource_i] * rolls_per_unit[resource_i]
 
-            # Bank/port trades: convert excess resources at fixed ratios.
             bank_savings = 0.0
             for resource_j, excess in excesses.items():
                 if resource_j == resource_i or excess <= 0:
@@ -132,17 +121,15 @@ class EtwEstimator:
                 units_gained = excess / max(1, sell_ratio)
                 bank_savings += units_gained * rolls_per_unit[resource_i]
 
-            # Player trades: optimistic but capped conversion via opponents.
             player_savings = 0.0
             if include_player_trades:
                 for resource_j, excess in excesses.items():
                     if resource_j == resource_i or excess <= 0:
                         continue
-                    ratio = self._player_trade_ratio(resource_j, resource_i, player, opponents, rolls_per_unit)
+                    ratio = self._player_trade_ratio(resource_j, resource_i, player, opponents, rolls_per_unit, weights)
                     units_gained = excess / max(1, ratio)
                     player_savings += units_gained * rolls_per_unit[resource_i]
 
-            # Remaining expected rolls after all conversions.
             trade_adjusted[resource_i] = max(0.0, direct_rolls - bank_savings - player_savings)
 
         return trade_adjusted
@@ -154,40 +141,35 @@ class EtwEstimator:
         player: SimPlayerState,
         opponents: List[SimPlayerState],
         rolls_per_unit: Dict[Resource, float],
+        weights: StrategyWeights,
     ) -> int:
-        """Return a conservative give:take ratio for player trades."""
         give_r = rolls_per_unit.get(resource_give, float("inf"))
         need_r = rolls_per_unit.get(resource_need, float("inf"))
 
-        # If we can't produce the needed resource, assume we must overpay.
         if need_r == float("inf"):
-            base_ratio = StrategyWeights.MAX_PLAYER_TRADE_GIVE_RATIO
+            base_ratio = weights.MAX_PLAYER_TRADE_GIVE_RATIO
         else:
-            # Ratio is based on relative scarcity (expected rolls per unit).
             if give_r <= 0.0 or give_r == float("inf"):
                 base_ratio = 1
             else:
                 base_ratio = math.ceil(need_r / give_r)
-                base_ratio = max(1, min(StrategyWeights.MAX_PLAYER_TRADE_GIVE_RATIO, base_ratio))
+                base_ratio = max(1, min(weights.MAX_PLAYER_TRADE_GIVE_RATIO, base_ratio))
 
-        # Slightly more conservative when trading while behind the leader.
         leading = max([player, *opponents], key=lambda p: p.victory_points()) if opponents else player
-        if leading is not player and base_ratio < StrategyWeights.MAX_PLAYER_TRADE_GIVE_RATIO:
-            base_ratio = min(StrategyWeights.MAX_PLAYER_TRADE_GIVE_RATIO, base_ratio + 1)
+        if leading is not player and base_ratio < weights.MAX_PLAYER_TRADE_GIVE_RATIO:
+            base_ratio = min(weights.MAX_PLAYER_TRADE_GIVE_RATIO, base_ratio + 1)
 
         return base_ratio
 
     def estimated_time_to_win(
-            self,
-            player: SimPlayerState,
-            sim_game: SimGame,
-            dev_played: bool,
-            include_player_trades: bool = True,
-            max_depth_override: Optional[int] = None,
+        self,
+        player: SimPlayerState,
+        sim_game: SimGame,
+        dev_played: bool,
+        weights: StrategyWeights,
+        include_player_trades: bool = True,
+        max_depth_override: Optional[int] = None,
     ) -> float:
-        """Estimate expected turns to reach 10 VP via a greedy forward rollout."""
-
-        # Cache key includes depth override to avoid mixing fast vs full ETW estimates.
         cache_key = (
             player.player_number,
             dev_played,
@@ -210,20 +192,17 @@ class EtwEstimator:
         etw = 0.0
         iterations = 0
 
-        # Default rollout depth shrinks as we get closer to winning.
         default_depth = min(
             Game.VICTORY_POINTS_TO_WIN + ETW_MAX_DEPTH_OFFSET - points,
             ETW_MAX_DEPTH_OFFSET,
         )
 
-        # Optional override for fast, rank-only ETW estimates.
         if max_depth_override is not None:
             max_depth = max(1, int(max_depth_override))
             max_depth = min(max_depth, default_depth)
         else:
             max_depth = default_depth
 
-        # Work on a copied player and overlay so the real state is untouched.
         sim_player = player.copy()
         sim_game_local = _sim_game_with_replaced_player(sim_game, sim_player)
 
@@ -232,34 +211,30 @@ class EtwEstimator:
                 sim_player,
                 sim_game_local,
                 dev_played,
+                weights,
                 include_player_trades,
             )
 
-            # No feasible progress → penalise and stop.
             if not candidate_actions:
-                etw += StrategyWeights.ETW_NO_ACTION_PENALTY
+                etw += weights.ETW_NO_ACTION_PENALTY
                 break
 
             actions, etb, _ = candidate_actions[0]
 
-            # Plans that take too long are treated as stalls.
             if etb > ETW_ETB_THRESHOLD:
-                etw += StrategyWeights.ETW_NO_ACTION_PENALTY
+                etw += weights.ETW_NO_ACTION_PENALTY
                 break
 
             etw += etb
 
-            # Apply the full chosen plan step by step.
             for step in actions:
                 self._simulate_step(sim_game_local, sim_player, step)
 
-            # Update points after the rollout step.
             points = sim_player.victory_points()
             iterations += 1
 
-        # Only inflate ETW for missing points in the full (non-fast) estimate.
         if max_depth_override is None and points < Game.VICTORY_POINTS_TO_WIN:
-            etw += (Game.VICTORY_POINTS_TO_WIN - points) * StrategyWeights.ETW_MISSING_POINT_PENALTY
+            etw += (Game.VICTORY_POINTS_TO_WIN - points) * weights.ETW_MISSING_POINT_PENALTY
 
         player.etw_cache[cache_key] = etw
         return etw
@@ -269,7 +244,6 @@ class EtwEstimator:
         current: ResourceCount,
         target: ResourceCount,
     ) -> Tuple[Dict[Resource, int], Dict[Resource, int]]:
-        """Compute deficits and excesses relative to a target."""
         deficits: Dict[Resource, int] = {}
         excesses: Dict[Resource, int] = {}
 
@@ -277,7 +251,6 @@ class EtwEstimator:
             needed = target.get(resource, 0)
             have = current.get(resource, 0)
 
-            # Split each resource into either a shortfall or a surplus.
             if have >= needed:
                 excesses[resource] = have - needed
                 deficits[resource] = 0
@@ -287,8 +260,13 @@ class EtwEstimator:
 
         return deficits, excesses
 
-    def calc_etb_actions(self, player: SimPlayerState, sim_game: SimGame, total_actions: List[Action]) -> float:
-        """Compute ETB for a list of actions by summing resource costs."""
+    def calc_etb_actions(
+        self,
+        player: SimPlayerState,
+        sim_game: SimGame,
+        total_actions: List[Action],
+        weights: StrategyWeights,
+    ) -> float:
         total_resources: ResourceCount = {res: 0 for res in Resource}
 
         for action in total_actions:
@@ -296,18 +274,16 @@ class EtwEstimator:
             for res, cost in step_resources.items():
                 total_resources[res] = total_resources.get(res, 0) + cost
 
-        return self.estimated_time_to_build(player, sim_game, total_resources)
+        return self.estimated_time_to_build(player, sim_game, total_resources, weights)
 
     def _get_candidate_actions(
         self,
         player: SimPlayerState,
         sim_game: SimGame,
         dev_played: bool,
+        weights: StrategyWeights,
         include_player_trades: bool = True,
     ) -> List[Tuple[List[Action], float, float]]:
-        """Generate and prune candidates, returning (actions, etb, expected_vp_gain)."""
-
-        # Cache so utility evaluation doesn't regenerate candidates repeatedly.
         cache_key = (
             player.player_number,
             dev_played,
@@ -322,43 +298,40 @@ class EtwEstimator:
 
         candidate_actions: List[Tuple[List[Action], float, float]] = []
 
-        # City upgrades: only consider a few best settlements (highest yield) to keep branching low.
         if len(player.cities) < Buildable.CITY.max_on_board and player.settlements:
             city_etb = self.estimated_time_to_build(
                 player,
                 sim_game,
                 Game.BUILDING_COST[Buildable.CITY],
+                weights,
                 include_player_trades=include_player_trades,
             )
             sorted_settlements = sorted(
                 player.settlements,
                 key=lambda settlement: sum(dice_probability(h.production_number) for h in settlement.hexes),
                 reverse=True,
-            )[:StrategyWeights.MAX_SETTLEMENTS_FOR_CITY_UPGRADE]
+            )[:weights.MAX_SETTLEMENTS_FOR_CITY_UPGRADE]
             for s in sorted_settlements:
                 candidate_actions.append(([Action(ActionType.BUILD, (Buildable.CITY, s))], city_etb, 1))
 
-        # Settlement expansion: include direct and “reachable with k roads” candidates, ETB-sorted.
-        settlement_candidates = distant_settlement_candidates(player, sim_game, self)
+        settlement_candidates = distant_settlement_candidates(player, sim_game, self, weights)
         settlement_candidates.sort(key=lambda x: x[1])
         candidate_actions.extend(settlement_candidates[:MAX_SETTLEMENT_CANDIDATES])
 
-        # Dev cards: mainly when close to winning or already investing in army pressure.
         points_needed = Game.VICTORY_POINTS_TO_WIN - player.victory_points()
         if player.army_size >= 2 or points_needed <= 2:
-            candidate_actions.extend(purchase_development_card_action(player, sim_game, self))
+            candidate_actions.extend(purchase_development_card_action(player, sim_game, self, weights))
 
-        # Playing dev cards is free ETB-wise, only allow once per turn.
         if not dev_played:
-            candidate_actions.extend(play_development_card_action(player, sim_game))
+            candidate_actions.extend(play_development_card_action(player, sim_game, weights))
 
-        # If the candidate set is too small, add a cheap road option to avoid “dead-end” turns.
-        if len(candidate_actions) < StrategyWeights.MIN_CANDIDATES_FOR_ROAD:
+        if len(candidate_actions) < weights.MIN_CANDIDATES_FOR_ROAD:
             road_cost = Game.BUILDING_COST[Buildable.ROAD]
             road_etb = self.estimated_time_to_build(
                 player,
                 sim_game,
                 road_cost,
+                weights,
                 include_player_trades=include_player_trades,
             )
             if road_etb < ROAD_ETB_THRESHOLD:
@@ -370,7 +343,6 @@ class EtwEstimator:
                     if candidate_actions and candidate_actions[-1][0]:
                         break
 
-        # Sort by ETB so later stages can prune quickly.
         candidate_actions.sort(key=lambda x: x[1])
         player.candidate_cache[cache_key] = candidate_actions
         return candidate_actions[:ETW_SIMULATION_MAX_CANDIDATES]
@@ -383,28 +355,25 @@ class EtwEstimator:
         candidates: List[Tuple[List[Action], float, float]],
         etw_before: float,
         opponents_etw_before: Dict[PlayerNumber, float],
+        weights: StrategyWeights,
     ) -> List[Tuple[Action, float]]:
-        """Evaluate utility for candidate actions."""
         self._eval_stats["evaluations"] += 1
 
         utilities: List[Tuple[Action, float]] = []
-        candidates.sort(key=lambda x: x[1])  # Cheap plans first (helps pruning)
+        candidates.sort(key=lambda x: x[1])
         max_eval = min(MAX_EVALUATIONS, len(candidates))
 
-        # Use the opponent with the lowest ETW as the "leader" for interference scoring.
         leading_opp_num, opp_etw_before = None, None
         if opponents_etw_before:
             leading_opp_num = min(opponents_etw_before, key=opponents_etw_before.get)
             opp_etw_before = opponents_etw_before.get(leading_opp_num)
 
         for actions, etb, vp_inc in candidates[:max_eval]:
-            # Skip very slow plans or empty candidates.
             if etb > MAX_ETB_THRESHOLD or not actions:
                 continue
 
-            next_step = actions[0]  # Only the first step is executed this turn
+            next_step = actions[0]
 
-            # Roll out the full plan to estimate downstream ETW impact.
             player_copy = player.copy()
             sim_game_copy = _sim_game_with_replaced_player(sim_game, player_copy)
 
@@ -419,16 +388,15 @@ class EtwEstimator:
 
                 self._simulate_step(sim_game_copy, player_copy, s)
 
-            # Self utility: percent reduction in (approx) ETW after the rollout.
             etw_after = self.estimated_time_to_win(
                 player_copy,
                 sim_game_copy,
                 dev_played,
+                weights,
                 max_depth_override=EVAL_UTIL_MAX_DEPTH,
             )
             u_self = 0.0 if etw_before <= 0 else max(0.0, (etw_before - etw_after) / etw_before * 100.0)
 
-            # Opponent utility: only score interference if this plan changes the board.
             affects_board = any(
                 s.type == ActionType.BUILD and s.payload[0] in (Buildable.ROAD, Buildable.SETTLEMENT)
                 for s in actions
@@ -436,7 +404,6 @@ class EtwEstimator:
 
             u_opp = 0.0
             if affects_board and leading_opp_num is not None and opp_etw_before and opp_etw_before > 0:
-                # Evaluate the leader's ETW in the counterfactual world where we executed this plan.
                 opp_state = sim_game_copy.overlay.get_sim_player(leading_opp_num).copy()
                 sim_game_opp = _sim_game_with_replaced_player(sim_game_copy, opp_state)
 
@@ -444,39 +411,37 @@ class EtwEstimator:
                     opp_state,
                     sim_game_opp,
                     False,
+                    weights,
                     max_depth_override=EVAL_UTIL_MAX_DEPTH,
                 )
 
                 delay_caused = (opp_etw_after - opp_etw_before) / opp_etw_before * 100.0
-                u_opp = StrategyWeights.OPPONENT_INTERFERENCE_LEADING * delay_caused
+                u_opp = weights.OPPONENT_INTERFERENCE_LEADING * delay_caused
 
-            # Special utility: explicit incentives for LR / LA progress when a plan advances them.
             u_special = 0.0
 
             if did_build_road:
                 delta_lr = max(0, player_copy.longest_road_length - player.longest_road_length)
-                if delta_lr > 0 and player_copy.longest_road_length >= StrategyWeights.LR_ROAD_THRESHOLD:
-                    u_special += StrategyWeights.LR_UTILITY_MULTIPLIER * delta_lr
+                if delta_lr > 0 and player_copy.longest_road_length >= weights.LR_ROAD_THRESHOLD:
+                    u_special += weights.LR_UTILITY_MULTIPLIER * delta_lr
 
             if did_play_knight:
-                if player_copy.army_size >= StrategyWeights.LA_ARMY_THRESHOLD:
-                    u_special += compute_k_la(player_copy, sim_game)
+                if player_copy.army_size >= weights.LA_ARMY_THRESHOLD:
+                    u_special += compute_k_la(player_copy, sim_game, weights)
 
-            # Attention management: taking LR very early can paint a target on us.
             took_lr_now = (not player.has_longest_road) and player_copy.has_longest_road
             vp_after = player_copy.victory_points()
 
             u_attention = 0.0
-            if took_lr_now and vp_after < StrategyWeights.ATTENTION_LR_VP_THRESHOLD:
-                u_attention -= StrategyWeights.ATTENTION_LR_EARLY_PENALTY
+            if took_lr_now and vp_after < weights.ATTENTION_LR_VP_THRESHOLD:
+                u_attention -= weights.ATTENTION_LR_EARLY_PENALTY
 
-            # Discount by ETB so fast gains beat slow gains.
-            discount_rate = StrategyWeights.TIME_DISCOUNT_RATE
+            discount_rate = weights.TIME_DISCOUNT_RATE
             eu = (
                     (
-                            StrategyWeights.BUILD_SELF_UTILITY * u_self
-                            + StrategyWeights.BUILD_OPPONENT_UTILITY * u_opp
-                            + StrategyWeights.BUILD_SPECIAL_UTILITY * u_special
+                            weights.BUILD_SELF_UTILITY * u_self
+                            + weights.BUILD_OPPONENT_UTILITY * u_opp
+                            + weights.BUILD_SPECIAL_UTILITY * u_special
                             + u_attention
                     )
                     / ((1.0 + discount_rate) ** max(1.0, etb))
@@ -487,10 +452,8 @@ class EtwEstimator:
         return utilities
 
     def _simulate_step(self, sim_game: SimGame, player: SimPlayerState, step: Action):
-        """Apply an action to SimPlayerState and BoardOverlay (including resource costs)."""
         overlay = sim_game.overlay
 
-        # Safe payment for rollouts.
         def _pay(cost: ResourceCount) -> None:
             for r, c in cost.items():
                 if c <= 0:
@@ -502,7 +465,6 @@ class EtwEstimator:
             _pay(Game.BUILDING_COST[building])
 
             if building == Buildable.ROAD:
-                # Longest Road depends on opponents' best length, so pass that into the update.
                 opp_lengths = [
                     p.longest_road_length
                     for num, p in overlay.sim_players.items()
@@ -522,7 +484,6 @@ class EtwEstimator:
         elif step.type == ActionType.BUY_DEV_CARD:
             _pay(Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD])
 
-            # Track expected VP from future VP-card draws without simulating the deck.
             deck = sim_game.game.development_deck
             if not deck.empty():
                 vp_prob = deck.get_probability(DevelopmentCardType.VICTORY_POINT, player.dev_cards)
@@ -531,14 +492,12 @@ class EtwEstimator:
         elif step.type == ActionType.PLAY_DEV_CARD:
             ctype = step.payload
 
-            # Guard against illegal rollouts (e.g. playing hidden/unknown opponent cards).
             if player.dev_cards.get(ctype, 0) <= 0:
                 return
 
             player.remove_card(ctype)
 
             if ctype == DevelopmentCardType.KNIGHT:
-                # Largest Army is relative, so update using opponents' current army sizes.
                 opp_armies = [
                     p.army_size
                     for num, p in overlay.sim_players.items()
@@ -547,19 +506,16 @@ class EtwEstimator:
                 player.add_knight(opp_armies)
 
         elif step.type == ActionType.TRADE_WITH_BANK:
-            # Rollouts treat trades deterministically as a resource conversion.
             selling, buying = step.payload
             player.remove_resources(selling)
             player.add_resources(buying)
 
         elif step.type == ActionType.TRADE_WITH_PLAYER:
-            # Same as bank trade in rollout: we give selling, receive buying.
             selling, buying = step.payload
             player.remove_resources(selling)
             player.add_resources(buying)
 
     def last_trade_rejected(self, player: SimPlayerState) -> bool:
-        """Return True if the last trade was proposed but resources did not change."""
         if not self._last_trade_proposed or self._last_trade_resources is None:
             return False
         return self._last_trade_resources == player.resources
@@ -569,29 +525,26 @@ class EtwEstimator:
         player: SimPlayerState,
         sim_game: SimGame,
         utilities: List[Tuple[Action, float]],
+        weights: StrategyWeights,
         ignore_affordability: bool = False,
     ) -> Action:
-        """Select the max-utility action, optionally inserting bank/player trades."""
         best_action: Optional[Action] = None
         best_utility = float("-inf")
 
         for action, utility in utilities:
             cost = calc_step_resources(action)
 
-            # If we can already do it (or we're in a planning mode), just compare utilities.
             if player.can_afford(cost) or ignore_affordability:
                 if utility > best_utility:
                     best_utility = utility
                     best_action = action
                 continue
 
-            # Otherwise, try a single bank/port trade that would unlock the action.
             bank_trade_action = get_bank_trade_for_action(player, cost)
             if bank_trade_action and utility > best_utility:
                 best_utility = utility
                 best_action = bank_trade_action
 
-            # If player trades are allowed, propose one missing resource trade (but avoid spamming repeats).
             if not self.last_trade_rejected(player):
                 player_deficit, player_excesses = self._calculate_deficits_and_excesses(player.resources, cost)
                 missing = next((r for r, v in player_deficit.items() if v > 0), None)
@@ -605,6 +558,7 @@ class EtwEstimator:
                         player_excesses,
                         opponents,
                         self,
+                        weights,
                     )
                     if trade_action and utility > best_utility:
                         best_utility = utility
@@ -617,27 +571,28 @@ class EtwEstimator:
         sim_game: SimGame,
         player_number: PlayerNumber,
         dev_played: bool,
+        weights: StrategyWeights,
         ignore_affordability: bool = False,
         ignore_opponents: bool = False,
     ) -> Action:
-        """Return the best next action for the given player number using the SimGame overlay."""
         sim_player = sim_game.overlay.get_sim_player(player_number)
 
-        # Baseline ETW for scoring self-improvement.
-        etw_before = self.estimated_time_to_win(sim_player.copy(), sim_game, dev_played)
+        etw_before = self.estimated_time_to_win(sim_player.copy(), sim_game, dev_played, weights)
 
-        # Opponent ETWs are only needed when we want interference scoring.
         opponents_etw_before: Dict[PlayerNumber, float] = {}
         if not ignore_opponents:
             for opp in get_opponents(sim_game, player_number):
-                opponents_etw_before[opp.player_number] = self.estimated_time_to_win(opp.copy(), sim_game, False)
+                opponents_etw_before[opp.player_number] = self.estimated_time_to_win(
+                    opp.copy(),
+                    sim_game,
+                    False,
+                    weights,
+                )
 
-        # Generate a small, pruned action set to keep rollout evaluation tractable.
-        candidates = self._get_candidate_actions(sim_player, sim_game, dev_played)
+        candidates = self._get_candidate_actions(sim_player, sim_game, dev_played, weights)
         if not candidates:
             return Action(ActionType.END_TURN)
 
-        # Convert candidate plans into (next-step, utility) scores via rollouts + ETW deltas.
         utilities = self.evaluate_utilities(
             sim_player,
             sim_game,
@@ -645,11 +600,11 @@ class EtwEstimator:
             candidates,
             etw_before,
             opponents_etw_before,
+            weights,
         )
         if not utilities:
             return Action(ActionType.END_TURN)
 
-        # Hidden-information heuristic: favour dev cards when they are "close enough" to the best alternative.
         best_build = max(
             (u for u in utilities if u[0].type != ActionType.BUY_DEV_CARD),
             default=None,
@@ -662,13 +617,13 @@ class EtwEstimator:
         )
 
         if (not ignore_affordability) and best_build is not None and best_dev is not None:
-            if best_dev[1] >= best_build[1] * (1.0 - StrategyWeights.DEV_CLOSE_THRESHOLD):
+            if best_dev[1] >= best_build[1] * (1.0 - weights.DEV_CLOSE_THRESHOLD):
                 utilities = [best_dev]
 
-        # Final selection can insert a trade step if the top action isn't currently affordable.
         return self._choose_max_utility_action(
             sim_player,
             sim_game,
             utilities,
+            weights,
             ignore_affordability=ignore_affordability,
         )
