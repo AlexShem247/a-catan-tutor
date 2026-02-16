@@ -2,8 +2,6 @@ from random import Random
 from typing import List, Tuple, Optional, Dict
 
 from ai.ai_utils.actions import ActionType, Phase
-from config.view_constants import AI_DECISION_ANIMATION_DELAY, AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE, \
-    SHOW_AI_BUILT_LOCATIONS
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game, PlayerConfig
 from game.HexTile import HexTile
@@ -13,6 +11,20 @@ from game.Resources import ResourceCount, Resource
 from game.Vertex import Vertex, Port, VertexDirection
 from view.View import View
 from view.display_utils import resource_dict_to_str
+
+
+# Safe optional import for UI-only constants
+try:
+    from config.view_constants import (
+        AI_DECISION_ANIMATION_DELAY,
+        AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE,
+        SHOW_AI_BUILT_LOCATIONS,
+    )
+except Exception:
+    # Headless / simulation defaults
+    AI_DECISION_ANIMATION_DELAY = 0
+    AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE = 0
+    SHOW_AI_BUILT_LOCATIONS = False
 
 START_LAST = False
 
