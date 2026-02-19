@@ -6,6 +6,7 @@ from typing import Optional, List, Tuple, Dict
 from ai.AI import AI
 from ai.RuleBasedAI import RuleBasedAI
 from ai.ai_utils.actions import Phase, Action, ActionType
+from config.StrategyWeights import StrategyWeights
 from game.Game import Game
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Player import Player
@@ -226,6 +227,7 @@ class BasicAI(AI):
                     game=game,
                     available_vertices=available_vertices,
                     first_settlement=(len(player.settlements) == 0),
+                    weights=StrategyWeights()
                 ),
                 default=None,
             )

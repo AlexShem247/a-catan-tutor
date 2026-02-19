@@ -16,7 +16,7 @@ from view.HeadlessView import HeadlessView
 NUM_SIMULATIONS = 100
 SHUFFLE_ORDER = True
 NUM_PROCESSES = mp.cpu_count()
-SEED = 1234
+SEED = 4321
 
 
 def run_single_game(args):
@@ -149,7 +149,7 @@ if __name__ == "__main__":
     policy = RULE_BASED_VS_BASIC
 
     print("Using parallel processing...")
-    test_args = (12345, policy, list(policy.values())[0], 0)
+    test_args = (1234, policy, list(policy.values())[0], 0)
     run_single_game(test_args)
     print("Test game completed successfully, starting batch...")
 
