@@ -20,7 +20,7 @@ class StrategyWeights:
     LA_BASE = 0.2282  # Baseline value for Largest Army
     LA_PHASE = 0.9369  # Weight for game phase
     LA_KNIGHT_DIST = 0.9979  # Weight for closeness to claiming Largest Army
-    LA_CONTEST = 0.0000  # Weight for contest with other players
+    LA_CONTEST = 0.6067  # Weight for contest with other players
 
     # Robber targeting weights
     ROBBER_OWN_HEX_PENALTY = 0.5350  # Penalty multiplier for placing robber on own hexes

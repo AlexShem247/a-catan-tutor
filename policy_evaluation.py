@@ -16,7 +16,7 @@ from view.HeadlessView import HeadlessView
 NUM_SIMULATIONS = 100
 SHUFFLE_ORDER = True
 NUM_PROCESSES = mp.cpu_count()
-SEED = 4321
+SEED = 42
 
 
 def run_single_game(args):
