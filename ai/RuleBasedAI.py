@@ -17,6 +17,7 @@ from ai.ai_utils.board_sim_utils import (
     find_edge_toward_vertex_from_any,
     get_opponents,
 )
+from ai.ai_utils.explanations import ActionExplanation, CandidateExplanation, Reason, ReasonType
 from ai.ai_utils.resource_utils import calc_step_resources
 from ai.ai_utils.trade_utils import respond_to_trade_batna, select_best_trade_partner
 from config.StrategyWeights import StrategyWeights
@@ -428,15 +429,14 @@ class RuleBasedAI(AI):
         # Fallback: keep the agent moving even if no clear preference exists.
         return random.choice(available_edges) if available_edges else None
 
-    def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:
-        """Determine the next action to take for the current phase of the game."""
+    def next_action_with_explanation(self, player: Player, game: Game, phase: Phase, dev_played: bool
+                                     ) -> Tuple[Action, ActionExplanation]:
+        """Determine the next action and return a structured explanation."""
         if phase == Phase.PRE_ROLL:
-            # We can optionally play (at most) one dev card before rolling.
             if not dev_played:
                 sim_game = make_sim_game_for_player(game, player)
                 sim_us = sim_game.overlay.get_sim_player(player.player_number)
 
-                # Candidate pre-roll dev card plays
                 dev_candidates = play_development_card_action(sim_us, sim_game)
 
                 if dev_candidates:
@@ -447,7 +447,7 @@ class RuleBasedAI(AI):
                         for opp in get_opponents(sim_game, player.player_number)
                     }
 
-                    utilities = self.etw_estimator.evaluate_utilities(
+                    explained_candidates = self.etw_estimator.evaluate_candidates_with_explanations(
                         sim_us,
                         sim_game,
                         dev_played,
@@ -456,25 +456,57 @@ class RuleBasedAI(AI):
                         opponents_etw_before,
                     )
 
-                    # Only play a dev card if it actually improves utility, otherwise just roll.
-                    if utilities:
-                        best_dev_action, best_u = max(utilities, key=lambda x: x[1])
-                        if best_u > 0.0:
-                            return best_dev_action
+                    if explained_candidates:
+                        best_candidate = explained_candidates[0]
+                        if best_candidate.utility_total > 0.0:
+                            confidence = best_candidate.utility_total - (
+                                explained_candidates[1].utility_total if len(explained_candidates) > 1 else 0.0
+                            )
+                            explanation = ActionExplanation(
+                                chosen_action=best_candidate.action,
+                                chosen_candidate=best_candidate,
+                                alternatives=explained_candidates[1:4],
+                                confidence=max(0.0, confidence),
+                                confidence_label=self.etw_estimator.confidence_label(max(0.0, confidence)),
+                                assumptions=[
+                                    "Pre-roll explanation is based on available development-card candidates only."
+                                ],
+                                metadata={"phase": "pre_roll"},
+                            )
+                            return best_candidate.action, explanation
 
-            return Action(ActionType.ROLL)
+            roll_action = Action(ActionType.ROLL)
+            explanation = ActionExplanation(
+                chosen_action=roll_action,
+                chosen_candidate=CandidateExplanation(
+                    action=roll_action,
+                    full_plan=[roll_action],
+                    reasons_for=[
+                        Reason(
+                            type=ReasonType.HEURISTIC_CHOICE,
+                            label="No beneficial pre-roll development-card play was identified",
+                            value=0.0,
+                        )
+                    ],
+                ),
+                alternatives=[],
+                confidence=0.0,
+                confidence_label="medium",
+                assumptions=[],
+                metadata={"phase": "pre_roll"},
+            )
+            return roll_action, explanation
 
-            # Build a simulated view of the game for ETW/ETB evaluation.
         sim_game = make_sim_game_for_player(game, player)
 
-        # Choose the next action that best improves our estimated time to win.
-        best_action = self.etw_estimator.calculate_best_game_action(
+        explanation = self.etw_estimator.calculate_best_game_action_with_explanation(
             sim_game=sim_game,
             player_number=player.player_number,
             dev_played=dev_played,
         )
 
-        # Track whether a proposed trade changed our resources, used to avoid repeating rejected trades.
+        best_action = explanation.chosen_action
+
         if best_action.type == ActionType.TRADE_WITH_PLAYER:
             self.etw_estimator._last_trade_proposed = True
             self.etw_estimator._last_trade_resources = player.resources.copy()
@@ -482,4 +514,9 @@ class RuleBasedAI(AI):
             self.etw_estimator._last_trade_proposed = False
             self.etw_estimator._last_trade_resources = None
 
-        return best_action
+        return best_action, explanation
+
+    def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:
+        """Determine the next action to take for the current phase of the game."""
+        action, _ = self.next_action_with_explanation(player, game, phase, dev_played)
+        return action

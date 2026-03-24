@@ -1,11 +1,19 @@
+from enum import Enum, auto
 from typing import List, Tuple, Dict, Optional, Protocol
 
+from ai.ai_utils.explanations import ActionExplanation
 from game.Edge import Edge
 from game.HexTile import HexTile
 from game.Player import Player
 from game.PlayerAssets import DevelopmentCardType
 from game.Resources import ResourceCount
 from game.Vertex import Vertex
+
+
+class GameMode(Enum):
+    PLAY = auto()
+    SIMULATION = auto()
+    GUIDED = auto()
 
 
 class View(Protocol):
@@ -20,7 +28,12 @@ class View(Protocol):
                            played_dev_card: bool = False) -> None:
         ...
 
-    def display_board_turn_ai(self, player: Player, dice_info: Tuple[int, int, int], msg: str) -> None:
+    def display_board_turn_ai(self, player: Player, dice_info: Tuple[int, int, int], msg: str, increase_delay=False,
+                              ) -> None:
+        ...
+
+    def display_board_turn_explanations(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
+                                        explanation: ActionExplanation) -> None:
         ...
 
     def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False) -> Vertex:
@@ -49,5 +62,5 @@ class View(Protocol):
     def display_results(self) -> None:
         ...
 
-    def display_start_screen(self) -> bool:
+    def display_start_screen(self) -> GameMode:
         ...

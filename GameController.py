@@ -1,16 +1,17 @@
 from typing import List, Tuple, Optional, Dict
 
+from ai.RuleBasedAI import RuleBasedAI
 from ai.ai_utils.actions import ActionType, Phase
 from config.view_constants import AI_DECISION_ANIMATION_DELAY, AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE, \
     SHOW_AI_BUILT_LOCATIONS
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game, PlayerConfig
 from game.HexTile import HexTile
-from game.Player import Player
+from game.Player import Player, PlayerNumber
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import ResourceCount, Resource
 from game.Vertex import Vertex, Port, VertexDirection
-from view.View import View
+from view.View import View, GameMode
 from view.display_utils import resource_dict_to_str
 
 START_LAST = False
@@ -19,24 +20,25 @@ START_LAST = False
 class GameController:
     """Controls the flow of a Catan game using a pure Game model."""
     _game: Game
+    game_mode = GameMode.PLAY
 
     def __init__(self, game_players: PlayerConfig, simulation_players: PlayerConfig):
         self.view: View | None = None
         self.game_players = game_players
         self.simulation_players = simulation_players
-        self.reset_game(True)
+        self.reset_game()
 
-    def reset_game(self, game_mode: bool):
+    def reset_game(self):
         """Reset the game to a fresh state and reset round counter."""
-        self._game = Game(self.game_players if game_mode else self.simulation_players)
+        self._game = Game(self.game_players if self.game_mode == GameMode.PLAY else self.simulation_players)
         if self.view is not None:
-            self.view.ai_decision_animation_delay = (AI_DECISION_ANIMATION_DELAY if game_mode
+            self.view.ai_decision_animation_delay = (AI_DECISION_ANIMATION_DELAY if self.game_mode == GameMode.PLAY
                                                      else AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE)
 
     def start_game(self):
         """Run initial placement, then loop turns until game over."""
-        game_mode = self.view.display_start_screen()
-        self.reset_game(game_mode)
+        self.game_mode = self.view.display_start_screen()
+        self.reset_game()
 
         self.run_initial_placement()
         while not self._game.game_over:
@@ -305,6 +307,31 @@ class GameController:
         d1, d2, total, _ = self.roll_dice(player)
         self.view.display_board_turn(player, (d1, d2, total), played_dev_card)
 
+    def _is_guided_turn(self, player: Player):
+        return (self.game_mode == GameMode.GUIDED and player.player_number == PlayerNumber.P1
+                and isinstance(player.policy, RuleBasedAI))
+
+    def _get_ai_action(self, player: Player, phase: Phase, dev_played: bool,
+                       dice_info: Optional[Tuple[int, int, int]] = None):
+        """Return the next AI action, optionally with explanation printing in guided mode."""
+        if self._is_guided_turn(player) and isinstance(player.policy, RuleBasedAI):
+            action, explanation = player.policy.next_action_with_explanation(
+                player,
+                self._game,
+                phase=phase,
+                dev_played=dev_played,
+            )
+            if not (phase == Phase.PRE_ROLL and action.type == ActionType.ROLL):
+                self.view.display_board_turn_explanations(player, dice_info, explanation)
+            return action
+
+        return player.policy.next_action(
+            player,
+            self._game,
+            phase=phase,
+            dev_played=dev_played,
+        )
+
     def make_round_move_ai(self, player: Player):
         """AI turn driven by policy-selected actions."""
         player.policy.new_turn()
@@ -313,7 +340,7 @@ class GameController:
         messages = []
 
         # Pre-roll phase: maybe play a dev card
-        action = player.policy.next_action(player, self._game, phase=Phase.PRE_ROLL, dev_played=used_dev_card)
+        action = self._get_ai_action(player, phase=Phase.PRE_ROLL, dev_played=used_dev_card)
         if action and action.type == ActionType.PLAY_DEV_CARD:
             messages.append(self.play_development_card(player, action.payload))
             used_dev_card = True
@@ -323,7 +350,7 @@ class GameController:
 
         # Main decision loop
         while True:
-            action = player.policy.next_action(player, self._game, phase=Phase.MAIN, dev_played=used_dev_card)
+            action = self._get_ai_action(player, phase=Phase.MAIN, dev_played=used_dev_card, dice_info=(d1, d2, total))
             if action.type == ActionType.END_TURN:
                 break
 
@@ -380,7 +407,8 @@ class GameController:
         if roll_msg:
             messages.append(roll_msg)
 
-        self.view.display_board_turn_ai(player, (d1, d2, total), "\n".join(messages))
+        self.view.display_board_turn_ai(player, (d1, d2, total), "\n".join(messages),
+                                        increase_delay=self._is_guided_turn(player))
 
     def ai_attempt_build(self, player: Player, action: Buildable, location):
         """Attempt a build action and return the resulting message."""
@@ -412,7 +440,7 @@ class GameController:
 
         return msg
 
-# <editor-fold desc="Controller wrapper methods for model">
+    # <editor-fold desc="Controller wrapper methods for model">
 
     def get_ports(self) -> List[Tuple[Port, Vertex, Vertex]]:
         """Returns the list of ports and their position"""

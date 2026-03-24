@@ -9,7 +9,7 @@ from game.Player import Player
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
 from game.Vertex import VertexDirection, Vertex
-from view.View import View
+from view.View import View, GameMode
 from view.display_utils import display_board, clear_screen, get_player_lead_status, display_resources, \
     display_trade_offer, format_counter_offer, display_results
 
@@ -153,7 +153,8 @@ class CLIView(View):
             else:
                 error_msg = "Invalid option. Try again."
 
-    def display_board_turn_ai(self, player: Player, dice_info: Tuple[int, int, int], msg: str) -> None:
+    def display_board_turn_ai(self, player: Player, dice_info: Tuple[int, int, int], msg: str, increase_delay=False
+                              ) -> None:
         """Display board for AI turn."""
         d1, d2, total = dice_info
         clear_screen()
@@ -424,7 +425,7 @@ class CLIView(View):
         """Display game results."""
         display_results(self.controller.get_game_state())
 
-    def display_start_screen(self) -> bool:
+    def display_start_screen(self) -> GameMode:
         """Display game start screen and get player count."""
         clear_screen()
         print("=" * 50)
@@ -442,12 +443,12 @@ class CLIView(View):
         while True:
             user_input = input("\nPlay without human players? (y/n, or press enter to cancel): ").strip().lower()
             if user_input == "":
-                return True
+                return GameMode.PLAY
             if user_input in ("y", "yes"):
                 print("\nSimulation mode enabled (no human players)...")
-                return False
+                return GameMode.SIMULATION
             if user_input in ("n", "no"):
-                return True
+                return GameMode.PLAY
             print("Invalid input. Enter 'y' or 'n'.")
 
     # Additional helper methods for initial placement (not part of View interface but needed for CLI)

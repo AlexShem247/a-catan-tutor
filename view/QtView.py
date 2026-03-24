@@ -3,6 +3,7 @@ from typing import List, Dict, Optional, Tuple, Any
 from PyQt6.QtCore import QEventLoop, QTimer, pyqtBoundSignal
 
 from GameController import GameController
+from ai.ai_utils.explanations import ActionExplanation
 from game.Edge import Edge
 from game.HexTile import HexTile
 from game.Player import Player
@@ -10,7 +11,7 @@ from game.PlayerAssets import DevelopmentCardType
 from game.Resources import ResourceCount
 from game.Vertex import Vertex
 from view.MainWindow import MainWindow
-from view.View import View
+from view.View import View, GameMode
 from config.view_constants import AI_DECISION_ANIMATION_DELAY, WINDOW_WIDTH, WINDOW_HEIGHT
 
 
@@ -41,12 +42,13 @@ class QtView(View):
         select_blocking(self, self.window.turnMade, self.window.display_round_info, self.controller,
                         player, dice_info, played_dev_card)
 
-    def display_board_turn_ai(self, player: Player, dice_info: Tuple[int, int, int], msg: str):
+    def display_board_turn_ai(self, player: Player, dice_info: Tuple[int, int, int], msg: str, increase_delay=False):
         """Hook to display the board in the Qt window."""
         self.canvas.display_board(self.controller)
         self.window.display_resources(self.controller)
         self.window.display_round_info_ai_start(player, dice_info, msg)
-        delay = (3 if "\n" in msg else 1) * self.ai_decision_animation_delay
+        delay = AI_DECISION_ANIMATION_DELAY if increase_delay else self.ai_decision_animation_delay
+        delay *= 3 if "\n" in msg else 1
         ai_time_delay(delay)
 
     def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False) -> Vertex:
@@ -93,8 +95,15 @@ class QtView(View):
         """Display game results"""
         self.window.display_results(self.controller)
 
-    def display_start_screen(self) -> bool:
+    def display_start_screen(self) -> GameMode:
         return select_blocking(self, self.window.startGame, self.window.display_start_screen)
+
+    def display_board_turn_explanations(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
+                                        explanation: ActionExplanation) -> None:
+        self.canvas.display_board(self.controller)
+        self.window.display_resources(self.controller)
+        return select_blocking(self, self.window.turnMade, self.window.display_explanation,
+                               player, dice_info, explanation)
 
 
 def select_blocking(view: QtView, signal: pyqtBoundSignal, draw_fn, *args, **kwargs) -> Any:

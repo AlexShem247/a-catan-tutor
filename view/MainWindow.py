@@ -1,5 +1,5 @@
 from itertools import groupby
-from typing import Dict, Tuple, List, Callable
+from typing import Dict, Tuple, List, Callable, Optional
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, pyqtSignal
@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 )
 
 from GameController import GameController
+from ai.ai_utils.explanations import ActionExplanation
 from game.Edge import Edge
 from game.Player import PlayerNumber, Player
 from game.PlayerAssets import Buildable, DevelopmentCardType, DevelopmentCard
@@ -17,6 +18,7 @@ from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
 from view.SquareCanvas import SquareCanvas
 from config.view_constants import CROWN_SYM
+from view.View import GameMode
 from view.display_utils import format_counter_offer, get_player_lead_status
 
 
@@ -77,16 +79,6 @@ class MainWindow(QMainWindow):
 
         self.verticalSpacer = self.find_last_vertical_spacer()
         self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(True))
-
-    def word_wrap(self, msg: str, limit=LABEL_LINE_LENGTH) -> str:
-        out = []
-        for raw in msg.split("\n"):
-            line = ""
-            for w in raw.split():
-                line, out = (w, out + [line]) if len(line) + len(w) + bool(line) > limit else (
-                    f"{line} {w}" if line else w, out)
-            out.append(line)
-        return "\n".join(out)
 
     def safe_connect(self, button: QToolButton | QPushButton, slot: Callable):
         try:
@@ -255,6 +247,41 @@ class MainWindow(QMainWindow):
             controller, player, played_dev_card,
             lambda played: self.display_round_info(controller, player, dice_info, played)))
 
+    def display_explanation(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
+                            explanation: ActionExplanation):
+        self.display_round_info_ai_start(player, dice_info, explanation.generate_text_concise())
+        self.toggle_main_action_btns(False)
+
+        # Next button
+        self.main_menu.end_turn_btn.show()
+        self.main_menu.end_turn_btn.setEnabled(True)
+        self.main_menu.end_turn_btn.setText("Next")
+        self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(True))
+
+        # Reuse trade button as explanation-detail toggle
+        self.main_menu.trade_btn.show()
+        self.main_menu.trade_btn.setEnabled(True)
+        self.main_menu.trade_btn.setText("Why this move?")
+
+        showing_comparative = False
+
+        def toggle_explanation_detail():
+            nonlocal showing_comparative
+
+            if showing_comparative:
+                self.main_menu.action_label.setText(explanation.generate_text_concise())
+                self.main_menu.trade_btn.setText("Why this move?")
+                showing_comparative = False
+            else:
+                self.main_menu.action_label.setText(explanation.generate_text_comparative())
+                self.main_menu.trade_btn.setText("Show less")
+                showing_comparative = True
+
+        self.safe_connect(self.main_menu.trade_btn, toggle_explanation_detail)
+
+        # Hide dev button in guided explanation view
+        self.main_menu.dev_btn.hide()
+
     def create_quantity_handlers(
             self,
             current_counts: ResourceCount,
@@ -405,9 +432,7 @@ class MainWindow(QMainWindow):
 
         # Case 1: no players are willing to trade
         if not willing_players:
-            self.main_menu.action_label.setText(
-                self.word_wrap("No players are willing to trade with you right now.")
-            )
+            self.main_menu.action_label.setText("No players are willing to trade with you right now.")
             select_trade.submit_btn.setText("Go back")
             select_trade.trade_list.hide()
 
@@ -420,9 +445,7 @@ class MainWindow(QMainWindow):
             return
 
         # Case 2: show available trade offers
-        self.main_menu.action_label.setText(self.word_wrap(
-            f"Available Trades for {format_counter_offer(buying, buying)}:"
-        ))
+        self.main_menu.action_label.setText(f"Available Trades for {format_counter_offer(buying, buying)}:")
         select_trade.submit_btn.setText("Cancel")
         select_trade.trade_list.show()
 
@@ -487,11 +510,16 @@ class MainWindow(QMainWindow):
 
         self.safe_connect(select_trade.submit_btn, cancel)
 
-    def display_round_info_ai_start(self, player: Player, dice_info: Tuple[int, int, int], msg: str):
-        d1, d2, total = dice_info
+    def display_round_info_ai_start(self, player: Player, dice_info: Optional[Tuple[int, int, int]], msg: str):
+        if dice_info:
+            d1, d2, total = dice_info
+            self.main_menu.main_label.setText(f"Dice rolled: {d1} + {d2} = {total}")
+
+        if msg == "":
+            msg = f"{player.name} ended their turn without taking any further actions."
+
         self.main_menu.turn_label.setText(f"{player.name}'s turn")
-        self.main_menu.main_label.setText(f"Dice rolled: {d1} + {d2} = {total}")
-        self.main_menu.action_label.setText(self.word_wrap(msg))
+        self.main_menu.action_label.setText(msg)
         self.toggle_main_action_btns(False)
 
     def show_resource_chooser(self, player, num_resources: int, title: str,
@@ -514,7 +542,7 @@ class MainWindow(QMainWindow):
             resource_caps = {res: num_resources for res in Resource}
 
         self.main_menu.turn_label.setText(f"{player.name}'s turn")
-        self.main_menu.main_label.setText(self.word_wrap(title))
+        self.main_menu.main_label.setText(title)
         self.main_menu.action_label.setText(
             f"You need to select {num_resources} more resource{'s' if num_resources != 1 else ''}."
         )
@@ -567,7 +595,7 @@ class MainWindow(QMainWindow):
         self.main_menu.action_btn_layout.addWidget(trade_manager)
         self.main_menu.main_label.setText(f"Trade Offer from {selling_player.name}")
         self.main_menu.action_label.setText(
-            self.word_wrap(f"{selling_player.name} is buying {format_counter_offer(buying, buying)} for:")
+            f"{selling_player.name} is buying {format_counter_offer(buying, buying)} for:"
         )
 
         counter_offer = {res: selling.get(res, 0) for res in Resource}
@@ -589,7 +617,7 @@ class MainWindow(QMainWindow):
             txt = f"{selling_player.name} is buying {format_counter_offer(buying, buying)} for:"
             if not can_afford:
                 txt += "\nYou do not have the required resources for this trade."
-            self.main_menu.action_label.setText(self.word_wrap(txt))
+            self.main_menu.action_label.setText(txt)
 
         self.create_quantity_handlers(
             current_counts=counter_offer,
@@ -846,7 +874,7 @@ class MainWindow(QMainWindow):
         self.splitter_layout.addWidget(self.start_menu)
         self.splitter_layout.setSizes([sizes[0], sizes[1]])
 
-        def play(human_player_one: bool):
+        def play(game_mode: GameMode):
             # Remove results panel
             layout_sizes = self.splitter_layout.sizes()
             self.start_menu.setParent(None)
@@ -856,7 +884,8 @@ class MainWindow(QMainWindow):
             self.splitter_layout.setSizes(layout_sizes)
             self.main_menu.show()
 
-            self.startGame.emit(human_player_one)
+            self.startGame.emit(game_mode)
 
-        self.safe_connect(self.start_menu.play_game_btn, lambda: play(True))
-        self.safe_connect(self.start_menu.run_simulation_btn, lambda: play(False))
+        self.safe_connect(self.start_menu.play_game_btn, lambda: play(GameMode.PLAY))
+        self.safe_connect(self.start_menu.run_simulation_btn, lambda: play(GameMode.SIMULATION))
+        self.safe_connect(self.start_menu.run_guided_btn, lambda: play(GameMode.GUIDED))

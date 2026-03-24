@@ -130,7 +130,7 @@ p, li { white-space: pre-wrap; }
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>40</height>
+       <height>35</height>
       </size>
      </property>
      <property name="font">
@@ -139,7 +139,7 @@ p, li { white-space: pre-wrap; }
       </font>
      </property>
      <property name="toolTip">
-      <string>Go back to the main menu</string>
+      <string/>
      </property>
      <property name="text">
       <string>View Catan Rules</string>
@@ -151,7 +151,7 @@ p, li { white-space: pre-wrap; }
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>80</height>
+       <height>70</height>
       </size>
      </property>
      <property name="font">
@@ -160,7 +160,7 @@ p, li { white-space: pre-wrap; }
       </font>
      </property>
      <property name="toolTip">
-      <string>Go back to the main menu</string>
+      <string/>
      </property>
      <property name="text">
       <string>Play Game</string>
@@ -172,7 +172,7 @@ p, li { white-space: pre-wrap; }
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>80</height>
+       <height>70</height>
       </size>
      </property>
      <property name="font">
@@ -181,10 +181,31 @@ p, li { white-space: pre-wrap; }
       </font>
      </property>
      <property name="toolTip">
-      <string>Go back to the main menu</string>
+      <string>Let the AI play the game quickly without stopping to explain its moves.</string>
      </property>
      <property name="text">
-      <string>Run AI Simulation</string>
+      <string>Run Quick Simulation</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="run_guided_btn">
+     <property name="minimumSize">
+      <size>
+       <width>0</width>
+       <height>70</height>
+      </size>
+     </property>
+     <property name="font">
+      <font>
+       <pointsize>10</pointsize>
+      </font>
+     </property>
+     <property name="toolTip">
+      <string>Explore the AI's decision-making by stepping through moves with detailed explanations.</string>
+     </property>
+     <property name="text">
+      <string>Run Guided Simulation</string>
      </property>
     </widget>
    </item>

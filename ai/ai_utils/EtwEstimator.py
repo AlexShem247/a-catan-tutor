@@ -12,6 +12,7 @@ from ai.ai_utils.action_utils import (
 )
 from ai.ai_utils.actions import ActionType, Action
 from ai.ai_utils.board_sim_utils import get_opponents
+from ai.ai_utils.explanations import CandidateExplanation, Reason, ReasonType, ActionExplanation
 from ai.ai_utils.resource_utils import get_bank_trade_ratio, calc_step_resources
 from ai.ai_utils.trade_utils import propose_trade
 from config.StrategyWeights import StrategyWeights
@@ -49,11 +50,11 @@ class EtwEstimator:
         self._last_trade_resources = None
 
     def estimated_time_to_build(
-        self,
-        player: SimPlayerState,
-        sim_game: SimGame,
-        R_target: ResourceCount,
-        include_player_trades: bool = True,
+            self,
+            player: SimPlayerState,
+            sim_game: SimGame,
+            R_target: ResourceCount,
+            include_player_trades: bool = True,
     ) -> float:
         """Estimate ETB for a resource target with caching."""
 
@@ -102,14 +103,14 @@ class EtwEstimator:
         return 1.0 / fr
 
     def _calculate_trade_adjusted_rolls(
-        self,
-        player: SimPlayerState,
-        opponents: List[SimPlayerState],
-        deficits: Dict[Resource, int],
-        excesses: Dict[Resource, int],
-        rolls_per_unit: Dict[Resource, float],
-        bank_trade_ratio_func,
-        include_player_trades: bool,
+            self,
+            player: SimPlayerState,
+            opponents: List[SimPlayerState],
+            deficits: Dict[Resource, int],
+            excesses: Dict[Resource, int],
+            rolls_per_unit: Dict[Resource, float],
+            bank_trade_ratio_func,
+            include_player_trades: bool,
     ) -> Dict[Resource, float]:
         """Compute expected rolls per resource after bank/port and optional player-trade conversions."""
         trade_adjusted: Dict[Resource, float] = {}
@@ -148,12 +149,12 @@ class EtwEstimator:
         return trade_adjusted
 
     def _player_trade_ratio(
-        self,
-        resource_give: Resource,
-        resource_need: Resource,
-        player: SimPlayerState,
-        opponents: List[SimPlayerState],
-        rolls_per_unit: Dict[Resource, float],
+            self,
+            resource_give: Resource,
+            resource_need: Resource,
+            player: SimPlayerState,
+            opponents: List[SimPlayerState],
+            rolls_per_unit: Dict[Resource, float],
     ) -> int:
         """Return a conservative give:take ratio for player trades."""
         give_r = rolls_per_unit.get(resource_give, float("inf"))
@@ -265,9 +266,9 @@ class EtwEstimator:
         return etw
 
     def _calculate_deficits_and_excesses(
-        self,
-        current: ResourceCount,
-        target: ResourceCount,
+            self,
+            current: ResourceCount,
+            target: ResourceCount,
     ) -> Tuple[Dict[Resource, int], Dict[Resource, int]]:
         """Compute deficits and excesses relative to a target."""
         deficits: Dict[Resource, int] = {}
@@ -299,11 +300,11 @@ class EtwEstimator:
         return self.estimated_time_to_build(player, sim_game, total_resources)
 
     def _get_candidate_actions(
-        self,
-        player: SimPlayerState,
-        sim_game: SimGame,
-        dev_played: bool,
-        include_player_trades: bool = True,
+            self,
+            player: SimPlayerState,
+            sim_game: SimGame,
+            dev_played: bool,
+            include_player_trades: bool = True,
     ) -> List[Tuple[List[Action], float, float]]:
         """Generate and prune candidates, returning (actions, etb, expected_vp_gain)."""
 
@@ -376,13 +377,13 @@ class EtwEstimator:
         return candidate_actions[:ETW_SIMULATION_MAX_CANDIDATES]
 
     def evaluate_utilities(
-        self,
-        player: SimPlayerState,
-        sim_game: SimGame,
-        dev_played: bool,
-        candidates: List[Tuple[List[Action], float, float]],
-        etw_before: float,
-        opponents_etw_before: Dict[PlayerNumber, float],
+            self,
+            player: SimPlayerState,
+            sim_game: SimGame,
+            dev_played: bool,
+            candidates: List[Tuple[List[Action], float, float]],
+            etw_before: float,
+            opponents_etw_before: Dict[PlayerNumber, float],
     ) -> List[Tuple[Action, float]]:
         """Evaluate utility for candidate actions."""
         self._eval_stats["evaluations"] += 1
@@ -565,11 +566,11 @@ class EtwEstimator:
         return self._last_trade_resources == player.resources
 
     def _choose_max_utility_action(
-        self,
-        player: SimPlayerState,
-        sim_game: SimGame,
-        utilities: List[Tuple[Action, float]],
-        ignore_affordability: bool = False,
+            self,
+            player: SimPlayerState,
+            sim_game: SimGame,
+            utilities: List[Tuple[Action, float]],
+            ignore_affordability: bool = False,
     ) -> Action:
         """Select the max-utility action, optionally inserting bank/player trades."""
         best_action: Optional[Action] = None
@@ -613,12 +614,12 @@ class EtwEstimator:
         return best_action if best_action is not None else Action(ActionType.END_TURN)
 
     def calculate_best_game_action(
-        self,
-        sim_game: SimGame,
-        player_number: PlayerNumber,
-        dev_played: bool,
-        ignore_affordability: bool = False,
-        ignore_opponents: bool = False,
+            self,
+            sim_game: SimGame,
+            player_number: PlayerNumber,
+            dev_played: bool,
+            ignore_affordability: bool = False,
+            ignore_opponents: bool = False,
     ) -> Action:
         """Return the best next action for the given player number using the SimGame overlay."""
         sim_player = sim_game.overlay.get_sim_player(player_number)
@@ -672,3 +673,356 @@ class EtwEstimator:
             utilities,
             ignore_affordability=ignore_affordability,
         )
+
+    def evaluate_candidates_with_explanations(self, player: SimPlayerState, sim_game: SimGame, dev_played: bool,
+                                              candidates: List[Tuple[List[Action], float, float]], etw_before: float,
+                                              opponents_etw_before: Dict[PlayerNumber, float]) \
+            -> List[CandidateExplanation]:
+        """Evaluate candidates and return structured explanations."""
+        explained: List[CandidateExplanation] = []
+
+        candidates.sort(key=lambda x: x[1])
+        max_eval = min(MAX_EVALUATIONS, len(candidates))
+
+        leading_opp_num, opp_etw_before = None, None
+        if opponents_etw_before:
+            leading_opp_num = min(opponents_etw_before, key=opponents_etw_before.get)
+            opp_etw_before = opponents_etw_before.get(leading_opp_num)
+
+        for actions, etb, vp_inc in candidates[:max_eval]:
+            if etb > MAX_ETB_THRESHOLD or not actions:
+                continue
+
+            next_step = actions[0]
+
+            player_copy = player.copy()
+            sim_game_copy = _sim_game_with_replaced_player(sim_game, player_copy)
+
+            did_build_road = False
+            did_play_knight = False
+
+            for s in actions:
+                if s.type == ActionType.BUILD and s.payload[0] == Buildable.ROAD:
+                    did_build_road = True
+                elif s.type == ActionType.PLAY_DEV_CARD and s.payload == DevelopmentCardType.KNIGHT:
+                    did_play_knight = True
+
+                self._simulate_step(sim_game_copy, player_copy, s)
+
+            etw_after = self.estimated_time_to_win(
+                player_copy,
+                sim_game_copy,
+                dev_played,
+                max_depth_override=EVAL_UTIL_MAX_DEPTH,
+            )
+
+            etw_delta = etw_before - etw_after
+            u_self = 0.0 if etw_before <= 0 else max(0.0, etw_delta / etw_before * 100.0)
+
+            affects_board = any(
+                s.type == ActionType.BUILD and s.payload[0] in (Buildable.ROAD, Buildable.SETTLEMENT)
+                for s in actions
+            )
+
+            u_opp = 0.0
+            blocks_opponent = False
+            if affects_board and leading_opp_num is not None and opp_etw_before and opp_etw_before > 0:
+                opp_state = sim_game_copy.overlay.get_sim_player(leading_opp_num).copy()
+                sim_game_opp = _sim_game_with_replaced_player(sim_game_copy, opp_state)
+
+                opp_etw_after = self.estimated_time_to_win(
+                    opp_state,
+                    sim_game_opp,
+                    False,
+                    max_depth_override=EVAL_UTIL_MAX_DEPTH,
+                )
+
+                delay_caused = (opp_etw_after - opp_etw_before) / opp_etw_before * 100.0
+                u_opp = StrategyWeights.OPPONENT_INTERFERENCE_LEADING * delay_caused
+                blocks_opponent = delay_caused > 0.0
+
+            u_special = 0.0
+            improves_longest_road = False
+            improves_largest_army = False
+
+            if did_build_road:
+                delta_lr = max(0, player_copy.longest_road_length - player.longest_road_length)
+                if delta_lr > 0 and player_copy.longest_road_length >= StrategyWeights.LR_ROAD_THRESHOLD:
+                    u_special += StrategyWeights.LR_UTILITY_MULTIPLIER * delta_lr
+                    improves_longest_road = True
+
+            if did_play_knight:
+                if player_copy.army_size >= StrategyWeights.LA_ARMY_THRESHOLD:
+                    u_special += compute_k_la(player_copy, sim_game)
+                    improves_largest_army = True
+
+            took_lr_now = (not player.has_longest_road) and player_copy.has_longest_road
+            vp_after = player_copy.victory_points()
+
+            u_attention = 0.0
+            if took_lr_now and vp_after < StrategyWeights.ATTENTION_LR_VP_THRESHOLD:
+                u_attention -= StrategyWeights.ATTENTION_LR_EARLY_PENALTY
+
+            discount_rate = StrategyWeights.TIME_DISCOUNT_RATE
+            utility_total = (
+                    (
+                            StrategyWeights.BUILD_SELF_UTILITY * u_self
+                            + StrategyWeights.BUILD_OPPONENT_UTILITY * u_opp
+                            + StrategyWeights.BUILD_SPECIAL_UTILITY * u_special
+                            + u_attention
+                    )
+                    / ((1.0 + discount_rate) ** max(1.0, etb))
+            )
+
+            reasons_for: List[Reason] = []
+            reasons_against: List[Reason] = []
+
+            if u_self > 0:
+                reasons_for.append(
+                    Reason(
+                        type=ReasonType.FASTEST_PROGRESS,
+                        label="Improves expected progress toward victory",
+                        value=u_self,
+                        metadata={"etw_delta": etw_delta},
+                    )
+                )
+
+            if etb <= 2.5:
+                reasons_for.append(
+                    Reason(
+                        type=ReasonType.QUICK_TO_EXECUTE,
+                        label="Can be executed relatively quickly",
+                        value=max(0.0, 5.0 - etb),
+                    )
+                )
+
+            if blocks_opponent and u_opp > 0:
+                reasons_for.append(
+                    Reason(
+                        type=ReasonType.SLOWS_LEADING_OPPONENT,
+                        label="Slows the current leading opponent",
+                        value=u_opp,
+                    )
+                )
+
+            if improves_longest_road:
+                reasons_for.append(
+                    Reason(
+                        type=ReasonType.ADVANCES_LONGEST_ROAD,
+                        label="Advances progress toward Longest Road",
+                        value=u_special,
+                    )
+                )
+
+            if improves_largest_army:
+                reasons_for.append(
+                    Reason(
+                        type=ReasonType.ADVANCES_LARGEST_ARMY,
+                        label="Advances progress toward Largest Army",
+                        value=u_special,
+                    )
+                )
+
+            if next_step.type in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER):
+                reasons_for.append(
+                    Reason(
+                        type=ReasonType.REQUIRES_TRADE,
+                        label="Uses a trade to make the preferred plan feasible",
+                        value=1.0,
+                    )
+                )
+
+            if next_step.type == ActionType.BUY_DEV_CARD and vp_inc > 0:
+                reasons_for.append(
+                    Reason(
+                        type=ReasonType.HIDDEN_VALUE,
+                        label="Has hidden strategic value through development-card outcomes",
+                        value=vp_inc,
+                    )
+                )
+
+            if u_attention < 0:
+                reasons_against.append(
+                    Reason(
+                        type=ReasonType.AVOIDS_EARLY_ATTENTION,
+                        label="May expose an early lead and attract attention",
+                        value=abs(u_attention),
+                    )
+                )
+
+            reasons_for.sort(key=lambda r: r.value, reverse=True)
+            reasons_against.sort(key=lambda r: r.value, reverse=True)
+
+            explained.append(
+                CandidateExplanation(
+                    action=next_step,
+                    full_plan=actions,
+                    etb=etb,
+                    etw_before=etw_before,
+                    etw_after=etw_after,
+                    etw_delta=etw_delta,
+                    utility_total=utility_total,
+                    utility_self=u_self,
+                    utility_opponent=u_opp,
+                    utility_special=u_special,
+                    utility_attention=u_attention,
+                    expected_vp_gain=vp_inc,
+                    reasons_for=reasons_for,
+                    reasons_against=reasons_against,
+                    metadata={
+                        "blocks_opponent": blocks_opponent,
+                        "improves_longest_road": improves_longest_road,
+                        "improves_largest_army": improves_largest_army,
+                    },
+                )
+            )
+
+        explained.sort(key=lambda c: c.utility_total, reverse=True)
+        return explained
+
+    def calculate_best_game_action_with_explanation(
+            self,
+            sim_game: SimGame,
+            player_number: PlayerNumber,
+            dev_played: bool,
+            ignore_affordability: bool = False,
+            ignore_opponents: bool = False,
+    ) -> ActionExplanation:
+        sim_player = sim_game.overlay.get_sim_player(player_number)
+
+        etw_before = self.estimated_time_to_win(sim_player.copy(), sim_game, dev_played)
+
+        opponents_etw_before: Dict[PlayerNumber, float] = {}
+        if not ignore_opponents:
+            for opp in get_opponents(sim_game, player_number):
+                opponents_etw_before[opp.player_number] = self.estimated_time_to_win(
+                    opp.copy(), sim_game, False
+                )
+
+        candidates = self._get_candidate_actions(sim_player, sim_game, dev_played)
+        if not candidates:
+            chosen = CandidateExplanation(
+                action=Action(ActionType.END_TURN),
+                full_plan=[Action(ActionType.END_TURN)],
+                etw_before=etw_before,
+                etw_after=etw_before,
+                etw_delta=0.0,
+                utility_total=0.0,
+                reasons_for=[],
+            )
+            return ActionExplanation(
+                chosen_action=chosen.action,
+                chosen_candidate=chosen,
+                alternatives=[],
+                confidence=0.0,
+                confidence_label="low",
+                assumptions=["No beneficial candidate action was available."],
+            )
+
+        explained_candidates = self.evaluate_candidates_with_explanations(
+            sim_player,
+            sim_game,
+            dev_played,
+            candidates,
+            etw_before,
+            opponents_etw_before,
+        )
+
+        if not explained_candidates:
+            chosen = CandidateExplanation(
+                action=Action(ActionType.END_TURN),
+                full_plan=[Action(ActionType.END_TURN)],
+                etw_before=etw_before,
+                etw_after=etw_before,
+                etw_delta=0.0,
+                utility_total=0.0,
+                reasons_for=[],
+            )
+            return ActionExplanation(
+                chosen_action=chosen.action,
+                chosen_candidate=chosen,
+                alternatives=[],
+                confidence=0.0,
+                confidence_label="low",
+                assumptions=["All candidate actions were filtered out during evaluation."],
+            )
+
+        # IMPORTANT: choose the real legal action using the original legality-aware selector
+        utilities = [(c.action, c.utility_total) for c in explained_candidates]
+        chosen_action = self._choose_max_utility_action(
+            sim_player,
+            sim_game,
+            utilities,
+            ignore_affordability=ignore_affordability,
+        )
+
+        # Try to find the explanation corresponding to the chosen action
+        chosen_candidate = next(
+            (c for c in explained_candidates if c.action == chosen_action),
+            None,
+        )
+
+        # If the selector inserted a trade, it may not directly match a rollout candidate.
+        # In that case, synthesize a lightweight explanation.
+        if chosen_candidate is None:
+            chosen_candidate = CandidateExplanation(
+                action=chosen_action,
+                full_plan=[chosen_action],
+                etw_before=etw_before,
+                etw_after=etw_before,
+                etw_delta=0.0,
+                utility_total=max((u for a, u in utilities if a == chosen_action), default=0.0),
+                reasons_for=[],
+                metadata={"synthesised": True},
+            )
+
+            if chosen_action.type == ActionType.TRADE_WITH_BANK:
+                chosen_candidate.reasons_for.append(
+                    Reason(
+                        type=ReasonType.REQUIRES_TRADE,
+                        label="A bank trade is needed to make the strongest plan feasible",
+                        value=1.0,
+                    )
+                )
+            elif chosen_action.type == ActionType.TRADE_WITH_PLAYER:
+                chosen_candidate.reasons_for.append(
+                    Reason(
+                        type=ReasonType.REQUIRES_TRADE,
+                        label="A player trade is needed to make the strongest plan feasible",
+                        value=1.0,
+                    )
+                )
+            elif chosen_action.type == ActionType.END_TURN:
+                chosen_candidate.reasons_for.append(
+                    Reason(
+                        type=ReasonType.HEURISTIC_CHOICE,
+                        label="No legal immediate action provided enough value",
+                        value=0.0,
+                    )
+                )
+
+        alternatives = [c for c in explained_candidates if c.action != chosen_action][:3]
+
+        confidence = 0.0
+        if alternatives:
+            confidence = max(0.0, chosen_candidate.utility_total - alternatives[0].utility_total)
+
+        return ActionExplanation(
+            chosen_action=chosen_action,
+            chosen_candidate=chosen_candidate,
+            alternatives=alternatives,
+            confidence=confidence,
+            confidence_label=self.confidence_label(confidence),
+            assumptions=[
+                "Uses expected resource production rather than exact future dice outcomes.",
+                "The final chosen move is filtered through legality and affordability checks.",
+            ],
+            metadata={"player_number": player_number, "etw_before": etw_before},
+        )
+
+    def confidence_label(self, confidence: float) -> str:
+        if confidence >= 15.0:
+            return "high"
+        if confidence >= 5.0:
+            return "medium"
+        return "low"
