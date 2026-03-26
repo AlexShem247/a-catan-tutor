@@ -21,7 +21,7 @@ class QtView(View):
         self.canvas = window.canvas
         self.controller = controller
         self.ai_decision_animation_delay = AI_DECISION_ANIMATION_DELAY
-        self.window.setGeometry(120, 50, WINDOW_WIDTH, WINDOW_HEIGHT)
+        self.window.setGeometry(80, 50, WINDOW_WIDTH, WINDOW_HEIGHT)
         self.window.show()
 
     def display_board(self, player: Optional[Player] = None, msg: Optional[str] = None):
@@ -104,6 +104,9 @@ class QtView(View):
         self.window.display_resources(self.controller)
         return select_blocking(self, self.window.turnMade, self.window.display_explanation,
                                player, dice_info, explanation)
+
+    def open_tutor_menu(self, open_menu: bool):
+        self.window.open_tutor_menu(open_menu)
 
 
 def select_blocking(view: QtView, signal: pyqtBoundSignal, draw_fn, *args, **kwargs) -> Any:

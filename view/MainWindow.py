@@ -54,15 +54,16 @@ class MainWindow(QMainWindow):
         self.main_menu.setMinimumWidth(0)
         self.main_menu.setMaximumWidth(self.SIDE_PANEL_WIDTH * 2)
         self.splitter_layout.addWidget(self.main_menu)
-
-        self.splitter_layout.setSizes([
-            1000,
-            self.SIDE_PANEL_WIDTH
-        ])
+        self.splitter_layout.setSizes([1000, self.SIDE_PANEL_WIDTH])
 
         # Prevent canvas from being squashed too much
         self.splitter_layout.setStretchFactor(0, 1)
         self.splitter_layout.setStretchFactor(1, 0)
+
+        # Tutor panel
+        self.tutor_menu = uic.loadUi("view/ui/tutor_menu.ui")
+        self.tutor_menu.setMinimumWidth(0)
+        self.tutor_menu.setMaximumWidth(self.SIDE_PANEL_WIDTH * 2)
 
         self.resource_selector_widget = uic.loadUi("view/ui/resource_selector.ui")
         self.trade_designer_widget = uic.loadUi("view/ui/trade_designer.ui")
@@ -247,21 +248,36 @@ class MainWindow(QMainWindow):
             controller, player, played_dev_card,
             lambda played: self.display_round_info(controller, player, dice_info, played)))
 
+    def open_tutor_menu(self, open_menu: bool):
+        if open_menu:
+            # Avoid adding it twice
+            if self.splitter_layout.indexOf(self.tutor_menu) == -1:
+                self.tutor_menu.setMinimumWidth(0)
+                self.tutor_menu.setMaximumWidth(self.SIDE_PANEL_WIDTH * 2)
+                self.splitter_layout.insertWidget(0, self.tutor_menu)
+            self.tutor_menu.show()
+            self.splitter_layout.setSizes([int(self.SIDE_PANEL_WIDTH * 0.8), 1000, self.SIDE_PANEL_WIDTH])
+
+        else:
+            if self.splitter_layout.indexOf(self.tutor_menu) != -1:
+                self.tutor_menu.hide()
+                self.tutor_menu.setParent(None)
+            self.splitter_layout.setSizes([1000, self.SIDE_PANEL_WIDTH])
+
     def display_explanation(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
                             explanation: ActionExplanation):
-        self.display_round_info_ai_start(player, dice_info, explanation.generate_text_concise())
+        self.display_round_info_ai_start(player, dice_info, "")
         self.toggle_main_action_btns(False)
 
-        # Next button
-        self.main_menu.end_turn_btn.show()
-        self.main_menu.end_turn_btn.setEnabled(True)
-        self.main_menu.end_turn_btn.setText("Next")
-        self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(True))
+        self.tutor_menu.description_edit.setText(explanation.generate_text_concise())
+        self.main_menu.action_label.setText(f"{player} is thinking")
 
-        # Reuse trade button as explanation-detail toggle
-        self.main_menu.trade_btn.show()
-        self.main_menu.trade_btn.setEnabled(True)
-        self.main_menu.trade_btn.setText("Why this move?")
+        self.tutor_menu.continue_btn.setEnabled(True)
+        self.tutor_menu.continue_btn.setText("Continue")
+        self.safe_connect(self.tutor_menu.continue_btn, lambda: self.turnMade.emit(True))
+
+        self.tutor_menu.explain_btn.setEnabled(True)
+        self.tutor_menu.explain_btn.setText("Why this move?")
 
         showing_comparative = False
 
@@ -269,18 +285,15 @@ class MainWindow(QMainWindow):
             nonlocal showing_comparative
 
             if showing_comparative:
-                self.main_menu.action_label.setText(explanation.generate_text_concise())
-                self.main_menu.trade_btn.setText("Why this move?")
+                self.tutor_menu.description_edit.setText(explanation.generate_text_concise())
+                self.tutor_menu.explain_btn.setText("Why this move?")
                 showing_comparative = False
             else:
-                self.main_menu.action_label.setText(explanation.generate_text_comparative())
-                self.main_menu.trade_btn.setText("Show less")
+                self.tutor_menu.description_edit.setText(explanation.generate_text_comparative())
+                self.tutor_menu.explain_btn.setText("Show less")
                 showing_comparative = True
 
-        self.safe_connect(self.main_menu.trade_btn, toggle_explanation_detail)
-
-        # Hide dev button in guided explanation view
-        self.main_menu.dev_btn.hide()
+        self.safe_connect(self.tutor_menu.explain_btn, toggle_explanation_detail)
 
     def create_quantity_handlers(
             self,
@@ -521,6 +534,10 @@ class MainWindow(QMainWindow):
         self.main_menu.turn_label.setText(f"{player.name}'s turn")
         self.main_menu.action_label.setText(msg)
         self.toggle_main_action_btns(False)
+
+        self.tutor_menu.description_edit.setText("Wait for your turn")
+        self.tutor_menu.explain_btn.setEnabled(False)
+        self.tutor_menu.continue_btn.setEnabled(False)
 
     def show_resource_chooser(self, player, num_resources: int, title: str,
                               resource_caps: ResourceCount | None = None):

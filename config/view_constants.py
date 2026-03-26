@@ -8,7 +8,7 @@ from game.PlayerAssets import Building
 from game.Resources import HexType, Resource, HEX_TO_RESOURCE
 from game.Vertex import Port
 
-WINDOW_WIDTH, WINDOW_HEIGHT = 1280, 730
+WINDOW_WIDTH, WINDOW_HEIGHT = 1400, 730
 TITLE_COLOR = QColor(250, 200, 60)
 BOARD_BG_COLOR = QColor(15, 112, 183)
 HEX_TILE_RADIUS = 100

@@ -64,3 +64,6 @@ class View(Protocol):
 
     def display_start_screen(self) -> GameMode:
         ...
+
+    def open_tutor_menu(self, open_menu: bool):
+        ...

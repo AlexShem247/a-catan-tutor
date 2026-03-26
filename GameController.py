@@ -34,6 +34,7 @@ class GameController:
         if self.view is not None:
             self.view.ai_decision_animation_delay = (AI_DECISION_ANIMATION_DELAY if self.game_mode == GameMode.PLAY
                                                      else AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE)
+            self.view.open_tutor_menu(self.game_mode == GameMode.GUIDED)
 
     def start_game(self):
         """Run initial placement, then loop turns until game over."""
