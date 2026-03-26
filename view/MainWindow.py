@@ -269,7 +269,9 @@ class MainWindow(QMainWindow):
         self.display_round_info_ai_start(player, dice_info, "")
         self.toggle_main_action_btns(False)
 
-        self.tutor_menu.description_edit.setText(explanation.generate_text_concise())
+        action, explanation_txt = explanation.generate_text_concise()
+        self.tutor_menu.action_label.setText(action)
+        self.tutor_menu.explanation_edit.setText(explanation_txt)
         self.main_menu.action_label.setText(f"{player} is thinking")
 
         self.tutor_menu.continue_btn.setEnabled(True)
@@ -285,11 +287,13 @@ class MainWindow(QMainWindow):
             nonlocal showing_comparative
 
             if showing_comparative:
-                self.tutor_menu.description_edit.setText(explanation.generate_text_concise())
+                action_, explanation_txt_ = explanation.generate_text_concise()
+                self.tutor_menu.action_label.setText(action_)
+                self.tutor_menu.explanation_edit.setText(explanation_txt_)
                 self.tutor_menu.explain_btn.setText("Why this move?")
                 showing_comparative = False
             else:
-                self.tutor_menu.description_edit.setText(explanation.generate_text_comparative())
+                self.tutor_menu.explanation_edit.setText(explanation.generate_text_detail())
                 self.tutor_menu.explain_btn.setText("Show less")
                 showing_comparative = True
 
@@ -535,7 +539,8 @@ class MainWindow(QMainWindow):
         self.main_menu.action_label.setText(msg)
         self.toggle_main_action_btns(False)
 
-        self.tutor_menu.description_edit.setText("Wait for your turn")
+        self.tutor_menu.action_label.setText("Wait For Your Turn")
+        self.tutor_menu.explanation_edit.setText("")
         self.tutor_menu.explain_btn.setEnabled(False)
         self.tutor_menu.continue_btn.setEnabled(False)
 

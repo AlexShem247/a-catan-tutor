@@ -613,6 +613,127 @@ class EtwEstimator:
 
         return best_action if best_action is not None else Action(ActionType.END_TURN)
 
+    def _choose_max_utility_action_with_candidate(
+            self,
+            player: SimPlayerState,
+            sim_game: SimGame,
+            candidates: List[CandidateExplanation],
+            ignore_affordability: bool = False,
+    ) -> Tuple[Action, CandidateExplanation]:
+        """Select the max-utility action, optionally inserting bank/player trades."""
+        best_action: Optional[Action] = None
+        best_candidate: Optional[CandidateExplanation] = None
+        best_utility = float("-inf")
+
+        for candidate in candidates:
+            action = candidate.action
+            utility = candidate.utility_total
+            cost = calc_step_resources(action)
+
+            # If we can already do it (or we're in a planning mode), just compare utilities.
+            if player.can_afford(cost) or ignore_affordability:
+                if utility > best_utility:
+                    best_utility = utility
+                    best_action = action
+                    best_candidate = candidate
+                continue
+
+            # Otherwise, try a single bank/port trade that would unlock the action.
+            bank_trade_action = get_bank_trade_for_action(player, cost)
+            if bank_trade_action and utility > best_utility:
+                best_utility = utility
+                best_action = bank_trade_action
+                best_candidate = CandidateExplanation(
+                    action=bank_trade_action,
+                    full_plan=[bank_trade_action] + candidate.full_plan,
+                    etb=candidate.etb,
+                    etw_before=candidate.etw_before,
+                    etw_after=candidate.etw_after,
+                    etw_delta=candidate.etw_delta,
+                    utility_total=candidate.utility_total,
+                    utility_self=candidate.utility_self,
+                    utility_opponent=candidate.utility_opponent,
+                    utility_special=candidate.utility_special,
+                    utility_attention=candidate.utility_attention,
+                    expected_vp_gain=candidate.expected_vp_gain,
+                    reasons_for=[
+                                    Reason(
+                                        type=ReasonType.REQUIRES_TRADE,
+                                        label="Trades to get resources for the planned build",
+                                        value=max(1.0, candidate.utility_total),
+                                    )
+                                ] + list(candidate.reasons_for),
+                    reasons_against=list(candidate.reasons_against),
+                    metadata={
+                        **candidate.metadata,
+                        "trade_inserted": True,
+                        "enabled_action": candidate.action,
+                    },
+                )
+
+            # If player trades are allowed, propose one missing resource trade (but avoid spamming repeats).
+            if not self.last_trade_rejected(player):
+                player_deficit, player_excesses = self._calculate_deficits_and_excesses(player.resources, cost)
+                missing = next((r for r, v in player_deficit.items() if v > 0), None)
+                if missing is not None:
+                    sim_game_for_trade = _sim_game_with_replaced_player(sim_game, player)
+                    opponents = get_opponents(sim_game_for_trade, player.player_number)
+                    trade_action = propose_trade(
+                        player,
+                        sim_game_for_trade,
+                        missing,
+                        player_excesses,
+                        opponents,
+                        self,
+                    )
+                    if trade_action and utility > best_utility:
+                        best_utility = utility
+                        best_action = trade_action
+                        best_candidate = CandidateExplanation(
+                            action=trade_action,
+                            full_plan=[trade_action] + candidate.full_plan,
+                            etb=candidate.etb,
+                            etw_before=candidate.etw_before,
+                            etw_after=candidate.etw_after,
+                            etw_delta=candidate.etw_delta,
+                            utility_total=candidate.utility_total,
+                            utility_self=candidate.utility_self,
+                            utility_opponent=candidate.utility_opponent,
+                            utility_special=candidate.utility_special,
+                            utility_attention=candidate.utility_attention,
+                            expected_vp_gain=candidate.expected_vp_gain,
+                            reasons_for=[
+                                            Reason(
+                                                type=ReasonType.REQUIRES_TRADE,
+                                                label="Trades to get resources for the planned build",
+                                                value=max(1.0, candidate.utility_total),
+                                            )
+                                        ] + list(candidate.reasons_for),
+                            reasons_against=list(candidate.reasons_against),
+                            metadata={
+                                **candidate.metadata,
+                                "trade_inserted": True,
+                                "enabled_action": candidate.action,
+                            },
+                        )
+
+        if best_action is not None and best_candidate is not None:
+            return best_action, best_candidate
+
+        fallback = CandidateExplanation(
+            action=Action(ActionType.END_TURN),
+            full_plan=[Action(ActionType.END_TURN)],
+            utility_total=0.0,
+            reasons_for=[
+                Reason(
+                    type=ReasonType.HEURISTIC_CHOICE,
+                    label="No legal immediate action provided enough value",
+                    value=0.0,
+                )
+            ],
+        )
+        return fallback.action, fallback
+
     def calculate_best_game_action(
             self,
             sim_game: SimGame,
@@ -777,15 +898,37 @@ class EtwEstimator:
             reasons_for: List[Reason] = []
             reasons_against: List[Reason] = []
 
-            if u_self > 0:
-                reasons_for.append(
-                    Reason(
-                        type=ReasonType.FASTEST_PROGRESS,
-                        label="Improves expected progress toward victory",
-                        value=u_self,
-                        metadata={"etw_delta": etw_delta},
+            final_step = actions[-1]
+
+            if final_step.type == ActionType.BUILD:
+                building, _ = final_step.payload
+
+                if building == Buildable.SETTLEMENT:
+                    reasons_for.append(
+                        Reason(
+                            type=ReasonType.ENABLES_EXPANSION,
+                            label="Leads to a valuable settlement and improves your position",
+                            value=max(u_self * 0.9, 1.0),
+                        )
                     )
-                )
+
+                elif building == Buildable.CITY:
+                    reasons_for.append(
+                        Reason(
+                            type=ReasonType.IMPROVES_PRODUCTION,
+                            label="Upgrades a strong location and improves future production",
+                            value=max(u_self * 0.8, 1.0),
+                        )
+                    )
+
+                elif building == Buildable.ROAD:
+                    reasons_for.append(
+                        Reason(
+                            type=ReasonType.ENABLES_EXPANSION,
+                            label="Improves your road network and opens future expansion",
+                            value=max(u_self * 0.7, 1.0),
+                        )
+                    )
 
             if etb <= 2.5:
                 reasons_for.append(
@@ -947,61 +1090,17 @@ class EtwEstimator:
                 assumptions=["All candidate actions were filtered out during evaluation."],
             )
 
-        # IMPORTANT: choose the real legal action using the original legality-aware selector
-        utilities = [(c.action, c.utility_total) for c in explained_candidates]
-        chosen_action = self._choose_max_utility_action(
+        chosen_action, chosen_candidate = self._choose_max_utility_action_with_candidate(
             sim_player,
             sim_game,
-            utilities,
+            explained_candidates,
             ignore_affordability=ignore_affordability,
         )
 
-        # Try to find the explanation corresponding to the chosen action
-        chosen_candidate = next(
-            (c for c in explained_candidates if c.action == chosen_action),
-            None,
-        )
-
-        # If the selector inserted a trade, it may not directly match a rollout candidate.
-        # In that case, synthesize a lightweight explanation.
-        if chosen_candidate is None:
-            chosen_candidate = CandidateExplanation(
-                action=chosen_action,
-                full_plan=[chosen_action],
-                etw_before=etw_before,
-                etw_after=etw_before,
-                etw_delta=0.0,
-                utility_total=max((u for a, u in utilities if a == chosen_action), default=0.0),
-                reasons_for=[],
-                metadata={"synthesised": True},
-            )
-
-            if chosen_action.type == ActionType.TRADE_WITH_BANK:
-                chosen_candidate.reasons_for.append(
-                    Reason(
-                        type=ReasonType.REQUIRES_TRADE,
-                        label="A bank trade is needed to make the strongest plan feasible",
-                        value=1.0,
-                    )
-                )
-            elif chosen_action.type == ActionType.TRADE_WITH_PLAYER:
-                chosen_candidate.reasons_for.append(
-                    Reason(
-                        type=ReasonType.REQUIRES_TRADE,
-                        label="A player trade is needed to make the strongest plan feasible",
-                        value=1.0,
-                    )
-                )
-            elif chosen_action.type == ActionType.END_TURN:
-                chosen_candidate.reasons_for.append(
-                    Reason(
-                        type=ReasonType.HEURISTIC_CHOICE,
-                        label="No legal immediate action provided enough value",
-                        value=0.0,
-                    )
-                )
-
-        alternatives = [c for c in explained_candidates if c.action != chosen_action][:3]
+        alternatives = [
+                           c for c in explained_candidates
+                           if c.full_plan != chosen_candidate.full_plan
+                       ][:3]
 
         confidence = 0.0
         if alternatives:

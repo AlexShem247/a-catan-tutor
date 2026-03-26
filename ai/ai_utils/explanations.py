@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from ai.ai_utils.actions import Action, ActionType
 
@@ -64,105 +64,302 @@ class ActionExplanation:
     assumptions: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def generate_text_concise(self) -> str:
-        """Return a short explanation suitable for live gameplay."""
-        action_text = self._action_to_text(self.chosen_candidate.action)
+    def generate_text_concise(self) -> Tuple[str, str]:
+        action_text = self._action_to_text(self.chosen_candidate.action, short=True)
         reason_text = self._top_reason_sentence(self.chosen_candidate.reasons_for, limit=2)
+        return action_text.title(), reason_text.capitalize() if reason_text else ""
 
-        if reason_text:
-            text = f"{action_text}. {reason_text}."
+    def generate_text_detail(self) -> str:
+        candidate = self.chosen_candidate
+        plan = candidate.full_plan
+
+        if not plan:
+            return "There is no clear plan for this move."
+
+        if len(plan) == 1:
+            action_text = self._action_to_text(plan[0], short=False)
+            opening = f"The idea is to {action_text.lower()}."
+            benefit = self._final_benefit_text(candidate)
+            closing = self._plan_timing_text(candidate)
+
+            parts = [opening, benefit]
+            if closing:
+                parts.append(closing)
+
+            return "<br><br>".join(parts)
+
+        parts: List[str] = []
+
+        trade_opening = self._trade_opening_text(plan)
+        if trade_opening:
+            parts.append(trade_opening)
         else:
-            text = f"{action_text}."
+            first_step = self._action_to_text(plan[0], short=False)
+            parts.append(f"The plan starts by {self._gerund_phrase(plan[0], first_step)}.")
 
-        return text
+        for i in range(1, len(plan)):
+            current = plan[i]
 
-    def generate_text_comparative(self) -> str:
-        """Return an explanation contrasting the chosen action with alternatives."""
-        chosen = self.chosen_candidate
-        action_text = self._action_to_text(chosen.action)
-        reason_text = self._top_reason_sentence(chosen.reasons_for, limit=2)
-
-        if reason_text:
-            text = f"I recommend {action_text.lower()} because {reason_text}."
-        else:
-            text = f"I recommend {action_text.lower()}."
-
-        if self.alternatives:
-            best_alt = max(self.alternatives, key=lambda c: c.utility_total)
-            alt_text = self._action_to_text(best_alt.action)
-
-            chosen_gap = chosen.utility_total - best_alt.utility_total
-            if chosen_gap > 0:
-                text += f" A strong alternative was {alt_text.lower()}, " \
-                        f"but it gave less overall value in this position."
+            if i == len(plan) - 1:
+                final_text = self._action_to_text(current, short=False)
+                parts.append(f"That sets up the final step: {final_text}.")
             else:
-                text += f" A strong alternative was {alt_text.lower()}, and this was a close decision."
+                mid_text = self._action_to_text(current, short=False)
+                parts.append(f"After that, the next step is to {mid_text.lower()}.")
 
-        return text
+        if not trade_opening:
+            link_text = self._plan_linking_text(plan)
+            if link_text:
+                parts.append(link_text)
 
-    def generate_text_teaching(self) -> str:
-        """Return a more tutor-like explanation with strategic interpretation."""
-        chosen = self.chosen_candidate
-        action_text = self._action_to_text(chosen.action)
+        parts.append(self._final_benefit_text(candidate))
 
-        parts: List[str] = [f"I recommend {action_text.lower()}.", self._strategic_intro(chosen.action)]
+        timing = self._plan_timing_text(candidate)
+        if timing:
+            parts.append(timing)
 
-        top_reasons = self._sorted_reasons(chosen.reasons_for)[:3]
-        if top_reasons:
-            reason_sentences = [self._reason_to_teaching_text(r) for r in top_reasons]
-            parts.extend(reason_sentences)
+        return "<br><br>".join(p for p in parts if p)
 
-        if self.alternatives:
-            best_alt = max(self.alternatives, key=lambda c: c.utility_total)
-            alt_text = self._action_to_text(best_alt.action)
-            parts.append(f"An alternative was {alt_text.lower()}, but it was less suitable in this state.")
-
-        if self.assumptions:
-            parts.append(f"This recommendation is based on {self.assumptions[0].lower()}.")
-
-        return " ".join(p for p in parts if p)
-
-    def _action_to_text(self, action: Action) -> str:
-        """Convert an Action into a short human-readable phrase."""
+    def _action_to_text(self, action: Action, short: bool = True) -> str:
         if action.type == ActionType.ROLL:
-            return "Roll the dice"
+            return "roll the dice"
 
         if action.type == ActionType.END_TURN:
-            return "End your turn"
+            return "end the turn"
 
         if action.type == ActionType.BUY_DEV_CARD:
-            return "Buy a development card"
+            return "buy a development card"
 
         if action.type == ActionType.PLAY_DEV_CARD:
             payload = action.payload
             if hasattr(payload, "name"):
-                return f"Play a {payload.name.lower()} card"
-            return "Play a development card"
+                return f"play a {payload.name.lower()} card"
+            return "play a development card"
 
         if action.type == ActionType.TRADE_WITH_BANK:
-            return "Trade with the bank"
+            if short:
+                return "trade with the bank"
+            return self._bank_trade_text(action)
 
         if action.type == ActionType.TRADE_WITH_PLAYER:
-            return "Propose a player trade"
+            if short:
+                return "propose a trade"
+            return self._player_trade_text(action)
 
+        if action.type == ActionType.BUILD:
+            return self._build_text(action, short=short)
+
+        return "take this action"
+
+    def _build_text(self, action: Action, short: bool = True) -> str:
+        payload = action.payload
+        if not isinstance(payload, tuple) or len(payload) < 1:
+            return "build"
+
+        buildable = payload[0]
+        position = payload[1] if len(payload) > 1 else None
+
+        if not hasattr(buildable, "name"):
+            return "build"
+
+        build_name = buildable.name.lower()
+
+        if short or position is None:
+            if build_name == "road":
+                return "build a road"
+            if build_name == "settlement":
+                return "build a settlement"
+            if build_name == "city":
+                return "build a city"
+            return f"build a {build_name}"
+
+        pos_text = self._position_text(position)
+
+        if build_name == "road":
+            return f"build a road {pos_text}"
+        if build_name == "settlement":
+            return f"build a settlement {pos_text}"
+        if build_name == "city":
+            return f"build a city {pos_text}"
+
+        return f"build a {build_name} {pos_text}"
+
+    def _bank_trade_text(self, action: Action) -> str:
+        payload = action.payload
+        if not isinstance(payload, tuple) or len(payload) != 2:
+            return "trade with the bank"
+
+        selling, buying = payload
+        sell_text = self._resource_count_text(selling)
+        buy_text = self._resource_count_text(buying)
+
+        if sell_text and buy_text:
+            return f"trade {sell_text} with the bank for {buy_text}"
+        return "trade with the bank"
+
+    def _player_trade_text(self, action: Action) -> str:
+        payload = action.payload
+        if not isinstance(payload, tuple) or len(payload) != 2:
+            return "propose a player trade"
+
+        selling, buying = payload
+        sell_text = self._resource_count_text(selling)
+        buy_text = self._resource_count_text(buying)
+
+        if sell_text and buy_text:
+            return f"offer {sell_text} in exchange for {buy_text}"
+        return "propose a player trade"
+
+    def _resource_count_text(self, rc: Dict[Any, int]) -> str:
+        if not rc:
+            return ""
+
+        parts: List[str] = []
+        for resource, amount in rc.items():
+            if amount <= 0:
+                continue
+
+            name = getattr(resource, "name", str(resource)).lower()
+            if amount == 1:
+                parts.append(f"1 {name}")
+            else:
+                parts.append(f"{amount} {name}")
+
+        if not parts:
+            return ""
+
+        if len(parts) == 1:
+            return parts[0]
+        if len(parts) == 2:
+            return f"{parts[0]} and {parts[1]}"
+        return ", ".join(parts[:-1]) + f", and {parts[-1]}"
+
+    def _position_text(self, pos: Any) -> str:
+        if pos is None:
+            return ""
+
+        raw = str(pos).strip()
+        if not raw:
+            return ""
+
+        lowered = raw.lower()
+
+        if lowered.startswith("path"):
+            return f"toward {raw}"
+        if lowered.startswith("empty"):
+            return f"at {raw}"
+
+        return f"at {raw}"
+
+    def _gerund_phrase(self, action: Action, action_text: str) -> str:
         if action.type == ActionType.BUILD:
             payload = action.payload
             if isinstance(payload, tuple) and len(payload) >= 1:
                 buildable = payload[0]
                 if hasattr(buildable, "name"):
-                    return f"Build a {buildable.name.lower()}"
-            return "Build"
+                    name = buildable.name.lower()
+                    if name in ("road", "settlement", "city"):
+                        return action_text.lower().replace("build", "building", 1)
 
-        return "Take this action"
+        if action.type == ActionType.BUY_DEV_CARD:
+            return "buying a development card"
+
+        if action.type == ActionType.PLAY_DEV_CARD:
+            return action_text.lower().replace("play", "playing", 1)
+
+        if action.type == ActionType.TRADE_WITH_BANK:
+            return action_text.lower().replace("trade", "trading", 1)
+
+        if action.type == ActionType.TRADE_WITH_PLAYER:
+            if action_text.lower().startswith("offer "):
+                return f"offering {action_text[len('offer '):].lower()}"
+            return action_text.lower().replace("propose", "proposing", 1)
+
+        if action.type == ActionType.ROLL:
+            return "rolling the dice"
+
+        if action.type == ActionType.END_TURN:
+            return "ending the turn"
+
+        return action_text.lower()
+
+    def _trade_opening_text(self, plan: List[Action]) -> str:
+        if len(plan) < 2:
+            return ""
+
+        first_action = plan[0]
+        if first_action.type not in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER):
+            return ""
+
+        first_text = self._action_to_text(first_action, short=False)
+        target_name = self._buildable_name(plan[-1])
+
+        if target_name:
+            article = "an" if target_name[0].lower() in "aeiou" else "a"
+            return f"The plan starts by {self._gerund_phrase(first_action, first_text)} to save up for {article} {target_name.title()}."
+
+        return f"The plan starts by {self._gerund_phrase(first_action, first_text)}."
+
+    def _plan_linking_text(self, plan: List[Action]) -> str:
+        if not plan:
+            return ""
+
+        final_action = plan[-1]
+
+        if final_action.type == ActionType.BUILD:
+            payload = final_action.payload
+            if isinstance(payload, tuple) and len(payload) >= 1:
+                buildable = payload[0]
+                if hasattr(buildable, "name"):
+                    name = buildable.name.lower()
+
+                    if name == "settlement":
+                        return "The earlier steps matter because they create access to that settlement opportunity."
+                    if name == "city":
+                        return "The earlier steps matter because they support a stronger upgrade at the end of the plan."
+                    if name == "road":
+                        return "The earlier steps matter because they improve your position before committing to that road."
+
+        if final_action.type == ActionType.BUY_DEV_CARD:
+            return "The earlier steps matter because they make it easier to invest in a flexible longer-term option."
+
+        if final_action.type == ActionType.PLAY_DEV_CARD:
+            return "The earlier steps matter because they prepare the position before using the card effect."
+
+        return "The earlier steps matter because they make the final move stronger than taking it in isolation."
+
+    def _buildable_name(self, action: Action) -> str:
+        if action.type != ActionType.BUILD:
+            return ""
+
+        payload = action.payload
+        if not isinstance(payload, tuple) or len(payload) < 1:
+            return ""
+
+        buildable = payload[0]
+        if not hasattr(buildable, "name"):
+            return ""
+
+        return buildable.name.lower()
+
+    def _plan_timing_text(self, candidate: CandidateExplanation) -> str:
+        if candidate.etb <= 0:
+            return ""
+
+        if candidate.etb <= 2:
+            return "This is a plan that should become available quite quickly."
+        if candidate.etb <= 5:
+            return "This is a realistic plan to work toward over the next few turns."
+        if candidate.etb <= 9:
+            return "This is more of a medium-term plan, but it offers a strong payoff."
+        return "This is a slower plan, but it was still judged to give the best long-term payoff."
 
     def _sorted_reasons(self, reasons: List[Reason]) -> List[Reason]:
-        """Return reasons sorted by descending importance."""
         return sorted(reasons, key=lambda r: r.value, reverse=True)
 
     def _top_reason_sentence(self, reasons: List[Reason], limit: int = 2) -> str:
-        """Return the top reasons joined into a single sentence fragment."""
         top = self._sorted_reasons(reasons)[:limit]
-        labels = [self._reason_label_to_phrase(r.label) for r in top if r.label]
+        labels = [self._normalise_reason_label(r.label) for r in top if r.label]
 
         if not labels:
             return ""
@@ -175,83 +372,69 @@ class ActionExplanation:
 
         return ", ".join(labels[:-1]) + f", and {labels[-1]}"
 
-    def _reason_label_to_phrase(self, label: str) -> str:
-        """Normalise a reason label into a sentence-friendly phrase."""
+    def _normalise_reason_label(self, label: str) -> str:
         if not label:
             return ""
-
         label = label.strip()
         if not label:
             return ""
+        return label[0].lower() + label[1:]
 
-        first = label[0].lower() + label[1:]
-        return first
+    def _final_benefit_text(self, candidate: CandidateExplanation) -> str:
+        top_reasons = [
+            reason for reason in self._sorted_reasons(candidate.reasons_for)
+            if reason.type != ReasonType.REQUIRES_TRADE
+        ][:3]
 
-    def _strategic_intro(self, action: Action) -> str:
-        """Return a tutor-style strategic description of the action type."""
-        if action.type == ActionType.BUILD:
-            return "This is a strategic building decision that affects both your current position" \
-                   " and your future development."
+        if not top_reasons:
+            return "This final move is the strongest option here."
 
-        if action.type == ActionType.BUY_DEV_CARD:
-            return "Development cards can create hidden value and add flexibility to your longer-term plan."
+        reason_phrases = [self._reason_to_detail_phrase(reason) for reason in top_reasons]
 
-        if action.type == ActionType.PLAY_DEV_CARD:
-            return "Playing a development card is useful when its immediate effect improves" \
-                   " your position more than waiting."
+        if len(reason_phrases) == 1:
+            joined = reason_phrases[0]
+        elif len(reason_phrases) == 2:
+            joined = f"{reason_phrases[0]} and {reason_phrases[1]}"
+        else:
+            joined = ", ".join(reason_phrases[:-1]) + f", and {reason_phrases[-1]}"
 
-        if action.type == ActionType.TRADE_WITH_BANK:
-            return "Bank trades are useful when converting surplus resources into ones that unblock stronger plans."
+        return f"This is strong because {joined}."
 
-        if action.type == ActionType.TRADE_WITH_PLAYER:
-            return "Player trades are useful when they accelerate your plan without helping an opponent too much."
-
-        if action.type == ActionType.ROLL:
-            return "No stronger pre-roll action was preferred, so progressing the turn is best."
-
-        if action.type == ActionType.END_TURN:
-            return "No available action provided enough value to justify spending resources or changing position."
-
-        return ""
-
-    def _reason_to_teaching_text(self, reason: Reason) -> str:
-        """Convert a structured reason into a slightly more educational sentence."""
+    def _reason_to_detail_phrase(self, reason: Reason) -> str:
         if reason.type == ReasonType.FASTEST_PROGRESS:
-            return "This action was preferred because it improves your expected progress toward winning more" \
-                   " than the other available options."
+            return "it gives the best overall progress"
 
         if reason.type == ReasonType.QUICK_TO_EXECUTE:
-            return "It is also attractive because it can be completed relatively quickly with" \
-                   " your expected resource flow."
+            return "it can be reached fairly quickly"
 
         if reason.type == ReasonType.IMPROVES_PRODUCTION:
-            return "Improving production matters because stronger resource income supports more future options."
+            return "it improves future resource production"
 
         if reason.type == ReasonType.IMPROVES_RESOURCE_DIVERSITY:
-            return "Resource diversity is valuable because it reduces dependence on a narrow set of dice outcomes."
+            return "it improves resource balance"
 
         if reason.type == ReasonType.ENABLES_EXPANSION:
-            return "This move also helps expansion, which can improve future settlement opportunities."
+            return "it opens up future expansion"
 
         if reason.type == ReasonType.ADVANCES_LONGEST_ROAD:
-            return "It contributes toward Longest Road, which can become an efficient source of extra victory points."
+            return "it strengthens progress toward Longest Road"
 
         if reason.type == ReasonType.ADVANCES_LARGEST_ARMY:
-            return "It contributes toward Largest Army, which can become an important tempo swing later in the game."
+            return "it strengthens progress toward Largest Army"
 
         if reason.type == ReasonType.SLOWS_LEADING_OPPONENT:
-            return "A further advantage is that it slows the current leading opponent, reducing their momentum."
+            return "it also slows the current leader"
 
         if reason.type == ReasonType.REQUIRES_TRADE:
-            return "This recommendation depends on using a trade to make the preferred plan feasible."
+            return ""
 
         if reason.type == ReasonType.HIDDEN_VALUE:
-            return "This option has hidden value because its full benefit depends on uncertain future outcomes."
+            return "it adds useful hidden value"
 
         if reason.type == ReasonType.AVOIDS_EARLY_ATTENTION:
-            return "It also avoids attracting unnecessary early attention from opponents."
+            return "it avoids drawing too much early attention"
 
         if reason.type == ReasonType.HEURISTIC_CHOICE:
-            return "This decision comes from a simpler heuristic rule rather than a deeper comparative evaluation."
+            return "it fits the strongest available plan"
 
-        return self._reason_label_to_phrase(reason.label).capitalize() + "."
+        return self._normalise_reason_label(reason.label)
