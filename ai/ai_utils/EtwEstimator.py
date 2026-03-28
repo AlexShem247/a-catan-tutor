@@ -219,7 +219,7 @@ class EtwEstimator:
 
         # Optional override for fast, rank-only ETW estimates.
         if max_depth_override is not None:
-            max_depth = max(1, int(max_depth_override))
+            max_depth = max(1.0, int(max_depth_override))
             max_depth = min(max_depth, default_depth)
         else:
             max_depth = default_depth
@@ -298,6 +298,69 @@ class EtwEstimator:
                 total_resources[res] = total_resources.get(res, 0) + cost
 
         return self.estimated_time_to_build(player, sim_game, total_resources)
+
+    def _plan_resource_cost(self, actions: List[Action]) -> ResourceCount:
+        """Return the total resource cost across all resource-consuming steps in a plan."""
+        total_resources: ResourceCount = {res: 0 for res in Resource}
+
+        for action in actions:
+            step_resources = calc_step_resources(action)
+            for res, cost in step_resources.items():
+                total_resources[res] = total_resources.get(res, 0) + cost
+
+        return total_resources
+
+    def _plan_waiting_resources(self, player: SimPlayerState, actions: List[Action]) -> ResourceCount:
+        """Return the remaining resources the player still needs to accumulate for a plan."""
+        total_resources = self._plan_resource_cost(actions)
+        deficits, _ = self._calculate_deficits_and_excesses(player.resources, total_resources)
+        return {res: amount for res, amount in deficits.items() if amount > 0}
+
+    def _future_plan_fields(
+            self,
+            player: SimPlayerState,
+            actions: List[Action],
+    ) -> Tuple[List[Action], ResourceCount]:
+        """Build the explanation fields that describe the deferred plan and its remaining cost."""
+        if not actions:
+            return [], {}
+        return list(actions), self._plan_waiting_resources(player, actions)
+
+    def _planned_target_phrase(self, action: Action) -> str:
+        if action.type == ActionType.BUILD:
+            payload = action.payload
+            if isinstance(payload, tuple) and payload:
+                buildable = payload[0]
+                build_name = getattr(buildable, "name", "build").lower().replace("_", " ")
+                article = "an" if build_name[:1] in "aeiou" else "a"
+                return f"{article} {build_name}"
+            return "the next build"
+
+        if action.type == ActionType.BUY_DEV_CARD:
+            return "a development card"
+
+        if action.type == ActionType.PLAY_DEV_CARD:
+            return "the next card play"
+
+        return "the next step"
+
+    def _trade_reason_label(self, enabled_action: Action) -> str:
+        return f"Trades to get resources for {self._planned_target_phrase(enabled_action)}"
+
+    def _quick_reason_label(self, next_step: Action, final_step: Action) -> str:
+        """Return a concise timing reason that refers to the plan outcome, not instant setup actions."""
+        if next_step.type in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER) and final_step != next_step:
+            if final_step.type == ActionType.BUILD:
+                buildable = final_step.payload[0]
+                build_name = getattr(buildable, "name", "build").lower()
+                return f"Gets to the planned {build_name} relatively quickly"
+            if final_step.type == ActionType.BUY_DEV_CARD:
+                return "Gets to the planned development-card purchase relatively quickly"
+            if final_step.type == ActionType.PLAY_DEV_CARD:
+                return "Sets up the planned card play relatively quickly"
+            return "Gets to the planned follow-up relatively quickly"
+
+        return "Can be executed relatively quickly"
 
     def _get_candidate_actions(
             self,
@@ -646,6 +709,8 @@ class EtwEstimator:
                 best_candidate = CandidateExplanation(
                     action=bank_trade_action,
                     full_plan=[bank_trade_action] + candidate.full_plan,
+                    next_plan=list(candidate.next_plan),
+                    waiting_resources=dict(candidate.waiting_resources),
                     etb=candidate.etb,
                     etw_before=candidate.etw_before,
                     etw_after=candidate.etw_after,
@@ -659,7 +724,7 @@ class EtwEstimator:
                     reasons_for=[
                                     Reason(
                                         type=ReasonType.REQUIRES_TRADE,
-                                        label="Trades to get resources for the planned build",
+                                        label=self._trade_reason_label(candidate.action),
                                         value=max(1.0, candidate.utility_total),
                                     )
                                 ] + list(candidate.reasons_for),
@@ -692,6 +757,8 @@ class EtwEstimator:
                         best_candidate = CandidateExplanation(
                             action=trade_action,
                             full_plan=[trade_action] + candidate.full_plan,
+                            next_plan=list(candidate.next_plan),
+                            waiting_resources=dict(candidate.waiting_resources),
                             etb=candidate.etb,
                             etw_before=candidate.etw_before,
                             etw_after=candidate.etw_after,
@@ -705,7 +772,7 @@ class EtwEstimator:
                             reasons_for=[
                                             Reason(
                                                 type=ReasonType.REQUIRES_TRADE,
-                                                label="Trades to get resources for the planned build",
+                                                label=self._trade_reason_label(candidate.action),
                                                 value=max(1.0, candidate.utility_total),
                                             )
                                         ] + list(candidate.reasons_for),
@@ -720,17 +787,34 @@ class EtwEstimator:
         if best_action is not None and best_candidate is not None:
             return best_action, best_candidate
 
+        deferred_candidate = max(candidates, key=lambda c: c.utility_total, default=None)
+        next_plan, waiting_resources = ([], {})
+        reasons_for: List[Reason] = [
+            Reason(
+                type=ReasonType.HEURISTIC_CHOICE,
+                label="No legal immediate action was worth taking before saving more resources",
+                value=0.0,
+            )
+        ]
+        reasons_against: List[Reason] = []
+        if deferred_candidate is not None:
+            next_plan = list(deferred_candidate.next_plan or deferred_candidate.full_plan)
+            waiting_resources = dict(
+                deferred_candidate.waiting_resources
+                or self._plan_waiting_resources(player, next_plan)
+            )
+            if deferred_candidate.reasons_for:
+                reasons_for = list(deferred_candidate.reasons_for)
+            reasons_against = list(deferred_candidate.reasons_against)
+
         fallback = CandidateExplanation(
             action=Action(ActionType.END_TURN),
             full_plan=[Action(ActionType.END_TURN)],
+            next_plan=next_plan,
+            waiting_resources=waiting_resources,
             utility_total=0.0,
-            reasons_for=[
-                Reason(
-                    type=ReasonType.HEURISTIC_CHOICE,
-                    label="No legal immediate action provided enough value",
-                    value=0.0,
-                )
-            ],
+            reasons_for=reasons_for,
+            reasons_against=reasons_against,
         )
         return fallback.action, fallback
 
@@ -815,6 +899,7 @@ class EtwEstimator:
                 continue
 
             next_step = actions[0]
+            next_plan, waiting_resources = self._future_plan_fields(player, actions)
 
             player_copy = player.copy()
             sim_game_copy = _sim_game_with_replaced_player(sim_game, player_copy)
@@ -934,7 +1019,7 @@ class EtwEstimator:
                 reasons_for.append(
                     Reason(
                         type=ReasonType.QUICK_TO_EXECUTE,
-                        label="Can be executed relatively quickly",
+                        label=self._quick_reason_label(next_step, final_step),
                         value=max(0.0, 5.0 - etb),
                     )
                 )
@@ -1000,6 +1085,8 @@ class EtwEstimator:
                 CandidateExplanation(
                     action=next_step,
                     full_plan=actions,
+                    next_plan=next_plan,
+                    waiting_resources=waiting_resources,
                     etb=etb,
                     etw_before=etw_before,
                     etw_after=etw_after,
@@ -1047,6 +1134,8 @@ class EtwEstimator:
             chosen = CandidateExplanation(
                 action=Action(ActionType.END_TURN),
                 full_plan=[Action(ActionType.END_TURN)],
+                next_plan=[],
+                waiting_resources={},
                 etw_before=etw_before,
                 etw_after=etw_before,
                 etw_delta=0.0,
@@ -1072,9 +1161,13 @@ class EtwEstimator:
         )
 
         if not explained_candidates:
+            next_plan, waiting_resources = self._future_plan_fields(sim_player, candidates[0][0]) if (
+                candidates) else ([], {})
             chosen = CandidateExplanation(
                 action=Action(ActionType.END_TURN),
                 full_plan=[Action(ActionType.END_TURN)],
+                next_plan=next_plan,
+                waiting_resources=waiting_resources,
                 etw_before=etw_before,
                 etw_after=etw_before,
                 etw_delta=0.0,

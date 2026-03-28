@@ -3,6 +3,7 @@ from enum import Enum, auto
 from typing import Any, Dict, List, Tuple
 
 from ai.ai_utils.actions import Action, ActionType
+from game.Resources import ResourceCount
 
 
 class ReasonType(Enum):
@@ -32,6 +33,8 @@ class Reason:
 class CandidateExplanation:
     action: Action
     full_plan: List[Action]
+    next_plan: List[Action] = field(default_factory=list)
+    waiting_resources: ResourceCount = field(default_factory=dict)
 
     etb: float = 0.0
     etw_before: float = 0.0
@@ -66,12 +69,20 @@ class ActionExplanation:
 
     def generate_text_concise(self) -> Tuple[str, str]:
         action_text = self._action_to_text(self.chosen_candidate.action, short=True)
-        reason_text = self._top_reason_sentence(self.chosen_candidate.reasons_for, limit=2)
+        if self.chosen_candidate.action.type == ActionType.END_TURN and self.chosen_candidate.next_plan:
+            reason_text = self._end_turn_concise_reason(self.chosen_candidate)
+        elif self.chosen_candidate.action.type in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER):
+            reason_text = self._trade_concise_reason(self.chosen_candidate, limit=2)
+        else:
+            reason_text = self._top_reason_sentence(self.chosen_candidate.reasons_for, limit=2)
         return action_text.title(), reason_text.capitalize() if reason_text else ""
 
     def generate_text_detail(self) -> str:
         candidate = self.chosen_candidate
         plan = candidate.full_plan
+
+        if candidate.action.type == ActionType.END_TURN and candidate.next_plan:
+            return self._end_turn_plan_text(candidate)
 
         if not plan:
             return "There is no clear plan for this move."
@@ -119,6 +130,36 @@ class ActionExplanation:
             parts.append(timing)
 
         return "<br><br>".join(p for p in parts if p)
+
+    def _end_turn_plan_text(self, candidate: CandidateExplanation) -> str:
+        next_plan = candidate.next_plan
+        next_step = next_plan[0]
+        next_step_text = self._action_to_text(next_step, short=False)
+        parts = [f"The best immediate move is to end the turn and keep saving for this plan: {next_step_text}."]
+
+        final_action = next_plan[-1]
+        if final_action != next_step:
+            final_text = self._action_to_text(final_action, short=False)
+            parts.append(f"The current milestone after saving is {final_text.lower()}.")
+
+        waiting_text = self._resource_count_text(candidate.waiting_resources)
+        if waiting_text:
+            parts.append(f"The resources still missing for that plan are {waiting_text}.")
+
+        benefit = self._final_benefit_text(candidate)
+        if benefit:
+            parts.append(benefit)
+
+        timing = self._plan_timing_text(candidate)
+        if timing:
+            parts.append(timing)
+
+        return "<br><br>".join(parts)
+
+    def _end_turn_concise_reason(self, candidate: CandidateExplanation) -> str:
+        next_step = candidate.next_plan[0]
+        next_step_text = self._action_to_text(next_step, short=False).lower()
+        return f"end turn so we can save resources for {next_step_text}"
 
     def _action_to_text(self, action: Action, short: bool = True) -> str:
         if action.type == ActionType.ROLL:
@@ -296,7 +337,8 @@ class ActionExplanation:
 
         if target_name:
             article = "an" if target_name[0].lower() in "aeiou" else "a"
-            return f"The plan starts by {self._gerund_phrase(first_action, first_text)} to save up for {article} {target_name.title()}."
+            return (f"The plan starts by {self._gerund_phrase(first_action, first_text)} to save up for"
+                    f" {article} {target_name}.")
 
         return f"The plan starts by {self._gerund_phrase(first_action, first_text)}."
 
@@ -316,9 +358,11 @@ class ActionExplanation:
                     if name == "settlement":
                         return "The earlier steps matter because they create access to that settlement opportunity."
                     if name == "city":
-                        return "The earlier steps matter because they support a stronger upgrade at the end of the plan."
+                        return ("The earlier steps matter because they support a stronger upgrade at the end of the "
+                                "plan.")
                     if name == "road":
-                        return "The earlier steps matter because they improve your position before committing to that road."
+                        return ("The earlier steps matter because they improve your position before committing to that "
+                                "road.")
 
         if final_action.type == ActionType.BUY_DEV_CARD:
             return "The earlier steps matter because they make it easier to invest in a flexible longer-term option."
@@ -359,7 +403,10 @@ class ActionExplanation:
 
     def _top_reason_sentence(self, reasons: List[Reason], limit: int = 2) -> str:
         top = self._sorted_reasons(reasons)[:limit]
-        labels = [self._normalise_reason_label(r.label) for r in top if r.label]
+        return self._reason_sentence_from_ordered(top)
+
+    def _reason_sentence_from_ordered(self, reasons: List[Reason]) -> str:
+        labels = [self._normalise_reason_label(r.label) for r in reasons if r.label]
 
         if not labels:
             return ""
@@ -371,6 +418,18 @@ class ActionExplanation:
             return f"{labels[0]} and {labels[1]}"
 
         return ", ".join(labels[:-1]) + f", and {labels[-1]}"
+
+    def _trade_concise_reason(self, candidate: CandidateExplanation, limit: int = 2) -> str:
+        ordered: List[Reason] = []
+        ordered.extend(
+            reason for reason in candidate.reasons_for
+            if reason.type == ReasonType.REQUIRES_TRADE
+        )
+        ordered.extend(
+            reason for reason in self._sorted_reasons(candidate.reasons_for)
+            if reason.type != ReasonType.REQUIRES_TRADE
+        )
+        return self._reason_sentence_from_ordered(ordered[:limit])
 
     def _normalise_reason_label(self, label: str) -> str:
         if not label:
