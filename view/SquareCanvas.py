@@ -13,9 +13,10 @@ from game.Resources import HexType
 from view.board_geometry import hex_center, vertex_xy
 from config.view_constants import WINDOW_HEIGHT, BOARD_BG_COLOR, HEX_TILE_RADIUS, SETTLEMENT_ICONS, hex_to_filepath, \
     EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON, HIGHLIGHT_COLOR, OUTLINE_COLOR, \
-    PORT_EDGE_COLOR, PORT_ICONS, TITLE_COLOR, SEA_BACKGROUND
+    PORT_EDGE_COLOR, PORT_ICONS, TITLE_COLOR, SEA_BACKGROUND, SETTLEMENT_OUTLINE, SETTLEMENT_OUTLINE_SOLID, \
+    CITY_OUTLINE, PLAN_OUTLINE_COLOR
 from view.shapes import HexTileShape, VertexShape, LineShape, InteractiveShape, InteractiveCircle, PixmapShape, \
-    TextShape
+    TextShape, InteractivePixmap, InteractiveRoadOverlay, InteractiveRoadVertexOverlay
 
 
 class SquareCanvas(QWidget):
@@ -61,6 +62,9 @@ class SquareCanvas(QWidget):
 
         self.icons[ROBBER_ICON] = QPixmap(ROBBER_ICON)
         self.icons[SEA_BACKGROUND] = QPixmap(SEA_BACKGROUND)
+        self.icons[SETTLEMENT_OUTLINE] = QPixmap(SETTLEMENT_OUTLINE)
+        self.icons[SETTLEMENT_OUTLINE_SOLID] = QPixmap(SETTLEMENT_OUTLINE_SOLID)
+        self.icons[CITY_OUTLINE] = QPixmap(CITY_OUTLINE)
 
         for key, path in PORT_ICONS.items():
             self.icons[path] = QPixmap(path)
@@ -340,3 +344,47 @@ class SquareCanvas(QWidget):
         self.add_shape(TextShape(w * 0.5, h * 0.65,
                                  "Your AI guide to smart moves and strategic insights in Catan.",
                                  TITLE_COLOR.lighter(150), 25, bold=True))
+
+    def render_planned_builds(self, builds: List[Tuple]):
+        self.shapes = [s for s in self.shapes if not isinstance(s, InteractiveShape)]
+        cx, cy = self.get_world_centre()
+
+        for buildable, position in builds:
+            if buildable == Buildable.ROAD and isinstance(position, Edge):
+                v1, v2 = position.vertices
+                x1, y1 = vertex_xy(v1, cx, cy, HEX_TILE_RADIUS)
+                x2, y2 = vertex_xy(v2, cx, cy, HEX_TILE_RADIUS)
+
+                self.add_shape(InteractiveRoadOverlay(
+                    x1, y1, x2, y2, ROAD_THICKNESS * 1.5, PLAN_OUTLINE_COLOR,
+                    payload=(buildable, position), solid=False,
+                    normal_alpha=100, hover_alpha=255
+                ))
+
+                for vertex in (v1, v2):
+                    if vertex.owner is None and vertex.building is None:
+                        x, y = vertex_xy(vertex, cx, cy, HEX_TILE_RADIUS)
+                        self.add_shape(InteractiveRoadVertexOverlay(
+                            x, y, VERTEX_SIZE, PLAN_OUTLINE_COLOR,
+                            payload=(buildable, vertex), normal_alpha=100, hover_alpha=255
+                        ))
+
+            elif buildable == Buildable.SETTLEMENT and position is not None:
+                x, y = vertex_xy(position, cx, cy, HEX_TILE_RADIUS)
+
+                self.add_shape(InteractivePixmap(
+                    x, y, VERTEX_SIZE * 4, VERTEX_SIZE * 4,
+                    self.icons[SETTLEMENT_OUTLINE], payload=(buildable, position)
+                ))
+                self.add_shape(InteractivePixmap(
+                    x, y, VERTEX_SIZE * 4, VERTEX_SIZE * 4,
+                    self.icons[SETTLEMENT_OUTLINE_SOLID], payload=(buildable, position), normal_alpha=150
+                ))
+
+            elif buildable == Buildable.CITY and position is not None:
+                x, y = vertex_xy(position, cx, cy, HEX_TILE_RADIUS)
+
+                self.add_shape(InteractivePixmap(
+                    x, y, VERTEX_SIZE * 4, VERTEX_SIZE * 4,
+                    self.icons[CITY_OUTLINE], payload=(buildable, position)
+                ))

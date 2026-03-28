@@ -166,13 +166,16 @@ class MainWindow(QMainWindow):
         # Fill in opponent labels
         stat_suffixes = {"name": "", "victory_points": "vic_", "num_resources": "res_",
                          "development_cards": "dev_", "army_size": "army_", "longest_road": "road_"}
+        opponent_prefixes: Dict[PlayerNumber, str] = {
+            PlayerNumber.P2: "p2", PlayerNumber.P3: "p3", PlayerNumber.P4: "p4"
+        }
 
         opponent_labels: Dict[PlayerNumber, Dict[str, QLabel]] = {
             pn: {
-                stat: getattr(self.main_menu, f"p{pn.value + 1}_{suffix}label")
+                stat: getattr(self.main_menu, f"{opponent_prefixes[pn]}_{suffix}label")
                 for stat, suffix in stat_suffixes.items()
             }
-            for pn in (PlayerNumber.P2, PlayerNumber.P3, PlayerNumber.P4)
+            for pn in opponent_prefixes
         }
 
         player_labels: Dict[Resource, QLabel] = {
@@ -298,6 +301,8 @@ class MainWindow(QMainWindow):
                 showing_comparative = True
 
         self.safe_connect(self.tutor_menu.explain_btn, toggle_explanation_detail)
+
+        self.canvas.render_planned_builds(explanation.get_visual_build_plan())
 
     def create_quantity_handlers(
             self,

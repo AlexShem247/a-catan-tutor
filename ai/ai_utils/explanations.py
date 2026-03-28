@@ -3,6 +3,7 @@ from enum import Enum, auto
 from typing import Any, Dict, List, Tuple
 
 from ai.ai_utils.actions import Action, ActionType
+from game.PlayerAssets import Buildable
 from game.Resources import ResourceCount
 
 
@@ -496,3 +497,13 @@ class ActionExplanation:
 
     def _highlight_buildable(self, name: str) -> str:
         return f"<b>{name}</b>"
+
+    def get_visual_build_plan(self) -> List[Tuple]:
+        """Return the planned build actions to visualise, in execution order."""
+        source_plan = self.chosen_candidate.full_plan
+
+        if self.chosen_action.type == ActionType.END_TURN and self.chosen_candidate.next_plan:
+            source_plan = self.chosen_candidate.next_plan
+
+        return [action.payload for action in source_plan if action.type == ActionType.BUILD and
+                action.payload[0] != Buildable.DEVELOPMENT_CARD]

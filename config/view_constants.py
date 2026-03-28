@@ -14,6 +14,7 @@ BOARD_BG_COLOR = QColor(15, 112, 183)
 HEX_TILE_RADIUS = 100
 EDGE_COLOR = QColor(240, 220, 170)
 PORT_EDGE_COLOR = QColor(220, 150, 50)
+PLAN_OUTLINE_COLOR = QColor(100, 200, 200)
 ROAD_THICKNESS = 10
 VERTEX_SIZE = 15
 
@@ -51,6 +52,9 @@ RESOURCE_ICONS: Dict[Resource, str] = {
 DESERT_ICON = "assets/cactus.png"
 ROBBER_ICON = "assets/robber.png"
 SEA_BACKGROUND = "assets/sea_background.png"
+SETTLEMENT_OUTLINE = "assets/settlement_outline.png"
+SETTLEMENT_OUTLINE_SOLID = "assets/settlement_outline_solid.png"
+CITY_OUTLINE = "assets/city_outline.png"
 
 PORT_ICONS: Dict[Port, str] = {
     Port.THREE_TO_ONE: "assets/port_generic.png",

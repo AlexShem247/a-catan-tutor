@@ -353,3 +353,148 @@ class InteractiveCircle(InteractiveShape):
         pr = self.current_radius() * scale  # use animated radius
 
         painter.drawEllipse(int(px - pr), int(py - pr), int(pr * 2), int(pr * 2))
+
+
+class InteractivePixmap(InteractiveShape):
+    def __init__(self, x: float, y: float, width: float, height: float, pixmap: QPixmap,
+                 payload=None, normal_alpha=255, hover_alpha=255):
+        super().__init__(payload)
+        self.x, self.y = float(x), float(y)
+        self.base_width, self.base_height = float(width), float(height)
+        self.pixmap = pixmap
+
+        self.normal_alpha, self.hover_alpha = normal_alpha, hover_alpha
+        self.alpha = normal_alpha
+
+        self.pulse_amplitude, self.pulse_speed = 0.10, 0.5
+        self._start_time = time.time()
+
+    def current_scale_factor(self):
+        if not HIGHLIGHT_ANIMATION:
+            return 1.0
+        t = time.time() - self._start_time
+        return 1.0 + math.sin(2 * math.pi * self.pulse_speed * t) * self.pulse_amplitude
+
+    def contains(self, wx: float, wy: float) -> bool:
+        f = self.current_scale_factor()
+        hw, hh = self.base_width * f / 2, self.base_height * f / 2
+        return self.x - hw <= wx <= self.x + hw and self.y - hh <= wy <= self.y + hh
+
+    def set_hover(self, hovered: bool):
+        super().set_hover(hovered)
+        self.alpha = self.hover_alpha if hovered else self.normal_alpha
+
+    def draw(self, painter, scale, offset):
+        f = self.current_scale_factor()
+        w, h = self.base_width * f * scale, self.base_height * f * scale
+        px, py = self.x * scale + offset.x() - w / 2, self.y * scale + offset.y() - h / 2
+
+        painter.save()
+        painter.setOpacity(self.alpha / 255.0)
+        painter.drawPixmap(int(px), int(py),
+                           self.pixmap.scaled(int(w), int(h),
+                                              Qt.AspectRatioMode.KeepAspectRatio,
+                                              Qt.TransformationMode.SmoothTransformation))
+        painter.restore()
+
+
+class InteractiveRoadOverlay(InteractiveShape):
+    def __init__(self, x1: float, y1: float, x2: float, y2: float, thickness: float, color: QColor,
+                 payload=None, solid=False, normal_alpha=180, hover_alpha=255):
+        super().__init__(payload)
+        self.x1, self.y1 = float(x1), float(y1)
+        self.x2, self.y2 = float(x2), float(y2)
+        self.base_thickness = max(1.0, float(thickness))
+        self.color, self.solid = QColor(color), solid
+        self.normal_alpha, self.hover_alpha = normal_alpha, hover_alpha
+        self._start_time = time.time()
+        self.alpha_amplitude, self.alpha_speed = 55, 0.9
+
+    def current_alpha(self):
+        if not HIGHLIGHT_ANIMATION:
+            return self.hover_alpha if self.hovered else self.normal_alpha
+
+        if self.hovered:
+            return self.hover_alpha
+
+        t = time.time() - self._start_time
+        pulse = (math.sin(2 * math.pi * self.alpha_speed * t) + 1) / 2
+        return int(self.normal_alpha + pulse * self.alpha_amplitude)
+
+    def contains(self, wx: float, wy: float) -> bool:
+        dx, dy = self.x2 - self.x1, self.y2 - self.y1
+        seg_len_sq = dx * dx + dy * dy
+        if seg_len_sq == 0:
+            return False
+
+        t = ((wx - self.x1) * dx + (wy - self.y1) * dy) / seg_len_sq
+        t = max(0.0, min(1.0, t))
+        px, py = self.x1 + t * dx, self.y1 + t * dy
+
+        hit_r = self.base_thickness * 1.2
+        return (wx - px) ** 2 + (wy - py) ** 2 <= hit_r ** 2
+
+    def set_hover(self, hovered: bool):
+        super().set_hover(hovered)
+
+    def draw(self, painter, scale, offset):
+        px1, py1 = self.x1 * scale + offset.x(), self.y1 * scale + offset.y()
+        px2, py2 = self.x2 * scale + offset.x(), self.y2 * scale + offset.y()
+
+        color = QColor(self.color)
+        color.setAlpha(self.current_alpha())
+
+        pen = QPen(color)
+        pen.setWidthF(max(2.0, self.base_thickness * scale))
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+
+        if not self.solid:
+            pen.setStyle(Qt.PenStyle.CustomDashLine)
+            pen.setDashPattern([6.0, 4.0])
+
+        painter.save()
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawLine(int(px1), int(py1), int(px2), int(py2))
+        painter.restore()
+
+
+class InteractiveRoadVertexOverlay(InteractiveShape):
+    def __init__(self, x: float, y: float, r: float, color: QColor,
+                 payload=None, normal_alpha=100, hover_alpha=255):
+        super().__init__(payload)
+        self.x, self.y, self.r = float(x), float(y), float(r)
+        self.base_color = QColor(color)
+        self.normal_alpha, self.hover_alpha = normal_alpha, hover_alpha
+        self._start_time = time.time()
+        self.alpha_amplitude, self.alpha_speed = 55, 0.9
+
+    def current_alpha(self):
+        if not HIGHLIGHT_ANIMATION:
+            return self.hover_alpha if self.hovered else self.normal_alpha
+        if self.hovered:
+            return self.hover_alpha
+        t = time.time() - self._start_time
+        pulse = (math.sin(2 * math.pi * self.alpha_speed * t) + 1) / 2
+        return int(self.normal_alpha + pulse * self.alpha_amplitude)
+
+    def contains(self, wx: float, wy: float) -> bool:
+        dx, dy = wx - self.x, wy - self.y
+        return dx * dx + dy * dy <= self.r * self.r
+
+    def set_hover(self, hovered: bool):
+        super().set_hover(hovered)
+
+    def draw(self, painter, scale, offset):
+        color = QColor(self.base_color)
+        color.setAlpha(self.current_alpha())
+
+        px = self.x * scale + offset.x()
+        py = self.y * scale + offset.y()
+        pr = self.r * scale
+
+        painter.save()
+        painter.setBrush(color)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(int(px - pr), int(py - pr), int(pr * 2), int(pr * 2))
+        painter.restore()
