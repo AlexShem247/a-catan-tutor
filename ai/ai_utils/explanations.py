@@ -55,6 +55,12 @@ class CandidateExplanation:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
+def capitalise(text: str) -> str:
+    if not text:
+        return ""
+    return text[0].upper() + text[1:]
+
+
 @dataclass
 class ActionExplanation:
     chosen_action: Action
@@ -68,14 +74,14 @@ class ActionExplanation:
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def generate_text_concise(self) -> Tuple[str, str]:
-        action_text = self._action_to_text(self.chosen_candidate.action, short=True)
+        action_text = capitalise(self._action_to_text(self.chosen_candidate.action, short=True))
         if self.chosen_candidate.action.type == ActionType.END_TURN and self.chosen_candidate.next_plan:
             reason_text = self._end_turn_concise_reason(self.chosen_candidate)
         elif self.chosen_candidate.action.type in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER):
             reason_text = self._trade_concise_reason(self.chosen_candidate, limit=2)
         else:
             reason_text = self._top_reason_sentence(self.chosen_candidate.reasons_for, limit=2)
-        return action_text.title(), reason_text.capitalize() if reason_text else ""
+        return action_text.title(), capitalise(reason_text) if reason_text else ""
 
     def generate_text_detail(self) -> str:
         candidate = self.chosen_candidate
@@ -89,7 +95,7 @@ class ActionExplanation:
 
         if len(plan) == 1:
             action_text = self._action_to_text(plan[0], short=False)
-            opening = f"The idea is to {action_text.lower()}."
+            opening = f"The idea is to {action_text}."
             benefit = self._final_benefit_text(candidate)
             closing = self._plan_timing_text(candidate)
 
@@ -116,7 +122,7 @@ class ActionExplanation:
                 parts.append(f"That sets up the final step: {final_text}.")
             else:
                 mid_text = self._action_to_text(current, short=False)
-                parts.append(f"After that, the next step is to {mid_text.lower()}.")
+                parts.append(f"After that, the next step is to {mid_text}.")
 
         if not trade_opening:
             link_text = self._plan_linking_text(plan)
@@ -140,7 +146,7 @@ class ActionExplanation:
         final_action = next_plan[-1]
         if final_action != next_step:
             final_text = self._action_to_text(final_action, short=False)
-            parts.append(f"The current milestone after saving is {final_text.lower()}.")
+            parts.append(f"The current milestone after saving is {final_text}.")
 
         waiting_text = self._resource_count_text(candidate.waiting_resources)
         if waiting_text:
@@ -158,7 +164,7 @@ class ActionExplanation:
 
     def _end_turn_concise_reason(self, candidate: CandidateExplanation) -> str:
         next_step = candidate.next_plan[0]
-        next_step_text = self._action_to_text(next_step, short=False).lower()
+        next_step_text = self._action_to_text(next_step, short=False)
         return f"end turn so we can save resources for {next_step_text}"
 
     def _action_to_text(self, action: Action, short: bool = True) -> str:
@@ -174,7 +180,7 @@ class ActionExplanation:
         if action.type == ActionType.PLAY_DEV_CARD:
             payload = action.payload
             if hasattr(payload, "name"):
-                return f"play a {payload.name.lower()} card"
+                return f"play a {payload.name} card"
             return "play a development card"
 
         if action.type == ActionType.TRADE_WITH_BANK:
@@ -203,27 +209,13 @@ class ActionExplanation:
         if not hasattr(buildable, "name"):
             return "build"
 
-        build_name = buildable.name.lower()
+        build_name = buildable.name.upper()
 
         if short or position is None:
-            if build_name == "road":
-                return "build a road"
-            if build_name == "settlement":
-                return "build a settlement"
-            if build_name == "city":
-                return "build a city"
-            return f"build a {build_name}"
+            return f"build a {self._highlight_buildable(build_name)}"
 
         pos_text = self._position_text(position)
-
-        if build_name == "road":
-            return f"build a road {pos_text}"
-        if build_name == "settlement":
-            return f"build a settlement {pos_text}"
-        if build_name == "city":
-            return f"build a city {pos_text}"
-
-        return f"build a {build_name} {pos_text}"
+        return f"build a {self._highlight_buildable(build_name)} {pos_text}"
 
     def _bank_trade_text(self, action: Action) -> str:
         payload = action.payload
@@ -260,11 +252,9 @@ class ActionExplanation:
             if amount <= 0:
                 continue
 
-            name = getattr(resource, "name", str(resource)).lower()
-            if amount == 1:
-                parts.append(f"1 {name}")
-            else:
-                parts.append(f"{amount} {name}")
+            name = getattr(resource, "name", str(resource)).upper()
+            formatted = f"<b>{amount} {name}</b>"
+            parts.append(formatted)
 
         if not parts:
             return ""
@@ -300,21 +290,21 @@ class ActionExplanation:
                 if hasattr(buildable, "name"):
                     name = buildable.name.lower()
                     if name in ("road", "settlement", "city"):
-                        return action_text.lower().replace("build", "building", 1)
+                        return action_text.replace("build", "building", 1)
 
         if action.type == ActionType.BUY_DEV_CARD:
             return "buying a development card"
 
         if action.type == ActionType.PLAY_DEV_CARD:
-            return action_text.lower().replace("play", "playing", 1)
+            return action_text.replace("play", "playing", 1)
 
         if action.type == ActionType.TRADE_WITH_BANK:
-            return action_text.lower().replace("trade", "trading", 1)
+            return action_text.replace("trade", "trading", 1)
 
         if action.type == ActionType.TRADE_WITH_PLAYER:
-            if action_text.lower().startswith("offer "):
-                return f"offering {action_text[len('offer '):].lower()}"
-            return action_text.lower().replace("propose", "proposing", 1)
+            if action_text.startswith("offer "):
+                return f"offering {action_text[len('offer '):]}"
+            return action_text.replace("propose", "proposing", 1)
 
         if action.type == ActionType.ROLL:
             return "rolling the dice"
@@ -322,7 +312,7 @@ class ActionExplanation:
         if action.type == ActionType.END_TURN:
             return "ending the turn"
 
-        return action_text.lower()
+        return action_text
 
     def _trade_opening_text(self, plan: List[Action]) -> str:
         if len(plan) < 2:
@@ -337,8 +327,10 @@ class ActionExplanation:
 
         if target_name:
             article = "an" if target_name[0].lower() in "aeiou" else "a"
-            return (f"The plan starts by {self._gerund_phrase(first_action, first_text)} to save up for"
-                    f" {article} {target_name}.")
+            return (
+                f"The plan starts by {self._gerund_phrase(first_action, first_text)} "
+                f"to save up for {article} {target_name.lower()}."
+            )
 
         return f"The plan starts by {self._gerund_phrase(first_action, first_text)}."
 
@@ -356,13 +348,13 @@ class ActionExplanation:
                     name = buildable.name.lower()
 
                     if name == "settlement":
-                        return "The earlier steps matter because they create access to that settlement opportunity."
+                        return f"The earlier steps matter because they create access to that settlement opportunity."
                     if name == "city":
-                        return ("The earlier steps matter because they support a stronger upgrade at the end of the "
-                                "plan.")
+                        return (f"The earlier steps matter because they support a stronger city "
+                                f"upgrade at the end of the plan.")
                     if name == "road":
-                        return ("The earlier steps matter because they improve your position before committing to that "
-                                "road.")
+                        return (f"The earlier steps matter because they improve your position before "
+                                f"committing to that road.")
 
         if final_action.type == ActionType.BUY_DEV_CARD:
             return "The earlier steps matter because they make it easier to invest in a flexible longer-term option."
@@ -384,7 +376,7 @@ class ActionExplanation:
         if not hasattr(buildable, "name"):
             return ""
 
-        return buildable.name.lower()
+        return buildable.name
 
     def _plan_timing_text(self, candidate: CandidateExplanation) -> str:
         if candidate.etb <= 0:
@@ -449,6 +441,10 @@ class ActionExplanation:
             return "This final move is the strongest option here."
 
         reason_phrases = [self._reason_to_detail_phrase(reason) for reason in top_reasons]
+        reason_phrases = [phrase for phrase in reason_phrases if phrase]
+
+        if not reason_phrases:
+            return "This final move is the strongest option here."
 
         if len(reason_phrases) == 1:
             joined = reason_phrases[0]
@@ -497,3 +493,6 @@ class ActionExplanation:
             return "it fits the strongest available plan"
 
         return self._normalise_reason_label(reason.label)
+
+    def _highlight_buildable(self, name: str) -> str:
+        return f"<b>{name}</b>"
