@@ -195,28 +195,22 @@ class ActionExplanation:
             return self._player_trade_text(action)
 
         if action.type == ActionType.BUILD:
-            return self._build_text(action, short=short)
+            return self._build_text(action)
 
         return "take this action"
 
-    def _build_text(self, action: Action, short: bool = True) -> str:
+    def _build_text(self, action: Action) -> str:
         payload = action.payload
         if not isinstance(payload, tuple) or len(payload) < 1:
             return "build"
 
         buildable = payload[0]
-        position = payload[1] if len(payload) > 1 else None
 
         if not hasattr(buildable, "name"):
             return "build"
 
         build_name = buildable.name.upper()
-
-        if short or position is None:
-            return f"build a {self._highlight_buildable(build_name)}"
-
-        pos_text = self._position_text(position)
-        return f"build a {self._highlight_buildable(build_name)} {pos_text}"
+        return f"build a {self._highlight_buildable(build_name)}"
 
     def _bank_trade_text(self, action: Action) -> str:
         payload = action.payload

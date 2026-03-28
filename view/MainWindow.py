@@ -804,6 +804,9 @@ class MainWindow(QMainWindow):
             self.main_menu.action_label.setText("")
 
     def display_results(self, controller: GameController):
+        # Close tutor menu
+        self.open_tutor_menu(False)
+
         self.canvas.interactive_shapes.clear()
         self.canvas.display_board(controller)
         self.display_resources(controller)

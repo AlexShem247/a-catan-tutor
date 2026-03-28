@@ -2,7 +2,7 @@ import math
 from typing import Dict, List, Tuple
 
 from PyQt6.QtCore import Qt, QRect, QPointF, QSize, pyqtSignal, QTimer
-from PyQt6.QtGui import QPainter, QCursor, QPixmap
+from PyQt6.QtGui import QPainter, QCursor, QPixmap, QFontMetrics
 from PyQt6.QtWidgets import QWidget
 
 from GameController import GameController
@@ -193,6 +193,22 @@ class SquareCanvas(QWidget):
         else:
             painter.fillRect(self.rect(), BOARD_BG_COLOR)
 
+            font = painter.font()
+            font.setPointSize(12)
+            painter.setFont(font)
+
+            text = "Use the scrollbar to zoom in"
+            fm = QFontMetrics(font)
+            text_rect = fm.boundingRect(text)
+
+            padding_x, padding_y = 12, 12
+
+            x = self.width() - text_rect.width() - padding_x
+            y = self.height() - padding_y
+
+            painter.setPen(BOARD_BG_COLOR.lighter(200))
+            painter.drawText(x, y, text)
+
         # Largest square inside widget
         side = min(self.width(), self.height())
         x = (self.width() - side) // 2
@@ -265,8 +281,6 @@ class SquareCanvas(QWidget):
         for vertex in controller.get_all_vertices():
             x, y = vertex_xy(vertex, cx, cy, HEX_TILE_RADIUS)
             self.add_shape(VertexShape(x, y, VERTEX_SIZE, vertex, self.icons))
-
-        self.add_shape(TextShape(1000, 980, "Use the scrollbar to zoom in", BOARD_BG_COLOR.lighter(200), font_size=16))
 
     def draw_selectable_vertices(self, vertices):
         self.interactive_shapes.clear()
