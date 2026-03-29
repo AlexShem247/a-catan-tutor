@@ -73,18 +73,26 @@ class GameController:
             # Settlement
             if player.is_human:
                 # Let human select position
-                self.view.display_board(player, "Select a position to build your settlement")
-
                 vertices = self._game.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
+                self.view.display_board(player, "Select a position to build your settlement")
                 vertex: Vertex = self.view.draw_selectable_vertices(vertices)
                 self.view.display_board()
             else:
                 available_vertices = self._game.get_available_vertices(player, Buildable.SETTLEMENT,
                                                                        road_restriction=False)
-                self.view.display_board()
-                self.view.draw_selectable_vertices(available_vertices, disable_interactivity=True)
-                self.view.display_board_ai(player, "Select a position to build your settlement")
-                vertex = player.policy.select_initial_settlement_location(player, self._game, available_vertices)
+                if self.game_mode == GameMode.GUIDED and isinstance(player.policy, RuleBasedAI):
+                    vertex, explanation = player.policy.select_initial_settlement_location_with_explanation(
+                        player,
+                        self._game,
+                        available_vertices,
+                    )
+                    if explanation is not None:
+                        self.view.display_board_turn_explanations(player, None, explanation)
+                else:
+                    self.view.display_board()
+                    self.view.draw_selectable_vertices(available_vertices, disable_interactivity=True)
+                    self.view.display_board_ai(player, "Select a position to build your settlement")
+                    vertex = player.policy.select_initial_settlement_location(player, self._game, available_vertices)
             self._game.try_build_settlement(player, vertex, use_resources=False,
                                             road_restriction=False, gain_resources=gain_resource)
 
@@ -97,13 +105,12 @@ class GameController:
 
     def get_road_choice(self, player: Player, settlement: Optional[Vertex] = None) -> Edge:
         """Human selects an edge for initial road placement."""
-        self.view.display_board(player, "Select a position to build your road")
-
         edges = self._game.get_available_edges(player)
         if settlement is not None:
             # Restrict edges to be directly connected to settlement
             edges = [edge for edge in edges if settlement in edge.vertices]
 
+        self.view.display_board(player, "Select a position to build your road")
         edge: Edge = self.view.draw_selectable_edges(edges)
 
         return edge
@@ -116,6 +123,16 @@ class GameController:
 
         if not available_edges:
             return None
+
+        if self.game_mode == GameMode.GUIDED and isinstance(player.policy, RuleBasedAI):
+            edge, explanation = player.policy.select_initial_road_location_with_explanation(
+                player,
+                self._game,
+                available_edges,
+            )
+            if explanation is not None:
+                self.view.display_board_turn_explanations(player, None, explanation)
+            return edge
 
         self.view.display_board()
         self.view.draw_selectable_edges(available_edges, disable_interactivity=True)

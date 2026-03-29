@@ -3,8 +3,7 @@ from enum import Enum, auto
 from typing import Any, Dict, List, Tuple
 
 from ai.ai_utils.actions import Action, ActionType
-from game.PlayerAssets import Buildable
-from game.PlayerAssets import DevelopmentCardType
+from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import ResourceCount
 
 
@@ -23,10 +22,61 @@ class ReasonType(Enum):
     HEURISTIC_CHOICE = auto()
 
 
+class ReasonLabel(Enum):
+    PLAN_SETTLEMENT_VALUE = auto()
+    PLAN_CITY_VALUE = auto()
+    PLAN_ROAD_VALUE = auto()
+    QUICK_GENERIC = auto()
+    QUICK_PLANNED_BUILD = auto()
+    QUICK_PLANNED_DEV_BUY = auto()
+    QUICK_PLANNED_DEV_PLAY = auto()
+    QUICK_PLANNED_FOLLOW_UP = auto()
+    QUICK_KNIGHT = auto()
+    QUICK_ROAD_BUILDING = auto()
+    QUICK_YEAR_OF_PLENTY = auto()
+    QUICK_MONOPOLY = auto()
+    SLOWS_LEADER = auto()
+    ADVANCES_LONGEST_ROAD = auto()
+    ADVANCES_LARGEST_ARMY = auto()
+    REQUIRES_TRADE = auto()
+    HIDDEN_DEV_VALUE = auto()
+    EARLY_ATTENTION_RISK = auto()
+    NO_IMMEDIATE_ACTION = auto()
+    PRE_ROLL_NO_DEV_PLAY = auto()
+    INIT_EARLY_PRODUCTION = auto()
+    INIT_RESOURCE_DIVERSITY = auto()
+    INIT_HIGH_FREQUENCY = auto()
+    INIT_PORT_ACCESS = auto()
+    INIT_COMPLEMENTS_FIRST = auto()
+    INIT_ROAD_CONNECTION = auto()
+    INIT_ROAD_TO_SETTLEMENT = auto()
+    INIT_ROAD_TO_BALANCE = auto()
+    INIT_ROAD_FLEXIBLE = auto()
+
+
+class ExplanationTemplate(Enum):
+    INITIAL_SETTLEMENT = auto()
+    INITIAL_ROAD = auto()
+
+
+class RoadExplanationKind(Enum):
+    CONNECTION = auto()
+    EXPANSION = auto()
+    FLEXIBLE = auto()
+
+
+class AssumptionCode(Enum):
+    PRE_ROLL_DEV_ONLY = auto()
+    NO_CANDIDATE_ACTION = auto()
+    FILTERED_CANDIDATES = auto()
+    EXPECTED_PRODUCTION = auto()
+    LEGALITY_AND_AFFORDABILITY = auto()
+
+
 @dataclass
 class Reason:
     type: ReasonType
-    label: str
+    label: Any
     value: float = 0.0
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -63,6 +113,14 @@ def capitalise(text: str) -> str:
     return text[0].upper() + text[1:]
 
 
+def confidence_label(confidence: float) -> str:
+    if confidence >= 15.0:
+        return "high"
+    if confidence >= 5.0:
+        return "medium"
+    return "low"
+
+
 @dataclass
 class ActionExplanation:
     chosen_action: Action
@@ -72,10 +130,16 @@ class ActionExplanation:
     confidence: float = 0.0
     confidence_label: str = "medium"
 
-    assumptions: List[str] = field(default_factory=list)
+    assumptions: List[Any] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def generate_text_concise(self) -> Tuple[str, str]:
+        template = self._explanation_template()
+        if template == ExplanationTemplate.INITIAL_SETTLEMENT:
+            return self._initial_settlement_concise()
+        if template == ExplanationTemplate.INITIAL_ROAD:
+            return self._initial_road_concise()
+
         action_text = capitalise(self._action_to_text(self.chosen_candidate.action, short=True))
         if self.chosen_candidate.action.type == ActionType.END_TURN and self.chosen_candidate.next_plan:
             reason_text = self._end_turn_concise_reason(self.chosen_candidate)
@@ -86,6 +150,12 @@ class ActionExplanation:
         return action_text.title(), capitalise(reason_text) if reason_text else ""
 
     def generate_text_detail(self) -> str:
+        template = self._explanation_template()
+        if template == ExplanationTemplate.INITIAL_SETTLEMENT:
+            return self._initial_settlement_detail()
+        if template == ExplanationTemplate.INITIAL_ROAD:
+            return self._initial_road_detail()
+
         candidate = self.chosen_candidate
         plan = candidate.full_plan
 
@@ -200,6 +270,9 @@ class ActionExplanation:
 
         return "take this action"
 
+    def _explanation_template(self) -> Any:
+        return self.metadata.get("template") or self.chosen_candidate.metadata.get("template")
+
     def _build_text(self, action: Action) -> str:
         payload = action.payload
         if not isinstance(payload, tuple) or len(payload) < 1:
@@ -216,6 +289,95 @@ class ActionExplanation:
     def _display_name(self, value: Any) -> str:
         name = getattr(value, "name", str(value))
         return name.replace("_", " ").title()
+
+    def _initial_settlement_concise(self) -> Tuple[str, str]:
+        vertex = self.chosen_candidate.metadata.get("target_vertex")
+        intersection = self._vertex_intersection_text(vertex)
+        return "Place A Settlement Here", f"Place your settlement at the intersection of {intersection}."
+
+    def _initial_road_concise(self) -> Tuple[str, str]:
+        return "Place A Road Here", self._initial_road_target_sentence()
+
+    def _initial_settlement_detail(self) -> str:
+        vertex = self.chosen_candidate.metadata.get("target_vertex")
+        parts = [
+            f"The idea is to place your settlement at the intersection of {self._vertex_intersection_text(vertex)}."
+        ]
+        port = self.chosen_candidate.metadata.get("port")
+        port_text = self._port_reason_text(port)
+        if port_text:
+            parts.append(port_text)
+        parts.append(self._detail_sentence_from_reasons(self.chosen_candidate.reasons_for))
+        return "<br><br>".join(parts)
+
+    def _initial_road_detail(self) -> str:
+        parts = [f"The idea is to {self._initial_road_target_sentence().lower()}",
+                 self._detail_sentence_from_reasons(self.chosen_candidate.reasons_for)]
+        return "<br><br>".join(parts)
+
+    def _initial_road_target_sentence(self) -> str:
+        target_vertex = self.chosen_candidate.metadata.get("target_vertex")
+        kind = self.chosen_candidate.metadata.get("road_explanation_kind")
+        if kind == RoadExplanationKind.CONNECTION:
+            return "Place your road back toward your other settlement to keep the opening connected."
+        if kind == RoadExplanationKind.EXPANSION and target_vertex is not None:
+            return (f"Place your road so you can expand toward the "
+                    f"{self._vertex_intersection_text(target_vertex)} settlement spot.")
+        return "Place your road where it keeps your opening flexible."
+
+    def _vertex_intersection_text(self, vertex: Any) -> str:
+        if vertex is None or not getattr(vertex, "hexes", None):
+            return "the available tiles"
+        descriptions = [self._hex_description(hex_tile) for hex_tile in sorted(
+            [hex_tile for hex_tile in vertex.hexes if getattr(hex_tile, "resource", None) is not None],
+            key=lambda hex_tile: self._dice_probability(hex_tile.production_number), reverse=True
+        )]
+        if not descriptions:
+            return "the available tiles"
+        if len(descriptions) == 1:
+            return descriptions[0]
+        if len(descriptions) == 2:
+            return f"{descriptions[0]} and {descriptions[1]}"
+        return ", ".join(descriptions[:-1]) + f", and {descriptions[-1]}"
+
+    def _hex_description(self, hex_tile: Any) -> str:
+        name = getattr(getattr(hex_tile, "type", None), "name", "tile").lower()
+        if name.endswith("s"):
+            name = name[:-1]
+        if getattr(hex_tile, "production_number", None) in (6, 8):
+            return f"high-yield {name}"
+        return name
+
+    def _port_reason_text(self, port: Any) -> str:
+        if port is None:
+            return ""
+        if getattr(port, "name", "") == "THREE_TO_ONE":
+            label = "a 3:1 port"
+        else:
+            label = f"the {port.name.replace('_', ' ').title()} port"
+        return f"It also keeps {label} available if you want extra trading flexibility later."
+
+    def _detail_sentence_from_reasons(self, reasons: List[Reason]) -> str:
+        if not reasons:
+            return "This is the strongest available setup choice here."
+        phrases = [self._reason_to_detail_phrase(reason) for reason in reasons[:3]]
+        phrases = [phrase for phrase in phrases if phrase]
+        if not phrases:
+            return "This is the strongest available setup choice here."
+        if len(phrases) == 1:
+            joined = phrases[0]
+        elif len(phrases) == 2:
+            joined = f"{phrases[0]} and {phrases[1]}"
+        else:
+            joined = ", ".join(phrases[:-1]) + f", and {phrases[-1]}"
+        return f"This is strong because {joined}."
+
+    def _dice_probability(self, number: Any) -> float:
+        probs = {
+            2: 1 / 36, 3: 2 / 36, 4: 3 / 36, 5: 4 / 36, 6: 5 / 36,
+            8: 5 / 36, 9: 4 / 36, 10: 3 / 36, 11: 2 / 36, 12: 1 / 36,
+        }
+        return probs.get(number, 0.0)
 
     def _bank_trade_text(self, action: Action) -> str:
         payload = action.payload
@@ -398,7 +560,7 @@ class ActionExplanation:
         return self._reason_sentence_from_ordered(top)
 
     def _reason_sentence_from_ordered(self, reasons: List[Reason]) -> str:
-        labels = [self._normalise_reason_label(r.label) for r in reasons if r.label]
+        labels = [self._normalise_reason_label(self._reason_label_text(r)) for r in reasons if r.label]
 
         if not labels:
             return ""
@@ -430,6 +592,78 @@ class ActionExplanation:
         if not label:
             return ""
         return label[0].lower() + label[1:]
+
+    def _reason_label_text(self, reason: Reason) -> str:
+        label = reason.label
+        metadata = reason.metadata
+
+        if label == ReasonLabel.PLAN_SETTLEMENT_VALUE:
+            return "Leads to a valuable settlement and improves your position"
+        if label == ReasonLabel.PLAN_CITY_VALUE:
+            return "Upgrades a strong location and improves future production"
+        if label == ReasonLabel.PLAN_ROAD_VALUE:
+            return "Improves your road network and opens future expansion"
+        if label == ReasonLabel.QUICK_GENERIC:
+            return "Can be executed relatively quickly"
+        if label == ReasonLabel.QUICK_PLANNED_BUILD:
+            return f"Gets to the planned {metadata.get('build_name', 'build')} relatively quickly"
+        if label == ReasonLabel.QUICK_PLANNED_DEV_BUY:
+            return "Gets to the planned development-card purchase relatively quickly"
+        if label == ReasonLabel.QUICK_PLANNED_DEV_PLAY:
+            return "Sets up the planned card play relatively quickly"
+        if label == ReasonLabel.QUICK_PLANNED_FOLLOW_UP:
+            return "Gets to the planned follow-up relatively quickly"
+        if label == ReasonLabel.QUICK_KNIGHT:
+            return "Uses the Knight to move the robber and grow your army"
+        if label == ReasonLabel.QUICK_ROAD_BUILDING:
+            return "Uses Road Building for an immediate two-road swing"
+        if label == ReasonLabel.QUICK_YEAR_OF_PLENTY:
+            return "Uses Year Of Plenty to take the exact 2 resources you need"
+        if label == ReasonLabel.QUICK_MONOPOLY:
+            return "Uses Monopoly for a potentially large resource swing"
+        if label == ReasonLabel.SLOWS_LEADER:
+            return "Slows the current leading opponent"
+        if label == ReasonLabel.ADVANCES_LONGEST_ROAD:
+            return "Advances progress toward Longest Road"
+        if label == ReasonLabel.ADVANCES_LARGEST_ARMY:
+            return "Advances progress toward Largest Army"
+        if label == ReasonLabel.REQUIRES_TRADE:
+            return "Uses a trade to make the preferred plan feasible"
+        if label == ReasonLabel.HIDDEN_DEV_VALUE:
+            return "Has hidden strategic value through development-card outcomes"
+        if label == ReasonLabel.EARLY_ATTENTION_RISK:
+            return "May expose an early lead and attract attention"
+        if label == ReasonLabel.NO_IMMEDIATE_ACTION:
+            return "No legal immediate action was worth taking before saving more resources"
+        if label == ReasonLabel.PRE_ROLL_NO_DEV_PLAY:
+            return "No beneficial pre-roll development-card play was identified"
+        if label == ReasonLabel.INIT_EARLY_PRODUCTION:
+            return "it improves your early production"
+        if label == ReasonLabel.INIT_RESOURCE_DIVERSITY:
+            return "it improves your resource diversity"
+        if label == ReasonLabel.INIT_HIGH_FREQUENCY:
+            return "it puts you on strong high-frequency numbers right away"
+        if label == ReasonLabel.INIT_PORT_ACCESS:
+            port = metadata.get("port")
+            if port is None:
+                port_name = "port"
+            elif getattr(port, "name", "") == "THREE_TO_ONE":
+                port_name = "a 3:1 port"
+            else:
+                port_name = f"the {port.name.replace('_', ' ').title()} port"
+            return f"it keeps {port_name} access in play"
+        if label == ReasonLabel.INIT_COMPLEMENTS_FIRST:
+            return "it complements your first settlement with missing resources"
+        if label == ReasonLabel.INIT_ROAD_CONNECTION:
+            return "it keeps your two starting settlements better connected"
+        if label == ReasonLabel.INIT_ROAD_TO_SETTLEMENT:
+            return "it opens a route toward a strong follow-up settlement"
+        if label == ReasonLabel.INIT_ROAD_TO_BALANCE:
+            return "it points your network toward more balanced future resources"
+        if label == ReasonLabel.INIT_ROAD_FLEXIBLE:
+            return "it keeps your road network flexible"
+
+        return str(label)
 
     def _final_benefit_text(self, candidate: CandidateExplanation) -> str:
         card_benefit = self._development_card_benefit_text(candidate)
@@ -497,6 +731,19 @@ class ActionExplanation:
         return ""
 
     def _reason_to_detail_phrase(self, reason: Reason) -> str:
+        if reason.label in (
+                ReasonLabel.INIT_EARLY_PRODUCTION,
+                ReasonLabel.INIT_RESOURCE_DIVERSITY,
+                ReasonLabel.INIT_HIGH_FREQUENCY,
+                ReasonLabel.INIT_PORT_ACCESS,
+                ReasonLabel.INIT_COMPLEMENTS_FIRST,
+                ReasonLabel.INIT_ROAD_CONNECTION,
+                ReasonLabel.INIT_ROAD_TO_SETTLEMENT,
+                ReasonLabel.INIT_ROAD_TO_BALANCE,
+                ReasonLabel.INIT_ROAD_FLEXIBLE,
+        ):
+            return self._normalise_reason_label(self._reason_label_text(reason))
+
         if reason.type == ReasonType.FASTEST_PROGRESS:
             return "it gives the best overall progress"
 
@@ -533,13 +780,17 @@ class ActionExplanation:
         if reason.type == ReasonType.HEURISTIC_CHOICE:
             return "it fits the strongest available plan"
 
-        return self._normalise_reason_label(reason.label)
+        return self._normalise_reason_label(self._reason_label_text(reason))
 
     def _highlight_buildable(self, name: str) -> str:
         return f"<b>{name}</b>"
 
     def get_visual_build_plan(self) -> List[Tuple]:
         """Return the planned build actions to visualise, in execution order."""
+        custom_plan = self.metadata.get("visual_plan") or self.chosen_candidate.metadata.get("visual_plan")
+        if isinstance(custom_plan, list):
+            return custom_plan
+
         source_plan = self.chosen_candidate.full_plan
 
         if self.chosen_action.type == ActionType.END_TURN and self.chosen_candidate.next_plan:

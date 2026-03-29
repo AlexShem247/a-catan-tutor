@@ -1,18 +1,19 @@
 import math
-from typing import List, Tuple, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ai.ai_utils.SimGame import SimGame
 from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability
 from ai.ai_utils.action_utils import (
     compute_k_la,
     distant_settlement_candidates,
-    purchase_development_card_action,
-    play_development_card_action,
     get_bank_trade_for_action,
+    play_development_card_action,
+    purchase_development_card_action,
 )
 from ai.ai_utils.actions import ActionType, Action
 from ai.ai_utils.board_sim_utils import get_opponents
-from ai.ai_utils.explanations import CandidateExplanation, Reason, ReasonType, ActionExplanation
+from ai.ai_utils.explanations import (ActionExplanation, AssumptionCode, CandidateExplanation, Reason, ReasonLabel,
+                                      ReasonType, confidence_label)
 from ai.ai_utils.resource_utils import get_bank_trade_ratio, calc_step_resources
 from ai.ai_utils.trade_utils import propose_trade
 from config.StrategyWeights import StrategyWeights
@@ -178,14 +179,9 @@ class EtwEstimator:
 
         return base_ratio
 
-    def estimated_time_to_win(
-            self,
-            player: SimPlayerState,
-            sim_game: SimGame,
-            dev_played: bool,
-            include_player_trades: bool = True,
-            max_depth_override: Optional[int] = None,
-    ) -> float:
+    def estimated_time_to_win(self, player: SimPlayerState, sim_game: SimGame, dev_played: bool,
+                              include_player_trades: bool = True,
+                              max_depth_override: Optional[int] = None) -> float:
         """Estimate expected turns to reach 10 VP via a greedy forward rollout."""
 
         # Cache key includes depth override to avoid mixing fast vs full ETW estimates.
@@ -230,10 +226,7 @@ class EtwEstimator:
 
         while points < Game.VICTORY_POINTS_TO_WIN and iterations < max_depth:
             candidate_actions = self._get_candidate_actions(
-                sim_player,
-                sim_game_local,
-                dev_played,
-                include_player_trades,
+                sim_player, sim_game_local, dev_played, include_player_trades
             )
 
             # No feasible progress → penalise and stop.
@@ -264,23 +257,15 @@ class EtwEstimator:
         player.etw_cache[cache_key] = etw
         return etw
 
-    def _simulate_plan_until_win(
-            self,
-            sim_game: SimGame,
-            player: SimPlayerState,
-            actions: List[Action],
-    ) -> None:
+    def _simulate_plan_until_win(self, sim_game: SimGame, player: SimPlayerState, actions: List[Action]) -> None:
         """Apply actions in order and stop immediately once the simulated player wins."""
         for step in actions:
             self._simulate_step(sim_game, player, step)
             if player.victory_points() >= Game.VICTORY_POINTS_TO_WIN:
                 break
 
-    def _calculate_deficits_and_excesses(
-            self,
-            current: ResourceCount,
-            target: ResourceCount,
-    ) -> Tuple[Dict[Resource, int], Dict[Resource, int]]:
+    def _calculate_deficits_and_excesses(self, current: ResourceCount,
+                                         target: ResourceCount) -> Tuple[Dict[Resource, int], Dict[Resource, int]]:
         """Compute deficits and excesses relative to a target."""
         deficits: Dict[Resource, int] = {}
         excesses: Dict[Resource, int] = {}
@@ -333,62 +318,37 @@ class EtwEstimator:
             return {}
         return self._plan_waiting_resources(player, [actions[0]])
 
-    def _future_plan_fields(
-            self,
-            player: SimPlayerState,
-            actions: List[Action],
-    ) -> Tuple[List[Action], ResourceCount]:
+    def _future_plan_fields(self, player: SimPlayerState, actions: List[Action]) -> Tuple[List[Action], ResourceCount]:
         """Build the explanation fields that describe the deferred plan and next-step shortfall."""
         if not actions:
             return [], {}
         return list(actions), self._next_step_waiting_resources(player, actions)
 
-    def _planned_target_phrase(self, action: Action) -> str:
-        if action.type == ActionType.BUILD:
-            payload = action.payload
-            if isinstance(payload, tuple) and payload:
-                buildable = payload[0]
-                build_name = getattr(buildable, "name", "build").lower().replace("_", " ")
-                article = "an" if build_name[:1] in "aeiou" else "a"
-                return f"{article} {build_name}"
-            return "the next build"
-
-        if action.type == ActionType.BUY_DEV_CARD:
-            return "a development card"
-
-        if action.type == ActionType.PLAY_DEV_CARD:
-            return "the next card play"
-
-        return "the next step"
-
-    def _trade_reason_label(self, enabled_action: Action) -> str:
-        return f"Trades to get resources for {self._planned_target_phrase(enabled_action)}"
-
-    def _quick_reason_label(self, next_step: Action, final_step: Action) -> str:
-        """Return a concise timing reason that refers to the plan outcome, not instant setup actions."""
+    def _quick_reason_label(self, next_step: Action, final_step: Action) -> Tuple[ReasonLabel, Dict[str, Any]]:
+        """Return a concise timing reason key and metadata for the plan outcome."""
         if next_step.type in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER) and final_step != next_step:
             if final_step.type == ActionType.BUILD:
                 buildable = final_step.payload[0]
                 build_name = getattr(buildable, "name", "build").lower()
-                return f"Gets to the planned {build_name} relatively quickly"
+                return ReasonLabel.QUICK_PLANNED_BUILD, {"build_name": build_name}
             if final_step.type == ActionType.BUY_DEV_CARD:
-                return "Gets to the planned development-card purchase relatively quickly"
+                return ReasonLabel.QUICK_PLANNED_DEV_BUY, {}
             if final_step.type == ActionType.PLAY_DEV_CARD:
-                return "Sets up the planned card play relatively quickly"
-            return "Gets to the planned follow-up relatively quickly"
+                return ReasonLabel.QUICK_PLANNED_DEV_PLAY, {}
+            return ReasonLabel.QUICK_PLANNED_FOLLOW_UP, {}
 
         if final_step.type == ActionType.PLAY_DEV_CARD:
             card_type = getattr(final_step, "payload", None)
             if card_type == DevelopmentCardType.KNIGHT:
-                return "Uses the Knight to move the robber and grow your army"
+                return ReasonLabel.QUICK_KNIGHT, {}
             if card_type == DevelopmentCardType.ROAD_BUILDING:
-                return "Uses Road Building for an immediate two-road swing"
+                return ReasonLabel.QUICK_ROAD_BUILDING, {}
             if card_type == DevelopmentCardType.YEAR_OF_PLENTY:
-                return "Uses Year of Plenty to take the exact 2 resources you need"
+                return ReasonLabel.QUICK_YEAR_OF_PLENTY, {}
             if card_type == DevelopmentCardType.MONOPOLY:
-                return "Uses Monopoly for a potentially large resource swing"
+                return ReasonLabel.QUICK_MONOPOLY, {}
 
-        return "Can be executed relatively quickly"
+        return ReasonLabel.QUICK_GENERIC, {}
 
     def _get_candidate_actions(
             self,
@@ -739,8 +699,7 @@ class EtwEstimator:
                 best_candidate = CandidateExplanation(
                     action=bank_trade_action,
                     full_plan=[bank_trade_action] + candidate.full_plan,
-                    next_plan=list(candidate.next_plan),
-                    waiting_resources=dict(candidate.waiting_resources),
+                next_plan=list(candidate.next_plan), waiting_resources=dict(candidate.waiting_resources),
                     etb=candidate.etb,
                     etw_before=candidate.etw_before,
                     etw_after=candidate.etw_after,
@@ -751,13 +710,8 @@ class EtwEstimator:
                     utility_special=candidate.utility_special,
                     utility_attention=candidate.utility_attention,
                     expected_vp_gain=candidate.expected_vp_gain,
-                    reasons_for=[
-                                    Reason(
-                                        type=ReasonType.REQUIRES_TRADE,
-                                        label=self._trade_reason_label(candidate.action),
-                                        value=max(1.0, candidate.utility_total),
-                                    )
-                                ] + list(candidate.reasons_for),
+                    reasons_for=[Reason(ReasonType.REQUIRES_TRADE, ReasonLabel.REQUIRES_TRADE,
+                                        max(1.0, candidate.utility_total))] + list(candidate.reasons_for),
                     reasons_against=list(candidate.reasons_against),
                     metadata={
                         **candidate.metadata,
@@ -787,8 +741,7 @@ class EtwEstimator:
                         best_candidate = CandidateExplanation(
                             action=trade_action,
                             full_plan=[trade_action] + candidate.full_plan,
-                            next_plan=list(candidate.next_plan),
-                            waiting_resources=dict(candidate.waiting_resources),
+                            next_plan=list(candidate.next_plan), waiting_resources=dict(candidate.waiting_resources),
                             etb=candidate.etb,
                             etw_before=candidate.etw_before,
                             etw_after=candidate.etw_after,
@@ -799,13 +752,8 @@ class EtwEstimator:
                             utility_special=candidate.utility_special,
                             utility_attention=candidate.utility_attention,
                             expected_vp_gain=candidate.expected_vp_gain,
-                            reasons_for=[
-                                            Reason(
-                                                type=ReasonType.REQUIRES_TRADE,
-                                                label=self._trade_reason_label(candidate.action),
-                                                value=max(1.0, candidate.utility_total),
-                                            )
-                                        ] + list(candidate.reasons_for),
+                            reasons_for=[Reason(ReasonType.REQUIRES_TRADE, ReasonLabel.REQUIRES_TRADE,
+                                                max(1.0, candidate.utility_total))] + list(candidate.reasons_for),
                             reasons_against=list(candidate.reasons_against),
                             metadata={
                                 **candidate.metadata,
@@ -822,7 +770,7 @@ class EtwEstimator:
         reasons_for: List[Reason] = [
             Reason(
                 type=ReasonType.HEURISTIC_CHOICE,
-                label="No legal immediate action was worth taking before saving more resources",
+                label=ReasonLabel.NO_IMMEDIATE_ACTION,
                 value=0.0,
             )
         ]
@@ -1024,7 +972,7 @@ class EtwEstimator:
                     reasons_for.append(
                         Reason(
                             type=ReasonType.ENABLES_EXPANSION,
-                            label="Leads to a valuable settlement and improves your position",
+                            label=ReasonLabel.PLAN_SETTLEMENT_VALUE,
                             value=max(u_self * 0.9, 1.0),
                         )
                     )
@@ -1033,7 +981,7 @@ class EtwEstimator:
                     reasons_for.append(
                         Reason(
                             type=ReasonType.IMPROVES_PRODUCTION,
-                            label="Upgrades a strong location and improves future production",
+                            label=ReasonLabel.PLAN_CITY_VALUE,
                             value=max(u_self * 0.8, 1.0),
                         )
                     )
@@ -1042,16 +990,18 @@ class EtwEstimator:
                     reasons_for.append(
                         Reason(
                             type=ReasonType.ENABLES_EXPANSION,
-                            label="Improves your road network and opens future expansion",
+                            label=ReasonLabel.PLAN_ROAD_VALUE,
                             value=max(u_self * 0.7, 1.0),
                         )
                     )
 
             if etb <= 2.5:
+                quick_label, quick_meta = self._quick_reason_label(next_step, final_step)
                 reasons_for.append(
                     Reason(
                         type=ReasonType.QUICK_TO_EXECUTE,
-                        label=self._quick_reason_label(next_step, final_step),
+                        label=quick_label,
+                        metadata=quick_meta,
                         value=max(0.0, 5.0 - etb),
                     )
                 )
@@ -1060,7 +1010,7 @@ class EtwEstimator:
                 reasons_for.append(
                     Reason(
                         type=ReasonType.SLOWS_LEADING_OPPONENT,
-                        label="Slows the current leading opponent",
+                        label=ReasonLabel.SLOWS_LEADER,
                         value=u_opp,
                     )
                 )
@@ -1069,7 +1019,7 @@ class EtwEstimator:
                 reasons_for.append(
                     Reason(
                         type=ReasonType.ADVANCES_LONGEST_ROAD,
-                        label="Advances progress toward Longest Road",
+                        label=ReasonLabel.ADVANCES_LONGEST_ROAD,
                         value=u_special,
                     )
                 )
@@ -1078,7 +1028,7 @@ class EtwEstimator:
                 reasons_for.append(
                     Reason(
                         type=ReasonType.ADVANCES_LARGEST_ARMY,
-                        label="Advances progress toward Largest Army",
+                        label=ReasonLabel.ADVANCES_LARGEST_ARMY,
                         value=u_special,
                     )
                 )
@@ -1087,7 +1037,7 @@ class EtwEstimator:
                 reasons_for.append(
                     Reason(
                         type=ReasonType.REQUIRES_TRADE,
-                        label="Uses a trade to make the preferred plan feasible",
+                        label=ReasonLabel.REQUIRES_TRADE,
                         value=1.0,
                     )
                 )
@@ -1096,7 +1046,7 @@ class EtwEstimator:
                 reasons_for.append(
                     Reason(
                         type=ReasonType.HIDDEN_VALUE,
-                        label="Has hidden strategic value through development-card outcomes",
+                        label=ReasonLabel.HIDDEN_DEV_VALUE,
                         value=vp_inc,
                     )
                 )
@@ -1105,7 +1055,7 @@ class EtwEstimator:
                 reasons_against.append(
                     Reason(
                         type=ReasonType.AVOIDS_EARLY_ATTENTION,
-                        label="May expose an early lead and attract attention",
+                        label=ReasonLabel.EARLY_ATTENTION_RISK,
                         value=abs(u_attention),
                     )
                 )
@@ -1180,7 +1130,7 @@ class EtwEstimator:
                 alternatives=[],
                 confidence=0.0,
                 confidence_label="low",
-                assumptions=["No beneficial candidate action was available."],
+                assumptions=[AssumptionCode.NO_CANDIDATE_ACTION],
             )
 
         explained_candidates = self.evaluate_candidates_with_explanations(
@@ -1212,7 +1162,7 @@ class EtwEstimator:
                 alternatives=[],
                 confidence=0.0,
                 confidence_label="low",
-                assumptions=["All candidate actions were filtered out during evaluation."],
+                assumptions=[AssumptionCode.FILTERED_CANDIDATES],
             )
 
         chosen_action, chosen_candidate = self._choose_max_utility_action_with_candidate(
@@ -1236,17 +1186,10 @@ class EtwEstimator:
             chosen_candidate=chosen_candidate,
             alternatives=alternatives,
             confidence=confidence,
-            confidence_label=self.confidence_label(confidence),
+            confidence_label=confidence_label(confidence),
             assumptions=[
-                "Uses expected resource production rather than exact future dice outcomes.",
-                "The final chosen move is filtered through legality and affordability checks.",
+                AssumptionCode.EXPECTED_PRODUCTION,
+                AssumptionCode.LEGALITY_AND_AFFORDABILITY,
             ],
             metadata={"player_number": player_number, "etw_before": etw_before},
         )
-
-    def confidence_label(self, confidence: float) -> str:
-        if confidence >= 15.0:
-            return "high"
-        if confidence >= 5.0:
-            return "medium"
-        return "low"
