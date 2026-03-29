@@ -8,17 +8,14 @@ from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability
 from ai.ai_utils.action_utils import play_development_card_action
 from ai.ai_utils.actions import Phase, ActionType, Action
 from ai.ai_utils.board_sim_utils import (
-    find_edge_toward_vertex,
-    find_edge_toward_vertex_from_any,
-    find_gap_connection,
-    get_legal_settlement_vertices,
-    get_opponents,
-    get_reachable_vertices,
-    moves_toward_vertex,
+    find_edge_toward_vertex, find_edge_toward_vertex_from_any, find_gap_connection,
+    get_legal_settlement_vertices, get_opponents, get_reachable_vertices, moves_toward_vertex,
     score_hex_for_opponent,
 )
-from ai.ai_utils.explanations import (ActionExplanation, AssumptionCode, CandidateExplanation, ExplanationTemplate,
-                                      RoadExplanationKind, Reason, ReasonLabel, ReasonType, confidence_label)
+from ai.ai_utils.explanations import (
+    ActionExplanation, AssumptionCode, CandidateExplanation, ExplanationTemplate,
+    RoadExplanationKind, Reason, ReasonLabel, ReasonType, confidence_label,
+)
 from ai.ai_utils.resource_utils import calc_step_resources
 from ai.ai_utils.trade_utils import respond_to_trade_batna, select_best_trade_partner
 from config.StrategyWeights import StrategyWeights
@@ -39,32 +36,30 @@ class RuleBasedAI(AI):
         self.etw_estimator.new_turn()
 
     def select_initial_settlement_location(
-            self, player: Player, game: Game, available_vertices: List[Vertex]
-    ) -> Optional[Vertex]:
+            self, player: Player, game: Game, available_vertices: List[Vertex]) -> Optional[Vertex]:
         """Return the best initial settlement vertex based on utility evaluation."""
         vertex, _ = self.select_initial_settlement_location_with_explanation(player, game, available_vertices)
         return vertex
 
     def select_initial_road_location(
-            self, player: Player, game: Game, available_edges: List[Edge]
-    ) -> Optional[Edge]:
+            self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
         """Return the best initial road edge connecting settlements or toward high-utility vertices."""
         edge, _ = self.select_initial_road_location_with_explanation(player, game, available_edges)
         return edge
 
     def select_initial_settlement_location_with_explanation(
-            self, player: Player, game: Game, available_vertices: List[Vertex]
-    ) -> Tuple[Optional[Vertex], Optional[ActionExplanation]]:
+            self, player: Player, game: Game,
+            available_vertices: List[Vertex]) -> Tuple[Optional[Vertex], Optional[ActionExplanation]]:
         """Return the best initial settlement vertex together with an explanation."""
         if not available_vertices:
             return None, None
 
         first_settlement = len(player.settlements) == 0
-        ranked_vertices = sorted(available_vertices,
-                                 key=lambda vertex: self.vertex_utility(
-                                     vertex, player, game, available_vertices, first_settlement
-                                 ),
-                                 reverse=True)
+        ranked_vertices = sorted(
+            available_vertices,
+            key=lambda vertex: self.vertex_utility(vertex, player, game, available_vertices, first_settlement),
+            reverse=True,
+        )
         best_vertex = ranked_vertices[0]
         best_score = self.vertex_utility(best_vertex, player, game, available_vertices, first_settlement)
         second_score = (
@@ -76,8 +71,8 @@ class RuleBasedAI(AI):
         return best_vertex, explanation
 
     def select_initial_road_location_with_explanation(
-            self, player: Player, game: Game, available_edges: List[Edge]
-    ) -> Tuple[Optional[Edge], Optional[ActionExplanation]]:
+            self, player: Player, game: Game,
+            available_edges: List[Edge]) -> Tuple[Optional[Edge], Optional[ActionExplanation]]:
         """Return the best initial road edge together with an explanation."""
         if not available_edges:
             return None, None
@@ -87,62 +82,58 @@ class RuleBasedAI(AI):
             if edge is None:
                 return None, None
             explanation = self._build_initial_road_explanation(
-                edge, target_vertex=None, explanation_kind=RoadExplanationKind.FLEXIBLE
-            )
+                edge, target_vertex=None, explanation_kind=RoadExplanationKind.FLEXIBLE)
             return edge, explanation
 
         current_settlement = player.settlements[-1]
         legal_vertices = get_legal_settlement_vertices(make_sim_game_for_player(game, player))
 
         if len(player.settlements) == 1:
-            best_vertex = max(legal_vertices,
-                              key=lambda vertex: self.vertex_utility(
-                                  vertex, player, game, legal_vertices, first_settlement=False
-                              ),
-                              default=None)
+            best_vertex = max(
+                legal_vertices,
+                key=lambda vertex: self.vertex_utility(vertex, player, game, legal_vertices, first_settlement=False),
+                default=None,
+            )
             if best_vertex is not None:
                 edge = find_edge_toward_vertex(current_settlement, best_vertex, available_edges)
                 if edge is not None:
                     explanation = self._build_initial_road_explanation(
-                        edge, target_vertex=best_vertex, explanation_kind=RoadExplanationKind.EXPANSION
-                    )
+                        edge, target_vertex=best_vertex, explanation_kind=RoadExplanationKind.EXPANSION)
                     return edge, explanation
         else:
             for edge in available_edges:
                 other_vertex = edge.get_other_vertex(current_settlement)
                 if moves_toward_vertex(other_vertex, player.settlements[0]):
                     explanation = self._build_initial_road_explanation(
-                        edge, target_vertex=player.settlements[0], explanation_kind=RoadExplanationKind.CONNECTION
-                    )
+                        edge, target_vertex=player.settlements[0], explanation_kind=RoadExplanationKind.CONNECTION)
                     return edge, explanation
 
-            best_vertex = max(legal_vertices,
-                              key=lambda vertex: self.vertex_utility(
-                                  vertex, player, game, legal_vertices, first_settlement=False
-                              ),
-                              default=None)
+            best_vertex = max(
+                legal_vertices,
+                key=lambda vertex: self.vertex_utility(vertex, player, game, legal_vertices, first_settlement=False),
+                default=None,
+            )
             if best_vertex is not None:
                 edge = find_edge_toward_vertex(current_settlement, best_vertex, available_edges)
                 if edge is not None:
                     explanation = self._build_initial_road_explanation(
-                        edge, target_vertex=best_vertex, explanation_kind=RoadExplanationKind.EXPANSION
-                    )
+                        edge, target_vertex=best_vertex, explanation_kind=RoadExplanationKind.EXPANSION)
                     return edge, explanation
 
         edge = random.choice(available_edges)
         explanation = self._build_initial_road_explanation(
-            edge, target_vertex=None, explanation_kind=RoadExplanationKind.FLEXIBLE
-        )
+            edge, target_vertex=None, explanation_kind=RoadExplanationKind.FLEXIBLE)
         return edge, explanation
 
     @staticmethod
-    def vertex_utility(vertex: Vertex, player: Player, game: Game, available_vertices: List[Vertex],
-                       first_settlement: bool = True) -> float:
+    def vertex_utility(
+            vertex: Vertex, player: Player, game: Game, available_vertices: List[Vertex],
+            first_settlement: bool = True) -> float:
         """Compute utility score for a vertex as a potential settlement location."""
         if not vertex.hexes:
             return float("-inf")
 
-            # Expected resource yield from adjacent hexes (dice probability weighted).
+        # Expected resource yield from adjacent hexes (dice probability weighted).
         dice_sum = sum(dice_probability(h.production_number) for h in vertex.hexes)
 
         # Count distinct resource types for early-game flexibility.
@@ -158,8 +149,9 @@ class RuleBasedAI(AI):
                 continue
 
             for opp_v in opp.settlements:
-                reachable = get_reachable_vertices(start_vertex=opp_v, player_number=opp.player_number,
-                                                   sim_game=sim_game, available_vertices=available_vertices)
+                reachable = get_reachable_vertices(
+                    start_vertex=opp_v, player_number=opp.player_number, sim_game=sim_game,
+                    available_vertices=available_vertices)
                 # If an opponent could reasonably reach this spot, blocking value is low.
                 if vertex in reachable:
                     blocking_penalty = 0.0
@@ -174,39 +166,28 @@ class RuleBasedAI(AI):
 
         # For the second settlement, reward complementary resources across both placements.
         if not first_settlement:
-            first_resources = {
-                h.resource
-                for s in player.settlements
-                for h in s.hexes
-                if h.resource is not None
-            }
+            first_resources = {h.resource for s in player.settlements for h in s.hexes if h.resource is not None}
             combined_diversity = len(resources | first_resources)
             utility += StrategyWeights.INIT_PLACE_DIVERSITY * (combined_diversity - diversity)
 
         return utility
 
-    def _build_initial_settlement_explanation(self, player: Player, vertex: Vertex,
-                                              best_score: float, second_score: float) -> ActionExplanation:
+    def _build_initial_settlement_explanation(
+            self, player: Player, vertex: Vertex, best_score: float, second_score: float) -> ActionExplanation:
         first_settlement = len(player.settlements) == 0
         reasons_for = self._initial_settlement_reasons(player, vertex, first_settlement)
 
         action = Action(ActionType.BUILD, (Buildable.SETTLEMENT, vertex))
         candidate = CandidateExplanation(
-            action=action,
-            full_plan=[action],
-            reasons_for=reasons_for,
-            metadata={
-                "template": ExplanationTemplate.INITIAL_SETTLEMENT,
-                "target_vertex": vertex,
-                "port": vertex.port,
-            },
-        )
-        return ActionExplanation(chosen_action=action, chosen_candidate=candidate,
-                                 confidence=max(0.0, best_score - second_score),
-                                 confidence_label=confidence_label(max(0.0, best_score - second_score)))
+            action=action, full_plan=[action], reasons_for=reasons_for,
+            metadata={"template": ExplanationTemplate.INITIAL_SETTLEMENT, "target_vertex": vertex, "port": vertex.port})
+        return ActionExplanation(
+            chosen_action=action, chosen_candidate=candidate, confidence=max(0.0, best_score - second_score),
+            confidence_label=confidence_label(max(0.0, best_score - second_score)))
 
-    def _build_initial_road_explanation(self, edge: Edge, target_vertex: Optional[Vertex],
-                                        explanation_kind: RoadExplanationKind) -> ActionExplanation:
+    def _build_initial_road_explanation(
+            self, edge: Edge, target_vertex: Optional[Vertex],
+            explanation_kind: RoadExplanationKind) -> ActionExplanation:
         reasons_for = self._initial_road_reasons(target_vertex, explanation_kind)
         visual_plan: List[Tuple[Buildable, object]] = [(Buildable.ROAD, edge)]
         if target_vertex is not None and explanation_kind == RoadExplanationKind.EXPANSION:
@@ -214,61 +195,54 @@ class RuleBasedAI(AI):
 
         action = Action(ActionType.BUILD, (Buildable.ROAD, edge))
         candidate = CandidateExplanation(
-            action=action,
-            full_plan=[action],
-            reasons_for=reasons_for,
-            metadata={
-                "template": ExplanationTemplate.INITIAL_ROAD,
-                "target_vertex": target_vertex,
-                "road_explanation_kind": explanation_kind,
-                "visual_plan": visual_plan,
-            },
-        )
-        return ActionExplanation(chosen_action=action, chosen_candidate=candidate, confidence=1.0,
-                                 confidence_label=("high" if target_vertex is not None
-                                                   or explanation_kind == RoadExplanationKind.CONNECTION else "medium"))
+            action=action, full_plan=[action], reasons_for=reasons_for,
+            metadata={"template": ExplanationTemplate.INITIAL_ROAD, "target_vertex": target_vertex,
+                      "road_explanation_kind": explanation_kind, "visual_plan": visual_plan})
+        return ActionExplanation(
+            chosen_action=action, chosen_candidate=candidate, confidence=1.0,
+            confidence_label=(
+                "high" if target_vertex is not None or explanation_kind == RoadExplanationKind.CONNECTION else "medium"
+            ))
 
-    def _initial_settlement_reasons(self, player: Player, vertex: Vertex, first_settlement: bool) -> List[Reason]:
+    def _initial_settlement_reasons(
+            self, player: Player, vertex: Vertex, first_settlement: bool) -> List[Reason]:
         reasons: List[Reason] = []
         resources = {hex_tile.resource for hex_tile in vertex.hexes if hex_tile.resource is not None}
         total_yield = sum(dice_probability(hex_tile.production_number) for hex_tile in vertex.hexes)
-        high_yield_count = sum(
-            1 for hex_tile in vertex.hexes if hex_tile.production_number in (6, 8)
-        )
+        high_yield_count = sum(1 for hex_tile in vertex.hexes if hex_tile.production_number in (6, 8))
 
         if total_yield > 0:
             reasons.append(Reason(ReasonType.IMPROVES_PRODUCTION, ReasonLabel.INIT_EARLY_PRODUCTION, total_yield))
 
         if len(resources) >= 2:
-            reasons.append(Reason(ReasonType.IMPROVES_RESOURCE_DIVERSITY,
-                                  ReasonLabel.INIT_RESOURCE_DIVERSITY, float(len(resources))))
+            reasons.append(
+                Reason(ReasonType.IMPROVES_RESOURCE_DIVERSITY, ReasonLabel.INIT_RESOURCE_DIVERSITY,
+                       float(len(resources))))
 
         if high_yield_count > 0:
-            reasons.append(Reason(ReasonType.FASTEST_PROGRESS, ReasonLabel.INIT_HIGH_FREQUENCY,
-                                  float(high_yield_count)))
+            reasons.append(
+                Reason(ReasonType.FASTEST_PROGRESS, ReasonLabel.INIT_HIGH_FREQUENCY, float(high_yield_count)))
 
         if vertex.port is not None:
             reasons.append(
-                Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.INIT_PORT_ACCESS, 1.0, {"port": vertex.port})
-            )
+                Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.INIT_PORT_ACCESS, 1.0, {"port": vertex.port}))
 
         if not first_settlement:
             first_resources = {
-                hex_tile.resource
-                for settlement in player.settlements
-                for hex_tile in settlement.hexes
+                hex_tile.resource for settlement in player.settlements for hex_tile in settlement.hexes
                 if hex_tile.resource is not None
             }
             combined_resources = resources | first_resources
             if len(combined_resources) > len(first_resources):
-                reasons.append(Reason(ReasonType.IMPROVES_RESOURCE_DIVERSITY,
-                                      ReasonLabel.INIT_COMPLEMENTS_FIRST, float(len(combined_resources))))
+                reasons.append(
+                    Reason(ReasonType.IMPROVES_RESOURCE_DIVERSITY, ReasonLabel.INIT_COMPLEMENTS_FIRST,
+                           float(len(combined_resources))))
 
         reasons.sort(key=lambda reason: reason.value, reverse=True)
         return reasons
 
-    def _initial_road_reasons(self, target_vertex: Optional[Vertex],
-                              explanation_kind: RoadExplanationKind) -> List[Reason]:
+    def _initial_road_reasons(
+            self, target_vertex: Optional[Vertex], explanation_kind: RoadExplanationKind) -> List[Reason]:
         reasons: List[Reason] = []
 
         if explanation_kind == RoadExplanationKind.CONNECTION:
@@ -282,13 +256,9 @@ class RuleBasedAI(AI):
         return reasons
 
     def choose_trade_partner(
-        self,
-        player: Player,
-        game: Game,
-        selling: ResourceCount,
-        buying: ResourceCount,
-        available_players: List[Tuple[Player, Optional[ResourceCount]]],
-    ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+            self, player: Player, game: Game, selling: ResourceCount, buying: ResourceCount,
+            available_players: List[Tuple[Player, Optional[ResourceCount]]]) -> Optional[
+            Tuple[Player, Optional[ResourceCount]]]:
         """Return the chosen trade partner using ETW-based selection."""
 
         # Build a lightweight simulated view of the game (we know our own hand, opponents are hidden-info).
@@ -298,13 +268,8 @@ class RuleBasedAI(AI):
 
         # Pick the partner (and optional counter-offer) that improves our ETW without helping the leader too much.
         selection = select_best_trade_partner(
-            player_sim=sim_us,
-            sim_game=sim_game,
-            etw_estimator=self.etw_estimator,
-            selling_orig=selling,
-            buying=buying,
-            available_players=available_sim_players,
-        )
+            player_sim=sim_us, sim_game=sim_game, etw_estimator=self.etw_estimator, selling_orig=selling,
+            buying=buying, available_players=available_sim_players)
 
         if selection is None:
             return None
@@ -315,11 +280,7 @@ class RuleBasedAI(AI):
         return chosen_player, counter
 
     def select_robber_target(
-        self,
-        player: Player,
-        game: Game,
-        valid_hexes: List[HexTile],
-    ) -> Tuple[HexTile, Optional[Player]]:
+            self, player: Player, game: Game, valid_hexes: List[HexTile]) -> Tuple[HexTile, Optional[Player]]:
         """Select which hex tile to place the robber on, prioritising opponents' resources."""
         best_score = float("-inf")
         best_hex: Optional[HexTile] = None
@@ -343,12 +304,8 @@ class RuleBasedAI(AI):
 
             sim_game_opp = make_sim_game_for_player(game, opponent)
             best_action = self.etw_estimator.calculate_best_game_action(
-                sim_game=sim_game_opp,
-                player_number=opponent.player_number,
-                dev_played=False,
-                ignore_affordability=True,
-                ignore_opponents=True,
-            )
+                sim_game=sim_game_opp, player_number=opponent.player_number, dev_played=False,
+                ignore_affordability=True, ignore_opponents=True)
 
             required = calc_step_resources(best_action)
             total = sum(required.values())
@@ -365,11 +322,9 @@ class RuleBasedAI(AI):
             score = 0.0
             for p in players_on_h:
                 score += score_hex_for_opponent(
-                    opponent_number=p.player_number,
-                    sim_game=sim_game_for_robber,
-                    hex_tile=h,
-                    importance=opponent_importance.get(p.player_number, {}),
-                ) * (p.calc_victory_points()[0] * diversion_boost)
+                    opponent_number=p.player_number, sim_game=sim_game_for_robber, hex_tile=h,
+                    importance=opponent_importance.get(p.player_number, {})) * (
+                                 p.calc_victory_points()[0] * diversion_boost)
 
             # Prefer not to rob our own production unless the blocking value is high.
             if h in our_resource_tiles:
@@ -388,10 +343,7 @@ class RuleBasedAI(AI):
         if not players_on_best_hex:
             return best_hex, None
 
-        best_player = max(
-            players_on_best_hex,
-            key=lambda pl: sum(pl.resources.values()) * pl.calc_victory_points()[0],
-        )
+        best_player = max(players_on_best_hex, key=lambda pl: sum(pl.resources.values()) * pl.calc_victory_points()[0])
         return best_hex, best_player
 
     def select_discard_resources(self, player: Player, game: Game, num_resources: int) -> ResourceCount:
@@ -401,10 +353,7 @@ class RuleBasedAI(AI):
         # Estimate what we are trying to build next and protect those resources.
         sim_game = make_sim_game_for_player(game, player)
         best_action = self.etw_estimator.calculate_best_game_action(
-            sim_game=sim_game,
-            player_number=player.player_number,
-            dev_played=False,
-        )
+            sim_game=sim_game, player_number=player.player_number, dev_played=False)
 
         needed = calc_step_resources(best_action)
 
@@ -416,10 +365,7 @@ class RuleBasedAI(AI):
         while remaining > 0:
             # Prefer discarding true surplus first, otherwise discard low-impact resources.
             # Ore and wheat are implicitly protected since they enable cities and dev cards.
-            r = min(
-                have.keys(),
-                key=lambda x: (surplus[x] <= 0, have[x], x in (Resource.ORE, Resource.WHEAT)),
-            )
+            r = min(have.keys(), key=lambda x: (surplus[x] <= 0, have[x], x in (Resource.ORE, Resource.WHEAT)))
             discard[r] += 1
             have[r] -= 1
 
@@ -435,25 +381,15 @@ class RuleBasedAI(AI):
         # Look ahead to what we want to build next.
         sim_game = make_sim_game_for_player(game, player)
         best_action = self.etw_estimator.calculate_best_game_action(
-            sim_game=sim_game,
-            player_number=player.player_number,
-            dev_played=False,
-        )
+            sim_game=sim_game, player_number=player.player_number, dev_played=False)
 
         needed = calc_step_resources(best_action)
 
         # Rank resources by how short we are relative to the next action's cost.
-        sorted_needed = sorted(
-            needed,
-            key=lambda r: max(0, needed[r] - player.resources[r]),
-            reverse=True,
-        )
+        sorted_needed = sorted(needed, key=lambda r: max(0, needed[r] - player.resources[r]), reverse=True)
 
         # Take the two most constraining resources, fall back to anything if fewer are needed.
-        picked = (
-                sorted_needed[:2]
-                + [r for r in Resource if r not in sorted_needed][: max(0, 2 - len(sorted_needed))]
-        )
+        picked = sorted_needed[:2] + [r for r in Resource if r not in sorted_needed][: max(0, 2 - len(sorted_needed))]
 
         return {r: 1 for r in picked[:2]}
 
@@ -470,12 +406,8 @@ class RuleBasedAI(AI):
             # Estimate what the opponent is trying to do next.
             sim_game_opp = make_sim_game_for_player(game, opponent)
             best_action = self.etw_estimator.calculate_best_game_action(
-                sim_game=sim_game_opp,
-                player_number=opponent.player_number,
-                dev_played=False,
-                ignore_affordability=True,
-                ignore_opponents=True,
-            )
+                sim_game=sim_game_opp, player_number=opponent.player_number, dev_played=False,
+                ignore_affordability=True, ignore_opponents=True)
 
             # Tally required resources for that action.
             required = calc_step_resources(best_action)
@@ -489,13 +421,8 @@ class RuleBasedAI(AI):
         return random.choice(candidates)
 
     def respond_to_trade(
-        self,
-        player: Player,
-        game: Game,
-        opponent: Player,
-        selling: ResourceCount,
-        buying: ResourceCount,
-    ) -> Tuple[bool, Optional[ResourceCount]]:
+            self, player: Player, game: Game, opponent: Player, selling: ResourceCount,
+            buying: ResourceCount) -> Tuple[bool, Optional[ResourceCount]]:
         """Respond to a proposed trade using BATNA + risk constraints."""
 
         # Evaluate the offer in a simulated state.
@@ -507,11 +434,12 @@ class RuleBasedAI(AI):
         opponents = get_opponents(sim_game, player.player_number)
 
         # Accept if it improves our ETW versus waiting/bank trades, but avoid helping a close/leading opponent.
-        return respond_to_trade_batna(player_sim=sim_us, opponent_sim=opponent_sim, sim_game=sim_game,
-                                      etw_estimator=self.etw_estimator, selling_to_us=selling,
-                                      buying_from_us=buying, opponents=opponents)
+        return respond_to_trade_batna(
+            player_sim=sim_us, opponent_sim=opponent_sim, sim_game=sim_game, etw_estimator=self.etw_estimator,
+            selling_to_us=selling, buying_from_us=buying, opponents=opponents)
 
-    def road_building_placement(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
+    def road_building_placement(
+            self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
         """Select an edge for road building, prioritising network connections or high-utility settlements."""
         sim_game = make_sim_game_for_player(game, player)
 
@@ -526,21 +454,15 @@ class RuleBasedAI(AI):
             best_vertex = max(
                 legal_vertices,
                 key=lambda v: self.vertex_utility(v, player, game, legal_vertices, first_settlement=False),
-                default=None,
-            )
+                default=None)
             if best_vertex:
-                return find_edge_toward_vertex_from_any(
-                    player.player_number,
-                    sim_game,
-                    best_vertex,
-                    available_edges,
-                )
+                return find_edge_toward_vertex_from_any(player.player_number, sim_game, best_vertex, available_edges)
 
         # Fallback: keep the agent moving even if no clear preference exists.
         return random.choice(available_edges) if available_edges else None
 
-    def next_action_with_explanation(self, player: Player, game: Game, phase: Phase, dev_played: bool
-                                     ) -> Tuple[Action, ActionExplanation]:
+    def next_action_with_explanation(
+            self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Tuple[Action, ActionExplanation]:
         """Determine the next action and return a structured explanation."""
         if phase == Phase.PRE_ROLL:
             if not dev_played:
@@ -558,60 +480,35 @@ class RuleBasedAI(AI):
                     }
 
                     explained_candidates = self.etw_estimator.evaluate_candidates_with_explanations(
-                        sim_us,
-                        sim_game,
-                        dev_played,
-                        dev_candidates,
-                        etw_before,
-                        opponents_etw_before,
-                    )
+                        sim_us, sim_game, dev_played, dev_candidates, etw_before, opponents_etw_before)
 
                     if explained_candidates:
                         best_candidate = explained_candidates[0]
                         if best_candidate.utility_total > 0.0:
                             confidence = best_candidate.utility_total - (
-                                explained_candidates[1].utility_total if len(explained_candidates) > 1 else 0.0
-                            )
+                                explained_candidates[1].utility_total if len(explained_candidates) > 1 else 0.0)
                             explanation = ActionExplanation(
-                                chosen_action=best_candidate.action,
-                                chosen_candidate=best_candidate,
-                                alternatives=explained_candidates[1:4],
-                                confidence=max(0.0, confidence),
+                                chosen_action=best_candidate.action, chosen_candidate=best_candidate,
+                                alternatives=explained_candidates[1:4], confidence=max(0.0, confidence),
                                 confidence_label=confidence_label(max(0.0, confidence)),
-                                assumptions=[AssumptionCode.PRE_ROLL_DEV_ONLY],
-                                metadata={"phase": "pre_roll"},
-                            )
+                                assumptions=[AssumptionCode.PRE_ROLL_DEV_ONLY], metadata={"phase": "pre_roll"})
                             return best_candidate.action, explanation
 
             roll_action = Action(ActionType.ROLL)
             explanation = ActionExplanation(
                 chosen_action=roll_action,
                 chosen_candidate=CandidateExplanation(
-                    action=roll_action,
-                    full_plan=[roll_action],
-                    reasons_for=[
-                        Reason(
-                            type=ReasonType.HEURISTIC_CHOICE,
-                            label=ReasonLabel.PRE_ROLL_NO_DEV_PLAY,
-                            value=0.0,
-                        )
-                    ],
-                ),
-                alternatives=[],
-                confidence=0.0,
-                confidence_label="medium",
-                assumptions=[],
-                metadata={"phase": "pre_roll"},
-            )
+                    action=roll_action, full_plan=[roll_action],
+                    reasons_for=[Reason(type=ReasonType.HEURISTIC_CHOICE, label=ReasonLabel.PRE_ROLL_NO_DEV_PLAY,
+                                        value=0.0)]),
+                alternatives=[], confidence=0.0, confidence_label="medium", assumptions=[],
+                metadata={"phase": "pre_roll"})
             return roll_action, explanation
 
         sim_game = make_sim_game_for_player(game, player)
 
         explanation = self.etw_estimator.calculate_best_game_action_with_explanation(
-            sim_game=sim_game,
-            player_number=player.player_number,
-            dev_played=dev_played,
-        )
+            sim_game=sim_game, player_number=player.player_number, dev_played=dev_played)
 
         best_action = explanation.chosen_action
 

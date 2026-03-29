@@ -4,27 +4,21 @@ from typing import Any, Dict, List, Optional, Tuple
 from ai.ai_utils.SimGame import SimGame
 from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability
 from ai.ai_utils.action_utils import (
-    compute_k_la,
-    distant_settlement_candidates,
-    get_bank_trade_for_action,
-    play_development_card_action,
-    purchase_development_card_action,
+    compute_k_la, distant_settlement_candidates, get_bank_trade_for_action,
+    play_development_card_action, purchase_development_card_action,
 )
 from ai.ai_utils.actions import ActionType, Action
 from ai.ai_utils.board_sim_utils import get_opponents
-from ai.ai_utils.explanations import (ActionExplanation, AssumptionCode, CandidateExplanation, Reason, ReasonLabel,
-                                      ReasonType, confidence_label)
+from ai.ai_utils.explanations import (
+    ActionExplanation, AssumptionCode, CandidateExplanation, Reason, ReasonLabel,
+    ReasonType, confidence_label,
+)
 from ai.ai_utils.resource_utils import get_bank_trade_ratio, calc_step_resources
 from ai.ai_utils.trade_utils import propose_trade
 from config.StrategyWeights import StrategyWeights
 from config.performance_constants import (
-    ETW_MAX_DEPTH_OFFSET,
-    MAX_ETB_THRESHOLD,
-    MAX_EVALUATIONS,
-    MAX_SETTLEMENT_CANDIDATES,
-    ROAD_ETB_THRESHOLD,
-    ETW_ETB_THRESHOLD,
-    ETW_SIMULATION_MAX_CANDIDATES, EVAL_UTIL_MAX_DEPTH,
+    ETW_MAX_DEPTH_OFFSET, MAX_ETB_THRESHOLD, MAX_EVALUATIONS, MAX_SETTLEMENT_CANDIDATES,
+    ROAD_ETB_THRESHOLD, ETW_ETB_THRESHOLD, ETW_SIMULATION_MAX_CANDIDATES, EVAL_UTIL_MAX_DEPTH,
 )
 from game.Game import Game
 from game.Player import PlayerNumber
@@ -51,20 +45,15 @@ class EtwEstimator:
         self._last_trade_resources = None
 
     def estimated_time_to_build(
-            self,
-            player: SimPlayerState,
-            sim_game: SimGame,
-            R_target: ResourceCount,
-            include_player_trades: bool = True,
+        self, player: SimPlayerState, sim_game: SimGame, R_target: ResourceCount,
+        include_player_trades: bool = True,
     ) -> float:
         """Estimate ETB for a resource target with caching."""
 
         # Cache key captures player state, target resources, and trade assumptions.
         target_key = tuple((r.value, R_target.get(r, 0)) for r in Resource)
         player_key = (
-            player.player_number,
-            tuple(player.settlements),
-            tuple(player.cities),
+            player.player_number, tuple(player.settlements), tuple(player.cities),
             tuple((r.value, player.resources.get(r, 0)) for r in Resource),
         )
         cache_key = (player_key, target_key, include_player_trades)
@@ -82,10 +71,7 @@ class EtwEstimator:
         # Adjust expected rolls using bank/port trades and (optionally) player trades.
         opponents = get_opponents(sim_game, player.player_number)
         trade_adjusted_rolls = self._calculate_trade_adjusted_rolls(
-            player=player,
-            opponents=opponents,
-            deficits=deficits,
-            excesses=excesses,
+            player=player, opponents=opponents, deficits=deficits, excesses=excesses,
             rolls_per_unit=rolls_per_unit,
             bank_trade_ratio_func=lambda r: get_bank_trade_ratio(player.settlements + player.cities, r),
             include_player_trades=include_player_trades,
@@ -104,14 +90,9 @@ class EtwEstimator:
         return 1.0 / fr
 
     def _calculate_trade_adjusted_rolls(
-            self,
-            player: SimPlayerState,
-            opponents: List[SimPlayerState],
-            deficits: Dict[Resource, int],
-            excesses: Dict[Resource, int],
-            rolls_per_unit: Dict[Resource, float],
-            bank_trade_ratio_func,
-            include_player_trades: bool,
+        self, player: SimPlayerState, opponents: List[SimPlayerState], deficits: Dict[Resource, int],
+        excesses: Dict[Resource, int], rolls_per_unit: Dict[Resource, float], bank_trade_ratio_func,
+        include_player_trades: bool,
     ) -> Dict[Resource, float]:
         """Compute expected rolls per resource after bank/port and optional player-trade conversions."""
         trade_adjusted: Dict[Resource, float] = {}
@@ -150,12 +131,8 @@ class EtwEstimator:
         return trade_adjusted
 
     def _player_trade_ratio(
-            self,
-            resource_give: Resource,
-            resource_need: Resource,
-            player: SimPlayerState,
-            opponents: List[SimPlayerState],
-            rolls_per_unit: Dict[Resource, float],
+        self, resource_give: Resource, resource_need: Resource, player: SimPlayerState,
+        opponents: List[SimPlayerState], rolls_per_unit: Dict[Resource, float],
     ) -> int:
         """Return a conservative give:take ratio for player trades."""
         give_r = rolls_per_unit.get(resource_give, float("inf"))
@@ -179,20 +156,16 @@ class EtwEstimator:
 
         return base_ratio
 
-    def estimated_time_to_win(self, player: SimPlayerState, sim_game: SimGame, dev_played: bool,
-                              include_player_trades: bool = True,
-                              max_depth_override: Optional[int] = None) -> float:
+    def estimated_time_to_win(
+        self, player: SimPlayerState, sim_game: SimGame, dev_played: bool,
+        include_player_trades: bool = True, max_depth_override: Optional[int] = None,
+    ) -> float:
         """Estimate expected turns to reach 10 VP via a greedy forward rollout."""
 
         # Cache key includes depth override to avoid mixing fast vs full ETW estimates.
         cache_key = (
-            player.player_number,
-            dev_played,
-            include_player_trades,
-            max_depth_override,
-            len(player.settlements),
-            len(player.cities),
-            len(player.roads),
+            player.player_number, dev_played, include_player_trades, max_depth_override,
+            len(player.settlements), len(player.cities), len(player.roads),
             tuple((r.value, player.resources.get(r, 0)) for r in Resource),
         )
 
@@ -208,10 +181,7 @@ class EtwEstimator:
         iterations = 0
 
         # Default rollout depth shrinks as we get closer to winning.
-        default_depth = min(
-            Game.VICTORY_POINTS_TO_WIN + ETW_MAX_DEPTH_OFFSET - points,
-            ETW_MAX_DEPTH_OFFSET,
-        )
+        default_depth = min(Game.VICTORY_POINTS_TO_WIN + ETW_MAX_DEPTH_OFFSET - points, ETW_MAX_DEPTH_OFFSET)
 
         # Optional override for fast, rank-only ETW estimates.
         if max_depth_override is not None:
@@ -226,7 +196,7 @@ class EtwEstimator:
 
         while points < Game.VICTORY_POINTS_TO_WIN and iterations < max_depth:
             candidate_actions = self._get_candidate_actions(
-                sim_player, sim_game_local, dev_played, include_player_trades
+                sim_player, sim_game_local, dev_played, include_player_trades,
             )
 
             # No feasible progress → penalise and stop.
@@ -264,8 +234,9 @@ class EtwEstimator:
             if player.victory_points() >= Game.VICTORY_POINTS_TO_WIN:
                 break
 
-    def _calculate_deficits_and_excesses(self, current: ResourceCount,
-                                         target: ResourceCount) -> Tuple[Dict[Resource, int], Dict[Resource, int]]:
+    def _calculate_deficits_and_excesses(
+        self, current: ResourceCount, target: ResourceCount,
+    ) -> Tuple[Dict[Resource, int], Dict[Resource, int]]:
         """Compute deficits and excesses relative to a target."""
         deficits: Dict[Resource, int] = {}
         excesses: Dict[Resource, int] = {}
@@ -351,22 +322,15 @@ class EtwEstimator:
         return ReasonLabel.QUICK_GENERIC, {}
 
     def _get_candidate_actions(
-            self,
-            player: SimPlayerState,
-            sim_game: SimGame,
-            dev_played: bool,
-            include_player_trades: bool = True,
+        self, player: SimPlayerState, sim_game: SimGame, dev_played: bool,
+        include_player_trades: bool = True,
     ) -> List[Tuple[List[Action], float, float]]:
         """Generate and prune candidates, returning (actions, etb, expected_vp_gain)."""
 
         # Cache so utility evaluation doesn't regenerate candidates repeatedly.
         cache_key = (
-            player.player_number,
-            dev_played,
-            len(player.settlements),
-            len(player.cities),
-            len(player.roads),
-            tuple((r.value, player.resources.get(r, 0)) for r in Resource),
+            player.player_number, dev_played, len(player.settlements), len(player.cities),
+            len(player.roads), tuple((r.value, player.resources.get(r, 0)) for r in Resource),
         )
 
         if cache_key in player.candidate_cache:
@@ -377,10 +341,7 @@ class EtwEstimator:
         # City upgrades: only consider a few best settlements (highest yield) to keep branching low.
         if len(player.cities) < Buildable.CITY.max_on_board and player.settlements:
             city_etb = self.estimated_time_to_build(
-                player,
-                sim_game,
-                Game.BUILDING_COST[Buildable.CITY],
-                include_player_trades=include_player_trades,
+                player, sim_game, Game.BUILDING_COST[Buildable.CITY], include_player_trades=include_player_trades,
             )
             sorted_settlements = sorted(
                 player.settlements,
@@ -408,10 +369,7 @@ class EtwEstimator:
         if len(candidate_actions) < StrategyWeights.MIN_CANDIDATES_FOR_ROAD:
             road_cost = Game.BUILDING_COST[Buildable.ROAD]
             road_etb = self.estimated_time_to_build(
-                player,
-                sim_game,
-                road_cost,
-                include_player_trades=include_player_trades,
+                player, sim_game, road_cost, include_player_trades=include_player_trades,
             )
             if road_etb < ROAD_ETB_THRESHOLD:
                 for v in player.settlements + player.cities:
@@ -428,13 +386,9 @@ class EtwEstimator:
         return candidate_actions[:ETW_SIMULATION_MAX_CANDIDATES]
 
     def evaluate_utilities(
-            self,
-            player: SimPlayerState,
-            sim_game: SimGame,
-            dev_played: bool,
-            candidates: List[Tuple[List[Action], float, float]],
-            etw_before: float,
-            opponents_etw_before: Dict[PlayerNumber, float],
+        self, player: SimPlayerState, sim_game: SimGame, dev_played: bool,
+        candidates: List[Tuple[List[Action], float, float]], etw_before: float,
+        opponents_etw_before: Dict[PlayerNumber, float],
     ) -> List[Tuple[Action, float]]:
         """Evaluate utility for candidate actions."""
         self._eval_stats["evaluations"] += 1
@@ -475,10 +429,7 @@ class EtwEstimator:
 
             # Self utility: percent reduction in (approx) ETW after the rollout.
             etw_after = self.estimated_time_to_win(
-                player_copy,
-                sim_game_copy,
-                dev_played,
-                max_depth_override=EVAL_UTIL_MAX_DEPTH,
+                player_copy, sim_game_copy, dev_played, max_depth_override=EVAL_UTIL_MAX_DEPTH,
             )
             u_self = 0.0 if etw_before <= 0 else max(0.0, (etw_before - etw_after) / etw_before * 100.0)
 
@@ -495,10 +446,7 @@ class EtwEstimator:
                 sim_game_opp = _sim_game_with_replaced_player(sim_game_copy, opp_state)
 
                 opp_etw_after = self.estimated_time_to_win(
-                    opp_state,
-                    sim_game_opp,
-                    False,
-                    max_depth_override=EVAL_UTIL_MAX_DEPTH,
+                    opp_state, sim_game_opp, False, max_depth_override=EVAL_UTIL_MAX_DEPTH,
                 )
 
                 delay_caused = (opp_etw_after - opp_etw_before) / opp_etw_before * 100.0
@@ -527,13 +475,9 @@ class EtwEstimator:
             # Discount by ETB so fast gains beat slow gains.
             discount_rate = StrategyWeights.TIME_DISCOUNT_RATE
             eu = (
-                    (
-                            StrategyWeights.BUILD_SELF_UTILITY * u_self
-                            + StrategyWeights.BUILD_OPPONENT_UTILITY * u_opp
-                            + StrategyWeights.BUILD_SPECIAL_UTILITY * u_special
-                            + u_attention
-                    )
-                    / ((1.0 + discount_rate) ** max(1.0, etb))
+                (StrategyWeights.BUILD_SELF_UTILITY * u_self + StrategyWeights.BUILD_OPPONENT_UTILITY * u_opp
+                 + StrategyWeights.BUILD_SPECIAL_UTILITY * u_special + u_attention)
+                / ((1.0 + discount_rate) ** max(1.0, etb))
             )
 
             utilities.append((next_step, eu))
@@ -558,9 +502,7 @@ class EtwEstimator:
             if building == Buildable.ROAD:
                 # Longest Road depends on opponents' best length, so pass that into the update.
                 opp_lengths = [
-                    p.longest_road_length
-                    for num, p in overlay.sim_players.items()
-                    if num != player.player_number
+                    p.longest_road_length for num, p in overlay.sim_players.items() if num != player.player_number
                 ]
                 player.build_road(loc, opp_lengths)
                 overlay.claim_edge(loc, player.player_number)
@@ -593,11 +535,7 @@ class EtwEstimator:
 
             if ctype == DevelopmentCardType.KNIGHT:
                 # Largest Army is relative, so update using opponents' current army sizes.
-                opp_armies = [
-                    p.army_size
-                    for num, p in overlay.sim_players.items()
-                    if num != player.player_number
-                ]
+                opp_armies = [p.army_size for num, p in overlay.sim_players.items() if num != player.player_number]
                 player.add_knight(opp_armies)
 
         elif step.type == ActionType.TRADE_WITH_BANK:
@@ -619,11 +557,8 @@ class EtwEstimator:
         return self._last_trade_resources == player.resources
 
     def _choose_max_utility_action(
-            self,
-            player: SimPlayerState,
-            sim_game: SimGame,
-            utilities: List[Tuple[Action, float]],
-            ignore_affordability: bool = False,
+        self, player: SimPlayerState, sim_game: SimGame, utilities: List[Tuple[Action, float]],
+        ignore_affordability: bool = False,
     ) -> Action:
         """Select the max-utility action, optionally inserting bank/player trades."""
         best_action: Optional[Action] = None
@@ -652,14 +587,7 @@ class EtwEstimator:
                 if missing is not None:
                     sim_game_for_trade = _sim_game_with_replaced_player(sim_game, player)
                     opponents = get_opponents(sim_game_for_trade, player.player_number)
-                    trade_action = propose_trade(
-                        player,
-                        sim_game_for_trade,
-                        missing,
-                        player_excesses,
-                        opponents,
-                        self,
-                    )
+                    trade_action = propose_trade(player, sim_game_for_trade, missing, player_excesses, opponents, self)
                     if trade_action and utility > best_utility:
                         best_utility = utility
                         best_action = trade_action
@@ -667,11 +595,8 @@ class EtwEstimator:
         return best_action if best_action is not None else Action(ActionType.END_TURN)
 
     def _choose_max_utility_action_with_candidate(
-            self,
-            player: SimPlayerState,
-            sim_game: SimGame,
-            candidates: List[CandidateExplanation],
-            ignore_affordability: bool = False,
+        self, player: SimPlayerState, sim_game: SimGame, candidates: List[CandidateExplanation],
+        ignore_affordability: bool = False,
     ) -> Tuple[Action, CandidateExplanation]:
         """Select the max-utility action, optionally inserting bank/player trades."""
         best_action: Optional[Action] = None
@@ -697,27 +622,18 @@ class EtwEstimator:
                 best_utility = utility
                 best_action = bank_trade_action
                 best_candidate = CandidateExplanation(
-                    action=bank_trade_action,
-                    full_plan=[bank_trade_action] + candidate.full_plan,
-                next_plan=list(candidate.next_plan), waiting_resources=dict(candidate.waiting_resources),
-                    etb=candidate.etb,
-                    etw_before=candidate.etw_before,
-                    etw_after=candidate.etw_after,
-                    etw_delta=candidate.etw_delta,
-                    utility_total=candidate.utility_total,
-                    utility_self=candidate.utility_self,
-                    utility_opponent=candidate.utility_opponent,
-                    utility_special=candidate.utility_special,
-                    utility_attention=candidate.utility_attention,
+                    action=bank_trade_action, full_plan=[bank_trade_action] + candidate.full_plan,
+                    next_plan=list(candidate.next_plan), waiting_resources=dict(candidate.waiting_resources),
+                    etb=candidate.etb, etw_before=candidate.etw_before, etw_after=candidate.etw_after,
+                    etw_delta=candidate.etw_delta, utility_total=candidate.utility_total,
+                    utility_self=candidate.utility_self, utility_opponent=candidate.utility_opponent,
+                    utility_special=candidate.utility_special, utility_attention=candidate.utility_attention,
                     expected_vp_gain=candidate.expected_vp_gain,
-                    reasons_for=[Reason(ReasonType.REQUIRES_TRADE, ReasonLabel.REQUIRES_TRADE,
-                                        max(1.0, candidate.utility_total))] + list(candidate.reasons_for),
+                    reasons_for=[
+                        Reason(ReasonType.REQUIRES_TRADE, ReasonLabel.REQUIRES_TRADE, max(1.0, candidate.utility_total))
+                    ] + list(candidate.reasons_for),
                     reasons_against=list(candidate.reasons_against),
-                    metadata={
-                        **candidate.metadata,
-                        "trade_inserted": True,
-                        "enabled_action": candidate.action,
-                    },
+                    metadata={**candidate.metadata, "trade_inserted": True, "enabled_action": candidate.action},
                 )
 
             # If player trades are allowed, propose one missing resource trade (but avoid spamming repeats).
@@ -727,39 +643,28 @@ class EtwEstimator:
                 if missing is not None:
                     sim_game_for_trade = _sim_game_with_replaced_player(sim_game, player)
                     opponents = get_opponents(sim_game_for_trade, player.player_number)
-                    trade_action = propose_trade(
-                        player,
-                        sim_game_for_trade,
-                        missing,
-                        player_excesses,
-                        opponents,
-                        self,
-                    )
+                    trade_action = propose_trade(player, sim_game_for_trade, missing, player_excesses, opponents, self)
                     if trade_action and utility > best_utility:
                         best_utility = utility
                         best_action = trade_action
                         best_candidate = CandidateExplanation(
-                            action=trade_action,
-                            full_plan=[trade_action] + candidate.full_plan,
+                            action=trade_action, full_plan=[trade_action] + candidate.full_plan,
                             next_plan=list(candidate.next_plan), waiting_resources=dict(candidate.waiting_resources),
-                            etb=candidate.etb,
-                            etw_before=candidate.etw_before,
-                            etw_after=candidate.etw_after,
-                            etw_delta=candidate.etw_delta,
-                            utility_total=candidate.utility_total,
-                            utility_self=candidate.utility_self,
+                            etb=candidate.etb, etw_before=candidate.etw_before,
+                            etw_after=candidate.etw_after, etw_delta=candidate.etw_delta,
+                            utility_total=candidate.utility_total, utility_self=candidate.utility_self,
                             utility_opponent=candidate.utility_opponent,
                             utility_special=candidate.utility_special,
                             utility_attention=candidate.utility_attention,
                             expected_vp_gain=candidate.expected_vp_gain,
-                            reasons_for=[Reason(ReasonType.REQUIRES_TRADE, ReasonLabel.REQUIRES_TRADE,
-                                                max(1.0, candidate.utility_total))] + list(candidate.reasons_for),
+                            reasons_for=[
+                                Reason(
+                                    ReasonType.REQUIRES_TRADE, ReasonLabel.REQUIRES_TRADE,
+                                    max(1.0, candidate.utility_total),
+                                )
+                            ] + list(candidate.reasons_for),
                             reasons_against=list(candidate.reasons_against),
-                            metadata={
-                                **candidate.metadata,
-                                "trade_inserted": True,
-                                "enabled_action": candidate.action,
-                            },
+                            metadata={**candidate.metadata, "trade_inserted": True, "enabled_action": candidate.action},
                         )
 
         if best_action is not None and best_candidate is not None:
@@ -768,41 +673,28 @@ class EtwEstimator:
         deferred_candidate = max(candidates, key=lambda c: c.utility_total, default=None)
         next_plan, waiting_resources = ([], {})
         reasons_for: List[Reason] = [
-            Reason(
-                type=ReasonType.HEURISTIC_CHOICE,
-                label=ReasonLabel.NO_IMMEDIATE_ACTION,
-                value=0.0,
-            )
+            Reason(type=ReasonType.HEURISTIC_CHOICE, label=ReasonLabel.NO_IMMEDIATE_ACTION, value=0.0)
         ]
         reasons_against: List[Reason] = []
         if deferred_candidate is not None:
             next_plan = list(deferred_candidate.next_plan or deferred_candidate.full_plan)
             waiting_resources = dict(
-                deferred_candidate.waiting_resources
-                or self._plan_waiting_resources(player, next_plan)
+                deferred_candidate.waiting_resources or self._plan_waiting_resources(player, next_plan)
             )
             if deferred_candidate.reasons_for:
                 reasons_for = list(deferred_candidate.reasons_for)
             reasons_against = list(deferred_candidate.reasons_against)
 
         fallback = CandidateExplanation(
-            action=Action(ActionType.END_TURN),
-            full_plan=[Action(ActionType.END_TURN)],
-            next_plan=next_plan,
-            waiting_resources=waiting_resources,
-            utility_total=0.0,
-            reasons_for=reasons_for,
+            action=Action(ActionType.END_TURN), full_plan=[Action(ActionType.END_TURN)], next_plan=next_plan,
+            waiting_resources=waiting_resources, utility_total=0.0, reasons_for=reasons_for,
             reasons_against=reasons_against,
         )
         return fallback.action, fallback
 
     def calculate_best_game_action(
-            self,
-            sim_game: SimGame,
-            player_number: PlayerNumber,
-            dev_played: bool,
-            ignore_affordability: bool = False,
-            ignore_opponents: bool = False,
+        self, sim_game: SimGame, player_number: PlayerNumber, dev_played: bool,
+        ignore_affordability: bool = False, ignore_opponents: bool = False,
     ) -> Action:
         """Return the best next action for the given player number using the SimGame overlay."""
         sim_player = sim_game.overlay.get_sim_player(player_number)
@@ -823,27 +715,16 @@ class EtwEstimator:
 
         # Convert candidate plans into (next-step, utility) scores via rollouts + ETW deltas.
         utilities = self.evaluate_utilities(
-            sim_player,
-            sim_game,
-            dev_played,
-            candidates,
-            etw_before,
-            opponents_etw_before,
+            sim_player, sim_game, dev_played, candidates, etw_before, opponents_etw_before,
         )
         if not utilities:
             return Action(ActionType.END_TURN)
 
         # Hidden-information heuristic: favour dev cards when they are "close enough" to the best alternative.
         best_build = max(
-            (u for u in utilities if u[0].type != ActionType.BUY_DEV_CARD),
-            default=None,
-            key=lambda x: x[1],
+            (u for u in utilities if u[0].type != ActionType.BUY_DEV_CARD), default=None, key=lambda x: x[1],
         )
-        best_dev = max(
-            (u for u in utilities if u[0].type == ActionType.BUY_DEV_CARD),
-            default=None,
-            key=lambda x: x[1],
-        )
+        best_dev = max((u for u in utilities if u[0].type == ActionType.BUY_DEV_CARD), default=None, key=lambda x: x[1])
 
         if (not ignore_affordability) and best_build is not None and best_dev is not None:
             if best_dev[1] >= best_build[1] * (1.0 - StrategyWeights.DEV_CLOSE_THRESHOLD):
@@ -851,16 +732,14 @@ class EtwEstimator:
 
         # Final selection can insert a trade step if the top action isn't currently affordable.
         return self._choose_max_utility_action(
-            sim_player,
-            sim_game,
-            utilities,
-            ignore_affordability=ignore_affordability,
+            sim_player, sim_game, utilities, ignore_affordability=ignore_affordability,
         )
 
-    def evaluate_candidates_with_explanations(self, player: SimPlayerState, sim_game: SimGame, dev_played: bool,
-                                              candidates: List[Tuple[List[Action], float, float]], etw_before: float,
-                                              opponents_etw_before: Dict[PlayerNumber, float]) \
-            -> List[CandidateExplanation]:
+    def evaluate_candidates_with_explanations(
+        self, player: SimPlayerState, sim_game: SimGame, dev_played: bool,
+        candidates: List[Tuple[List[Action], float, float]], etw_before: float,
+        opponents_etw_before: Dict[PlayerNumber, float],
+    ) -> List[CandidateExplanation]:
         """Evaluate candidates and return structured explanations."""
         explained: List[CandidateExplanation] = []
 
@@ -896,10 +775,7 @@ class EtwEstimator:
                     break
 
             etw_after = self.estimated_time_to_win(
-                player_copy,
-                sim_game_copy,
-                dev_played,
-                max_depth_override=EVAL_UTIL_MAX_DEPTH,
+                player_copy, sim_game_copy, dev_played, max_depth_override=EVAL_UTIL_MAX_DEPTH,
             )
 
             etw_delta = etw_before - etw_after
@@ -917,10 +793,7 @@ class EtwEstimator:
                 sim_game_opp = _sim_game_with_replaced_player(sim_game_copy, opp_state)
 
                 opp_etw_after = self.estimated_time_to_win(
-                    opp_state,
-                    sim_game_opp,
-                    False,
-                    max_depth_override=EVAL_UTIL_MAX_DEPTH,
+                    opp_state, sim_game_opp, False, max_depth_override=EVAL_UTIL_MAX_DEPTH,
                 )
 
                 delay_caused = (opp_etw_after - opp_etw_before) / opp_etw_before * 100.0
@@ -951,13 +824,9 @@ class EtwEstimator:
 
             discount_rate = StrategyWeights.TIME_DISCOUNT_RATE
             utility_total = (
-                    (
-                            StrategyWeights.BUILD_SELF_UTILITY * u_self
-                            + StrategyWeights.BUILD_OPPONENT_UTILITY * u_opp
-                            + StrategyWeights.BUILD_SPECIAL_UTILITY * u_special
-                            + u_attention
-                    )
-                    / ((1.0 + discount_rate) ** max(1.0, etb))
+                (StrategyWeights.BUILD_SELF_UTILITY * u_self + StrategyWeights.BUILD_OPPONENT_UTILITY * u_opp
+                 + StrategyWeights.BUILD_SPECIAL_UTILITY * u_special + u_attention)
+                / ((1.0 + discount_rate) ** max(1.0, etb))
             )
 
             reasons_for: List[Reason] = []
@@ -971,8 +840,7 @@ class EtwEstimator:
                 if building == Buildable.SETTLEMENT:
                     reasons_for.append(
                         Reason(
-                            type=ReasonType.ENABLES_EXPANSION,
-                            label=ReasonLabel.PLAN_SETTLEMENT_VALUE,
+                            type=ReasonType.ENABLES_EXPANSION, label=ReasonLabel.PLAN_SETTLEMENT_VALUE,
                             value=max(u_self * 0.9, 1.0),
                         )
                     )
@@ -980,8 +848,7 @@ class EtwEstimator:
                 elif building == Buildable.CITY:
                     reasons_for.append(
                         Reason(
-                            type=ReasonType.IMPROVES_PRODUCTION,
-                            label=ReasonLabel.PLAN_CITY_VALUE,
+                            type=ReasonType.IMPROVES_PRODUCTION, label=ReasonLabel.PLAN_CITY_VALUE,
                             value=max(u_self * 0.8, 1.0),
                         )
                     )
@@ -989,8 +856,7 @@ class EtwEstimator:
                 elif building == Buildable.ROAD:
                     reasons_for.append(
                         Reason(
-                            type=ReasonType.ENABLES_EXPANSION,
-                            label=ReasonLabel.PLAN_ROAD_VALUE,
+                            type=ReasonType.ENABLES_EXPANSION, label=ReasonLabel.PLAN_ROAD_VALUE,
                             value=max(u_self * 0.7, 1.0),
                         )
                     )
@@ -999,27 +865,20 @@ class EtwEstimator:
                 quick_label, quick_meta = self._quick_reason_label(next_step, final_step)
                 reasons_for.append(
                     Reason(
-                        type=ReasonType.QUICK_TO_EXECUTE,
-                        label=quick_label,
-                        metadata=quick_meta,
+                        type=ReasonType.QUICK_TO_EXECUTE, label=quick_label, metadata=quick_meta,
                         value=max(0.0, 5.0 - etb),
                     )
                 )
 
             if blocks_opponent and u_opp > 0:
                 reasons_for.append(
-                    Reason(
-                        type=ReasonType.SLOWS_LEADING_OPPONENT,
-                        label=ReasonLabel.SLOWS_LEADER,
-                        value=u_opp,
-                    )
+                    Reason(type=ReasonType.SLOWS_LEADING_OPPONENT, label=ReasonLabel.SLOWS_LEADER, value=u_opp)
                 )
 
             if improves_longest_road:
                 reasons_for.append(
                     Reason(
-                        type=ReasonType.ADVANCES_LONGEST_ROAD,
-                        label=ReasonLabel.ADVANCES_LONGEST_ROAD,
+                        type=ReasonType.ADVANCES_LONGEST_ROAD, label=ReasonLabel.ADVANCES_LONGEST_ROAD,
                         value=u_special,
                     )
                 )
@@ -1027,35 +886,23 @@ class EtwEstimator:
             if improves_largest_army:
                 reasons_for.append(
                     Reason(
-                        type=ReasonType.ADVANCES_LARGEST_ARMY,
-                        label=ReasonLabel.ADVANCES_LARGEST_ARMY,
+                        type=ReasonType.ADVANCES_LARGEST_ARMY, label=ReasonLabel.ADVANCES_LARGEST_ARMY,
                         value=u_special,
                     )
                 )
 
             if next_step.type in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER):
-                reasons_for.append(
-                    Reason(
-                        type=ReasonType.REQUIRES_TRADE,
-                        label=ReasonLabel.REQUIRES_TRADE,
-                        value=1.0,
-                    )
-                )
+                reasons_for.append(Reason(type=ReasonType.REQUIRES_TRADE, label=ReasonLabel.REQUIRES_TRADE, value=1.0))
 
             if next_step.type == ActionType.BUY_DEV_CARD and vp_inc > 0:
                 reasons_for.append(
-                    Reason(
-                        type=ReasonType.HIDDEN_VALUE,
-                        label=ReasonLabel.HIDDEN_DEV_VALUE,
-                        value=vp_inc,
-                    )
+                    Reason(type=ReasonType.HIDDEN_VALUE, label=ReasonLabel.HIDDEN_DEV_VALUE, value=vp_inc)
                 )
 
             if u_attention < 0:
                 reasons_against.append(
                     Reason(
-                        type=ReasonType.AVOIDS_EARLY_ATTENTION,
-                        label=ReasonLabel.EARLY_ATTENTION_RISK,
+                        type=ReasonType.AVOIDS_EARLY_ATTENTION, label=ReasonLabel.EARLY_ATTENTION_RISK,
                         value=abs(u_attention),
                     )
                 )
@@ -1065,25 +912,13 @@ class EtwEstimator:
 
             explained.append(
                 CandidateExplanation(
-                    action=next_step,
-                    full_plan=actions,
-                    next_plan=next_plan,
-                    waiting_resources=waiting_resources,
-                    etb=etb,
-                    etw_before=etw_before,
-                    etw_after=etw_after,
-                    etw_delta=etw_delta,
-                    utility_total=utility_total,
-                    utility_self=u_self,
-                    utility_opponent=u_opp,
-                    utility_special=u_special,
-                    utility_attention=u_attention,
-                    expected_vp_gain=vp_inc,
-                    reasons_for=reasons_for,
-                    reasons_against=reasons_against,
+                    action=next_step, full_plan=actions, next_plan=next_plan,
+                    waiting_resources=waiting_resources, etb=etb, etw_before=etw_before, etw_after=etw_after,
+                    etw_delta=etw_delta, utility_total=utility_total, utility_self=u_self,
+                    utility_opponent=u_opp, utility_special=u_special, utility_attention=u_attention,
+                    expected_vp_gain=vp_inc, reasons_for=reasons_for, reasons_against=reasons_against,
                     metadata={
-                        "blocks_opponent": blocks_opponent,
-                        "improves_longest_road": improves_longest_road,
+                        "blocks_opponent": blocks_opponent, "improves_longest_road": improves_longest_road,
                         "improves_largest_army": improves_largest_army,
                     },
                 )
@@ -1093,12 +928,8 @@ class EtwEstimator:
         return explained
 
     def calculate_best_game_action_with_explanation(
-            self,
-            sim_game: SimGame,
-            player_number: PlayerNumber,
-            dev_played: bool,
-            ignore_affordability: bool = False,
-            ignore_opponents: bool = False,
+        self, sim_game: SimGame, player_number: PlayerNumber, dev_played: bool,
+        ignore_affordability: bool = False, ignore_opponents: bool = False,
     ) -> ActionExplanation:
         sim_player = sim_game.overlay.get_sim_player(player_number)
 
@@ -1107,89 +938,51 @@ class EtwEstimator:
         opponents_etw_before: Dict[PlayerNumber, float] = {}
         if not ignore_opponents:
             for opp in get_opponents(sim_game, player_number):
-                opponents_etw_before[opp.player_number] = self.estimated_time_to_win(
-                    opp.copy(), sim_game, False
-                )
+                opponents_etw_before[opp.player_number] = self.estimated_time_to_win(opp.copy(), sim_game, False)
 
         candidates = self._get_candidate_actions(sim_player, sim_game, dev_played)
         if not candidates:
             chosen = CandidateExplanation(
-                action=Action(ActionType.END_TURN),
-                full_plan=[Action(ActionType.END_TURN)],
-                next_plan=[],
-                waiting_resources={},
-                etw_before=etw_before,
-                etw_after=etw_before,
-                etw_delta=0.0,
-                utility_total=0.0,
-                reasons_for=[],
+                action=Action(ActionType.END_TURN), full_plan=[Action(ActionType.END_TURN)],
+                next_plan=[], waiting_resources={}, etw_before=etw_before, etw_after=etw_before,
+                etw_delta=0.0, utility_total=0.0, reasons_for=[],
             )
             return ActionExplanation(
-                chosen_action=chosen.action,
-                chosen_candidate=chosen,
-                alternatives=[],
-                confidence=0.0,
-                confidence_label="low",
-                assumptions=[AssumptionCode.NO_CANDIDATE_ACTION],
+                chosen_action=chosen.action, chosen_candidate=chosen, alternatives=[], confidence=0.0,
+                confidence_label="low", assumptions=[AssumptionCode.NO_CANDIDATE_ACTION],
             )
 
         explained_candidates = self.evaluate_candidates_with_explanations(
-            sim_player,
-            sim_game,
-            dev_played,
-            candidates,
-            etw_before,
-            opponents_etw_before,
+            sim_player, sim_game, dev_played, candidates, etw_before, opponents_etw_before,
         )
 
         if not explained_candidates:
-            next_plan, waiting_resources = self._future_plan_fields(sim_player, candidates[0][0]) if (
-                candidates) else ([], {})
+            next_plan, waiting_resources = (
+                self._future_plan_fields(sim_player, candidates[0][0]) if candidates else ([], {})
+            )
             chosen = CandidateExplanation(
-                action=Action(ActionType.END_TURN),
-                full_plan=[Action(ActionType.END_TURN)],
-                next_plan=next_plan,
-                waiting_resources=waiting_resources,
-                etw_before=etw_before,
-                etw_after=etw_before,
-                etw_delta=0.0,
-                utility_total=0.0,
-                reasons_for=[],
+                action=Action(ActionType.END_TURN), full_plan=[Action(ActionType.END_TURN)],
+                next_plan=next_plan, waiting_resources=waiting_resources, etw_before=etw_before,
+                etw_after=etw_before, etw_delta=0.0, utility_total=0.0, reasons_for=[],
             )
             return ActionExplanation(
-                chosen_action=chosen.action,
-                chosen_candidate=chosen,
-                alternatives=[],
-                confidence=0.0,
-                confidence_label="low",
-                assumptions=[AssumptionCode.FILTERED_CANDIDATES],
+                chosen_action=chosen.action, chosen_candidate=chosen, alternatives=[], confidence=0.0,
+                confidence_label="low", assumptions=[AssumptionCode.FILTERED_CANDIDATES],
             )
 
         chosen_action, chosen_candidate = self._choose_max_utility_action_with_candidate(
-            sim_player,
-            sim_game,
-            explained_candidates,
-            ignore_affordability=ignore_affordability,
+            sim_player, sim_game, explained_candidates, ignore_affordability=ignore_affordability,
         )
 
-        alternatives = [
-                           c for c in explained_candidates
-                           if c.full_plan != chosen_candidate.full_plan
-                       ][:3]
+        alternatives = [c for c in explained_candidates if c.full_plan != chosen_candidate.full_plan][:3]
 
         confidence = 0.0
         if alternatives:
             confidence = max(0.0, chosen_candidate.utility_total - alternatives[0].utility_total)
 
         return ActionExplanation(
-            chosen_action=chosen_action,
-            chosen_candidate=chosen_candidate,
-            alternatives=alternatives,
-            confidence=confidence,
-            confidence_label=confidence_label(confidence),
-            assumptions=[
-                AssumptionCode.EXPECTED_PRODUCTION,
-                AssumptionCode.LEGALITY_AND_AFFORDABILITY,
-            ],
+            chosen_action=chosen_action, chosen_candidate=chosen_candidate, alternatives=alternatives,
+            confidence=confidence, confidence_label=confidence_label(confidence),
+            assumptions=[AssumptionCode.EXPECTED_PRODUCTION, AssumptionCode.LEGALITY_AND_AFFORDABILITY],
             metadata={"player_number": player_number, "etw_before": etw_before},
         )
