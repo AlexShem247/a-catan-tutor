@@ -47,9 +47,9 @@ class QtView(View):
         self.canvas.display_board(self.controller)
         self.window.display_resources(self.controller)
         self.window.display_round_info_ai_start(player, dice_info, msg)
-        delay = AI_DECISION_ANIMATION_DELAY if increase_delay else self.ai_decision_animation_delay
-        delay *= 3 if "\n" in msg else 1
-        ai_time_delay(delay)
+        # delay = AI_DECISION_ANIMATION_DELAY if increase_delay else self.ai_decision_animation_delay
+        # delay *= 3 if "\n" in msg else 1
+        ai_time_delay(self.ai_decision_animation_delay)
 
     def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False) -> Vertex:
         """Draws which vertices are selectable"""

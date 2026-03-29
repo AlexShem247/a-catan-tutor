@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Tuple
 
 from ai.ai_utils.actions import Action, ActionType
 from game.PlayerAssets import Buildable
+from game.PlayerAssets import DevelopmentCardType
 from game.Resources import ResourceCount
 
 
@@ -181,7 +182,7 @@ class ActionExplanation:
         if action.type == ActionType.PLAY_DEV_CARD:
             payload = action.payload
             if hasattr(payload, "name"):
-                return f"play a {payload.name} card"
+                return f"play a {self._display_name(payload)} card"
             return "play a development card"
 
         if action.type == ActionType.TRADE_WITH_BANK:
@@ -211,6 +212,10 @@ class ActionExplanation:
 
         build_name = buildable.name.upper()
         return f"build a {self._highlight_buildable(build_name)}"
+
+    def _display_name(self, value: Any) -> str:
+        name = getattr(value, "name", str(value))
+        return name.replace("_", " ").title()
 
     def _bank_trade_text(self, action: Action) -> str:
         payload = action.payload
@@ -427,6 +432,10 @@ class ActionExplanation:
         return label[0].lower() + label[1:]
 
     def _final_benefit_text(self, candidate: CandidateExplanation) -> str:
+        card_benefit = self._development_card_benefit_text(candidate)
+        if card_benefit:
+            return card_benefit
+
         top_reasons = [
             reason for reason in self._sorted_reasons(candidate.reasons_for)
             if reason.type != ReasonType.REQUIRES_TRADE
@@ -449,6 +458,43 @@ class ActionExplanation:
             joined = ", ".join(reason_phrases[:-1]) + f", and {reason_phrases[-1]}"
 
         return f"This is strong because {joined}."
+
+    def _development_card_benefit_text(self, candidate: CandidateExplanation) -> str:
+        if candidate.action.type != ActionType.PLAY_DEV_CARD:
+            return ""
+
+        card_type = candidate.action.payload
+
+        if card_type == DevelopmentCardType.KNIGHT:
+            if any(reason.type == ReasonType.ADVANCES_LARGEST_ARMY for reason in candidate.reasons_for):
+                return (
+                    "This is strong because playing the Knight moves the robber now "
+                    "and strengthens your push toward Largest Army."
+                )
+            return (
+                "This is strong because playing the Knight moves the robber now and "
+                "adds to your army count for future Largest Army pressure."
+            )
+
+        if card_type == DevelopmentCardType.ROAD_BUILDING:
+            return (
+                "This is strong because Road Building creates an immediate two-road "
+                "swing and can open new expansion lines without spending resources."
+            )
+
+        if card_type == DevelopmentCardType.YEAR_OF_PLENTY:
+            return (
+                "This is strong because Year of Plenty turns the card into the exact "
+                "two resources you need right now."
+            )
+
+        if card_type == DevelopmentCardType.MONOPOLY:
+            return (
+                "This is strong because Monopoly can create a large resource swing if "
+                "opponents are holding the resource you call."
+            )
+
+        return ""
 
     def _reason_to_detail_phrase(self, reason: Reason) -> str:
         if reason.type == ReasonType.FASTEST_PROGRESS:

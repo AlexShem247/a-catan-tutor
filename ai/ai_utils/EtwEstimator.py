@@ -251,8 +251,7 @@ class EtwEstimator:
             etw += etb
 
             # Apply the full chosen plan step by step.
-            for step in actions:
-                self._simulate_step(sim_game_local, sim_player, step)
+            self._simulate_plan_until_win(sim_game_local, sim_player, actions)
 
             # Update points after the rollout step.
             points = sim_player.victory_points()
@@ -264,6 +263,18 @@ class EtwEstimator:
 
         player.etw_cache[cache_key] = etw
         return etw
+
+    def _simulate_plan_until_win(
+            self,
+            sim_game: SimGame,
+            player: SimPlayerState,
+            actions: List[Action],
+    ) -> None:
+        """Apply actions in order and stop immediately once the simulated player wins."""
+        for step in actions:
+            self._simulate_step(sim_game, player, step)
+            if player.victory_points() >= Game.VICTORY_POINTS_TO_WIN:
+                break
 
     def _calculate_deficits_and_excesses(
             self,
@@ -316,15 +327,21 @@ class EtwEstimator:
         deficits, _ = self._calculate_deficits_and_excesses(player.resources, total_resources)
         return {res: amount for res, amount in deficits.items() if amount > 0}
 
+    def _next_step_waiting_resources(self, player: SimPlayerState, actions: List[Action]) -> ResourceCount:
+        """Return the missing resources for the immediate next action in a deferred plan."""
+        if not actions:
+            return {}
+        return self._plan_waiting_resources(player, [actions[0]])
+
     def _future_plan_fields(
             self,
             player: SimPlayerState,
             actions: List[Action],
     ) -> Tuple[List[Action], ResourceCount]:
-        """Build the explanation fields that describe the deferred plan and its remaining cost."""
+        """Build the explanation fields that describe the deferred plan and next-step shortfall."""
         if not actions:
             return [], {}
-        return list(actions), self._plan_waiting_resources(player, actions)
+        return list(actions), self._next_step_waiting_resources(player, actions)
 
     def _planned_target_phrase(self, action: Action) -> str:
         if action.type == ActionType.BUILD:
@@ -359,6 +376,17 @@ class EtwEstimator:
             if final_step.type == ActionType.PLAY_DEV_CARD:
                 return "Sets up the planned card play relatively quickly"
             return "Gets to the planned follow-up relatively quickly"
+
+        if final_step.type == ActionType.PLAY_DEV_CARD:
+            card_type = getattr(final_step, "payload", None)
+            if card_type == DevelopmentCardType.KNIGHT:
+                return "Uses the Knight to move the robber and grow your army"
+            if card_type == DevelopmentCardType.ROAD_BUILDING:
+                return "Uses Road Building for an immediate two-road swing"
+            if card_type == DevelopmentCardType.YEAR_OF_PLENTY:
+                return "Uses Year of Plenty to take the exact 2 resources you need"
+            if card_type == DevelopmentCardType.MONOPOLY:
+                return "Uses Monopoly for a potentially large resource swing"
 
         return "Can be executed relatively quickly"
 
@@ -482,6 +510,8 @@ class EtwEstimator:
                     did_play_knight = True
 
                 self._simulate_step(sim_game_copy, player_copy, s)
+                if player_copy.victory_points() >= Game.VICTORY_POINTS_TO_WIN:
+                    break
 
             # Self utility: percent reduction in (approx) ETW after the rollout.
             etw_after = self.estimated_time_to_win(
@@ -914,6 +944,8 @@ class EtwEstimator:
                     did_play_knight = True
 
                 self._simulate_step(sim_game_copy, player_copy, s)
+                if player_copy.victory_points() >= Game.VICTORY_POINTS_TO_WIN:
+                    break
 
             etw_after = self.estimated_time_to_win(
                 player_copy,
