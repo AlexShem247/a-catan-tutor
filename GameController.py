@@ -150,8 +150,14 @@ class GameController:
                 else:
                     # AI can only respond if it has enough resources to give
                     if player.can_afford(buying):
-                        interested, counter = player.policy.respond_to_trade(
-                            player, self._game, selling_player, selling, buying)
+                        if self.game_mode == GameMode.GUIDED and isinstance(player.policy, RuleBasedAI):
+                            interested, counter, explanation = player.policy.respond_to_trade_with_explanation(
+                                player, self._game, selling_player, selling, buying)
+                            if explanation is not None:
+                                self.view.display_board_turn_explanations(player, None, explanation)
+                        else:
+                            interested, counter = player.policy.respond_to_trade(
+                                player, self._game, selling_player, selling, buying)
                     else:
                         interested, counter = False, None
 
@@ -399,8 +405,14 @@ class GameController:
                     ]
 
                     if affordable_offers:
-                        deal = player.policy.choose_trade_partner(player, self._game, selling, buying,
-                                                                  affordable_offers)
+                        if self.game_mode == GameMode.GUIDED and isinstance(player.policy, RuleBasedAI):
+                            deal, explanation = player.policy.choose_trade_partner_with_explanation(
+                                player, self._game, selling, buying, affordable_offers)
+                            if explanation is not None:
+                                self.view.display_board_turn_explanations(player, (d1, d2, total), explanation)
+                        else:
+                            deal = player.policy.choose_trade_partner(player, self._game, selling, buying,
+                                                                      affordable_offers)
                         if deal is not None:
                             buying_player, counter = deal
                             if counter is not None:

@@ -52,11 +52,20 @@ class ReasonLabel(Enum):
     INIT_ROAD_TO_SETTLEMENT = auto()
     INIT_ROAD_TO_BALANCE = auto()
     INIT_ROAD_FLEXIBLE = auto()
+    TRADE_PARTNER_BEST_ETW = auto()
+    TRADE_PARTNER_COUNTER_VALUE = auto()
+    TRADE_PARTNER_SAFE_OPPONENT = auto()
+    TRADE_RESPONSE_ACCEPT_VALUE = auto()
+    TRADE_RESPONSE_COUNTER_VALUE = auto()
+    TRADE_RESPONSE_REJECT_NO_GAIN = auto()
+    TRADE_RESPONSE_REJECT_RISK = auto()
 
 
 class ExplanationTemplate(Enum):
     INITIAL_SETTLEMENT = auto()
     INITIAL_ROAD = auto()
+    TRADE_PARTNER = auto()
+    TRADE_RESPONSE = auto()
 
 
 class RoadExplanationKind(Enum):
@@ -139,6 +148,10 @@ class ActionExplanation:
             return self._initial_settlement_concise()
         if template == ExplanationTemplate.INITIAL_ROAD:
             return self._initial_road_concise()
+        if template == ExplanationTemplate.TRADE_PARTNER:
+            return self._trade_partner_concise()
+        if template == ExplanationTemplate.TRADE_RESPONSE:
+            return self._trade_response_concise()
 
         action_text = capitalise(self._action_to_text(self.chosen_candidate.action, short=True))
         if self.chosen_candidate.action.type == ActionType.END_TURN and self.chosen_candidate.next_plan:
@@ -155,6 +168,10 @@ class ActionExplanation:
             return self._initial_settlement_detail()
         if template == ExplanationTemplate.INITIAL_ROAD:
             return self._initial_road_detail()
+        if template == ExplanationTemplate.TRADE_PARTNER:
+            return self._trade_partner_detail()
+        if template == ExplanationTemplate.TRADE_RESPONSE:
+            return self._trade_response_detail()
 
         candidate = self.chosen_candidate
         plan = candidate.full_plan
@@ -325,6 +342,88 @@ class ActionExplanation:
                     f"{self._vertex_intersection_text(target_vertex)} settlement spot.")
         return "Place your road where it keeps your opening flexible."
 
+    def _trade_partner_concise(self) -> Tuple[str, str]:
+        partner_name = self.chosen_candidate.metadata.get("partner_name", "this player")
+        payment = self.chosen_candidate.metadata.get("payment")
+        buying = self.chosen_candidate.metadata.get("buying")
+        exchange = self._trade_exchange_text(payment, buying)
+        if exchange:
+            return "Choose This Trade Partner", f"Trade with {partner_name}: {exchange}."
+        return "Choose This Trade Partner", f"Trade with {partner_name}."
+
+    def _trade_partner_detail(self) -> str:
+        partner_name = self.chosen_candidate.metadata.get("partner_name", "this player")
+        payment = self.chosen_candidate.metadata.get("payment")
+        buying = self.chosen_candidate.metadata.get("buying")
+        if self.alternatives:
+            opening = f"The best trade partner is {partner_name}."
+        else:
+            opening = f"Trade with {partner_name}."
+        exchange = self._trade_exchange_text(payment, buying)
+        if exchange:
+            opening += f" The trade would be {exchange}."
+
+        reasons = self._trade_detail_sentence_from_reasons(self.chosen_candidate.reasons_for)
+        parts = [opening, reasons]
+        return "<br><br>".join(part for part in parts if part)
+
+    def _trade_response_concise(self) -> Tuple[str, str]:
+        decision = self.chosen_candidate.metadata.get("decision")
+        opponent_name = self.chosen_candidate.metadata.get("opponent_name", "the other player")
+        offered = self.chosen_candidate.metadata.get("selling_to_us")
+        requested = self.chosen_candidate.metadata.get("payment")
+
+        if decision == "accept":
+            exchange = self._trade_exchange_text(requested, offered)
+            return "Accept This Trade", f"Accept {opponent_name}'s trade: {exchange}."
+        if decision == "counter":
+            counter_payment = self.chosen_candidate.metadata.get("counter_payment")
+            exchange = self._trade_exchange_text(counter_payment, offered)
+            return "Counter This Trade", f"Counter {opponent_name} with {exchange}."
+        return "Reject This Trade", f"Reject {opponent_name}'s offer."
+
+    def _trade_response_detail(self) -> str:
+        decision = self.chosen_candidate.metadata.get("decision")
+        opponent_name = self.chosen_candidate.metadata.get("opponent_name", "the other player")
+        offered = self.chosen_candidate.metadata.get("selling_to_us")
+        requested = self.chosen_candidate.metadata.get("payment")
+        counter_payment = self.chosen_candidate.metadata.get("counter_payment")
+
+        if decision == "accept":
+            opening = f"Accept the trade from {opponent_name}."
+            exchange = self._trade_exchange_text(requested, offered)
+            if exchange:
+                opening += f" The exchange is {exchange}."
+        elif decision == "counter":
+            opening = f"Counter the trade from {opponent_name}."
+            if counter_payment:
+                exchange = self._trade_exchange_text(counter_payment, offered)
+                opening += f" Ask for {exchange} instead."
+        else:
+            opening = f"Reject the trade from {opponent_name}."
+            exchange = self._trade_exchange_text(requested, offered)
+            if exchange:
+                opening += f" The offered exchange is {exchange}."
+
+        reasons = self._trade_detail_sentence_from_reasons(self.chosen_candidate.reasons_for)
+        parts = [opening, reasons]
+        return "<br><br>".join(part for part in parts if part)
+
+    def _trade_detail_sentence_from_reasons(self, reasons: List[Reason]) -> str:
+        if not reasons:
+            return "This is the best trade available here."
+        phrases = [self._reason_to_detail_phrase(reason) for reason in reasons[:3]]
+        phrases = [phrase for phrase in phrases if phrase]
+        if not phrases:
+            return "This is the best trade available here."
+        if len(phrases) == 1:
+            joined = phrases[0]
+        elif len(phrases) == 2:
+            joined = f"{phrases[0]} and {phrases[1]}"
+        else:
+            joined = ", ".join(phrases[:-1]) + f", and {phrases[-1]}"
+        return f"This is better because {joined}."
+
     def _vertex_intersection_text(self, vertex: Any) -> str:
         if vertex is None or not getattr(vertex, "hexes", None):
             return "the available tiles"
@@ -426,6 +525,17 @@ class ActionExplanation:
         if len(parts) == 2:
             return f"{parts[0]} and {parts[1]}"
         return ", ".join(parts[:-1]) + f", and {parts[-1]}"
+
+    def _trade_exchange_text(self, payment: Dict[Any, int], buying: Dict[Any, int]) -> str:
+        pay_text = self._resource_count_text(payment)
+        receive_text = self._resource_count_text(buying)
+        if pay_text and receive_text:
+            return f"give {pay_text} for {receive_text}"
+        if receive_text:
+            return f"receive {receive_text}"
+        if pay_text:
+            return f"give {pay_text}"
+        return ""
 
     def _position_text(self, pos: Any) -> str:
         if pos is None:
@@ -662,6 +772,20 @@ class ActionExplanation:
             return "it points your network toward more balanced future resources"
         if label == ReasonLabel.INIT_ROAD_FLEXIBLE:
             return "it keeps your road network flexible"
+        if label == ReasonLabel.TRADE_PARTNER_BEST_ETW:
+            return "it gives the strongest trade improvement for your position"
+        if label == ReasonLabel.TRADE_PARTNER_COUNTER_VALUE:
+            return "the counter-offer keeps more of your own resources while staying worthwhile"
+        if label == ReasonLabel.TRADE_PARTNER_SAFE_OPPONENT:
+            return "it avoids giving too much help to a dangerous opponent"
+        if label == ReasonLabel.TRADE_RESPONSE_ACCEPT_VALUE:
+            return "it improves your plan more than refusing the trade"
+        if label == ReasonLabel.TRADE_RESPONSE_COUNTER_VALUE:
+            return "a smaller payment keeps the trade useful without giving away too much"
+        if label == ReasonLabel.TRADE_RESPONSE_REJECT_NO_GAIN:
+            return "waiting is better than accepting this trade as offered"
+        if label == ReasonLabel.TRADE_RESPONSE_REJECT_RISK:
+            return "the trade helps a dangerous opponent too much"
 
         return str(label)
 
@@ -741,6 +865,13 @@ class ActionExplanation:
                 ReasonLabel.INIT_ROAD_TO_SETTLEMENT,
                 ReasonLabel.INIT_ROAD_TO_BALANCE,
                 ReasonLabel.INIT_ROAD_FLEXIBLE,
+                ReasonLabel.TRADE_PARTNER_BEST_ETW,
+                ReasonLabel.TRADE_PARTNER_COUNTER_VALUE,
+                ReasonLabel.TRADE_PARTNER_SAFE_OPPONENT,
+                ReasonLabel.TRADE_RESPONSE_ACCEPT_VALUE,
+                ReasonLabel.TRADE_RESPONSE_COUNTER_VALUE,
+                ReasonLabel.TRADE_RESPONSE_REJECT_NO_GAIN,
+                ReasonLabel.TRADE_RESPONSE_REJECT_RISK,
         ):
             return self._normalise_reason_label(self._reason_label_text(reason))
 

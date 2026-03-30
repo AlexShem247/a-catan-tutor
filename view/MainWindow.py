@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 )
 
 from GameController import GameController
-from ai.ai_utils.explanations import ActionExplanation
+from ai.ai_utils.explanations import ActionExplanation, ExplanationTemplate
 from game.Edge import Edge
 from game.Player import PlayerNumber, Player
 from game.PlayerAssets import Buildable, DevelopmentCardType, DevelopmentCard
@@ -79,6 +79,7 @@ class MainWindow(QMainWindow):
         self.safe_connect(self.main_menu.help_btn, self.show_rules)
 
         self.verticalSpacer = self.find_last_vertical_spacer()
+        self.active_trade_preview_widget: QWidget | None = None
         self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(True))
 
     def safe_connect(self, button: QToolButton | QPushButton, slot: Callable):
@@ -303,6 +304,86 @@ class MainWindow(QMainWindow):
         self.safe_connect(self.tutor_menu.explain_btn, toggle_explanation_detail)
 
         self.canvas.render_planned_builds(explanation.get_visual_build_plan())
+        self.display_trade_preview(explanation)
+
+    def clear_trade_preview(self):
+        if self.active_trade_preview_widget is None:
+            return
+
+        self.main_menu.action_btn_layout.removeWidget(self.active_trade_preview_widget)
+        self.active_trade_preview_widget.setParent(None)
+        self.active_trade_preview_widget = None
+        self.restore_spacer()
+
+    def display_trade_preview(self, explanation: ActionExplanation):
+        self.clear_trade_preview()
+
+        template = explanation.metadata.get("template") or explanation.chosen_candidate.metadata.get("template")
+        if template == ExplanationTemplate.TRADE_PARTNER:
+            self._display_trade_partner_preview(explanation)
+        elif template == ExplanationTemplate.TRADE_RESPONSE:
+            self._display_trade_response_preview(explanation)
+
+    def _display_trade_partner_preview(self, explanation: ActionExplanation):
+        partner_name = explanation.chosen_candidate.metadata.get("partner_name", "player")
+        payment = explanation.chosen_candidate.metadata.get("payment", {})
+        buying = explanation.chosen_candidate.metadata.get("buying", {})
+
+        select_trade = self.select_trade_widget
+        select_trade.setParent(self.main_menu)
+        self.minimise_spacer()
+        self.main_menu.action_btn_layout.addWidget(select_trade)
+        self.active_trade_preview_widget = select_trade
+
+        self.main_menu.action_label.setText(f"Selected Trade for {format_counter_offer(buying, buying)}:")
+        select_trade.trade_list.clear()
+        select_trade.trade_list.show()
+        select_trade.submit_btn.hide()
+
+        item = QListWidgetItem(f"Trade {partner_name}: {format_counter_offer(payment, payment)}")
+        item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+        select_trade.trade_list.addItem(item)
+        select_trade.trade_list.setCurrentRow(0)
+        select_trade.trade_list.setEnabled(False)
+
+    def _display_trade_response_preview(self, explanation: ActionExplanation):
+        trade_manager = self.trade_manager_widget
+        trade_manager.setParent(self.main_menu)
+        self.minimise_spacer()
+        self.main_menu.action_btn_layout.addWidget(trade_manager)
+        self.active_trade_preview_widget = trade_manager
+
+        decision = explanation.chosen_candidate.metadata.get("decision")
+        opponent_name = explanation.chosen_candidate.metadata.get("opponent_name", "player")
+        requested = explanation.chosen_candidate.metadata.get("payment", {})
+        original_offer = explanation.chosen_candidate.metadata.get("selling_to_us", {})
+        counter_offer = explanation.chosen_candidate.metadata.get("counter_payment")
+        shown_offer = counter_offer if decision == "counter" and counter_offer is not None else original_offer
+
+        self.main_menu.main_label.setText(f"Trade Offer from {opponent_name}")
+        self.main_menu.action_label.setText(
+            f"{opponent_name} is buying {format_counter_offer(requested, requested)} for:"
+        )
+
+        for res in Resource:
+            getattr(trade_manager, f"{res.name.lower()}_quantity").setText(str(shown_offer.get(res, 0)))
+            getattr(trade_manager, f"{res.name.lower()}_quantity_dec").setEnabled(False)
+            getattr(trade_manager, f"{res.name.lower()}_quantity_inc").setEnabled(False)
+
+        trade_manager.accept_btn.show()
+        trade_manager.decline_btn.show()
+        trade_manager.accept_btn.setEnabled(False)
+        trade_manager.decline_btn.setEnabled(False)
+
+        if decision == "accept":
+            trade_manager.accept_btn.setText("Accepted")
+            trade_manager.decline_btn.hide()
+        elif decision == "counter":
+            trade_manager.accept_btn.setText("Counteroffer")
+            trade_manager.decline_btn.hide()
+        else:
+            trade_manager.decline_btn.setText("Rejected")
+            trade_manager.accept_btn.hide()
 
     def create_quantity_handlers(
             self,
@@ -444,12 +525,14 @@ class MainWindow(QMainWindow):
                                buying: ResourceCount, willing_players: List[Tuple[Player, ResourceCount | None]],
                                back_action):
         self.display_resources(controller)
+        self.clear_trade_preview()
         select_trade = self.select_trade_widget
         select_trade.setParent(self.main_menu)
 
         # Disable main action buttons and show the trade selector
         self.main_menu.action_btn_layout.addWidget(select_trade)
         select_trade.trade_list.clear()
+        select_trade.trade_list.setEnabled(True)
         self.main_menu.action_label.show()
 
         # Case 1: no players are willing to trade
@@ -469,6 +552,7 @@ class MainWindow(QMainWindow):
         # Case 2: show available trade offers
         self.main_menu.action_label.setText(f"Available Trades for {format_counter_offer(buying, buying)}:")
         select_trade.submit_btn.setText("Cancel")
+        select_trade.submit_btn.show()
         select_trade.trade_list.show()
 
         # Populate the list with trade offers
@@ -533,6 +617,7 @@ class MainWindow(QMainWindow):
         self.safe_connect(select_trade.submit_btn, cancel)
 
     def display_round_info_ai_start(self, player: Player, dice_info: Optional[Tuple[int, int, int]], msg: str):
+        self.clear_trade_preview()
         if dice_info:
             d1, d2, total = dice_info
             self.main_menu.main_label.setText(f"Dice rolled: {d1} + {d2} = {total}")
@@ -605,6 +690,7 @@ class MainWindow(QMainWindow):
     def display_trade_manager(self, player: Player, selling: ResourceCount,
                               buying: ResourceCount, selling_player: Player):
 
+        self.clear_trade_preview()
         trade_manager = self.trade_manager_widget
         trade_manager.setParent(self.main_menu)
 
@@ -624,6 +710,8 @@ class MainWindow(QMainWindow):
         self.main_menu.action_label.setText(
             f"{selling_player.name} is buying {format_counter_offer(buying, buying)} for:"
         )
+        trade_manager.accept_btn.show()
+        trade_manager.decline_btn.show()
 
         counter_offer = {res: selling.get(res, 0) for res in Resource}
 
