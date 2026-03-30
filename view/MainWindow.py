@@ -323,6 +323,10 @@ class MainWindow(QMainWindow):
             self._display_trade_partner_preview(explanation)
         elif template == ExplanationTemplate.TRADE_RESPONSE:
             self._display_trade_response_preview(explanation)
+        elif template == ExplanationTemplate.ROBBER_TARGET:
+            self._display_robber_preview(explanation)
+        elif template == ExplanationTemplate.DISCARD_RESOURCES:
+            self._display_discard_preview(explanation)
 
     def _display_trade_partner_preview(self, explanation: ActionExplanation):
         partner_name = explanation.chosen_candidate.metadata.get("partner_name", "player")
@@ -384,6 +388,38 @@ class MainWindow(QMainWindow):
         else:
             trade_manager.decline_btn.setText("Rejected")
             trade_manager.accept_btn.hide()
+
+    def _display_robber_preview(self, explanation: ActionExplanation):
+        target_player = explanation.chosen_candidate.metadata.get("target_player_name")
+        self.main_menu.main_label.setText("Move The Robber")
+        if target_player:
+            self.main_menu.action_label.setText(
+                f"Move the robber to the highlighted tile and steal from {target_player} if possible."
+            )
+        else:
+            self.main_menu.action_label.setText("Move the robber to the highlighted tile.")
+
+    def _display_discard_preview(self, explanation: ActionExplanation):
+        discard = explanation.chosen_candidate.metadata.get("discard_resources", {})
+        total_to_discard = sum(discard.values())
+
+        chooser = self.resource_selector_widget
+        chooser.setParent(self.main_menu)
+        self.minimise_spacer()
+        self.main_menu.action_btn_layout.addWidget(chooser)
+        self.active_trade_preview_widget = chooser
+
+        self.main_menu.main_label.setText("The Robber Has Been Rolled!")
+        self.main_menu.action_label.setText(
+            f"Discard {total_to_discard} resource{'s' if total_to_discard != 1 else ''}."
+        )
+
+        for res in Resource:
+            getattr(chooser, f"{res.name.lower()}_quantity").setText(str(discard.get(res, 0)))
+            getattr(chooser, f"{res.name.lower()}_quantity_dec").setEnabled(False)
+            getattr(chooser, f"{res.name.lower()}_quantity_inc").setEnabled(False)
+
+        chooser.submit_btn.hide()
 
     def create_quantity_handlers(
             self,
@@ -636,6 +672,7 @@ class MainWindow(QMainWindow):
 
     def show_resource_chooser(self, player, num_resources: int, title: str,
                               resource_caps: ResourceCount | None = None):
+        self.clear_trade_preview()
 
         selection_widget = self.resource_selector_widget
         selection_widget.setParent(self.main_menu)
@@ -661,6 +698,7 @@ class MainWindow(QMainWindow):
 
         self.toggle_main_action_btns(False)
         self.main_menu.action_btn_layout.addWidget(selection_widget)
+        selection_widget.submit_btn.show()
 
         def update_labels():
             total_remaining = num_resources - sum(chosen.values())

@@ -402,3 +402,9 @@ class SquareCanvas(QWidget):
                     x, y, VERTEX_SIZE * 4, VERTEX_SIZE * 4,
                     self.icons[CITY_OUTLINE], payload=(buildable, position)
                 ))
+            elif buildable == "ROBBER_HEX" and isinstance(position, HexTile):
+                x, y = hex_center(position.q, position.r, cx, cy, HEX_TILE_RADIUS)
+                self.add_shape(InteractiveCircle(
+                    x, y, HEX_TILE_RADIUS * 0.4, PLAN_OUTLINE_COLOR,
+                    outline_color=OUTLINE_COLOR, payload=(buildable, position)
+                ))

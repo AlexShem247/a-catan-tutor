@@ -59,6 +59,11 @@ class ReasonLabel(Enum):
     TRADE_RESPONSE_COUNTER_VALUE = auto()
     TRADE_RESPONSE_REJECT_NO_GAIN = auto()
     TRADE_RESPONSE_REJECT_RISK = auto()
+    ROBBER_BLOCKS_KEY_HEX = auto()
+    ROBBER_TARGETS_THREAT = auto()
+    ROBBER_AVOIDS_OWN_HEX = auto()
+    DISCARD_PROTECTS_PLAN = auto()
+    DISCARD_USES_SURPLUS = auto()
 
 
 class ExplanationTemplate(Enum):
@@ -66,6 +71,8 @@ class ExplanationTemplate(Enum):
     INITIAL_ROAD = auto()
     TRADE_PARTNER = auto()
     TRADE_RESPONSE = auto()
+    ROBBER_TARGET = auto()
+    DISCARD_RESOURCES = auto()
 
 
 class RoadExplanationKind(Enum):
@@ -152,6 +159,10 @@ class ActionExplanation:
             return self._trade_partner_concise()
         if template == ExplanationTemplate.TRADE_RESPONSE:
             return self._trade_response_concise()
+        if template == ExplanationTemplate.ROBBER_TARGET:
+            return self._robber_target_concise()
+        if template == ExplanationTemplate.DISCARD_RESOURCES:
+            return self._discard_resources_concise()
 
         action_text = capitalise(self._action_to_text(self.chosen_candidate.action, short=True))
         if self.chosen_candidate.action.type == ActionType.END_TURN and self.chosen_candidate.next_plan:
@@ -172,6 +183,10 @@ class ActionExplanation:
             return self._trade_partner_detail()
         if template == ExplanationTemplate.TRADE_RESPONSE:
             return self._trade_response_detail()
+        if template == ExplanationTemplate.ROBBER_TARGET:
+            return self._robber_target_detail()
+        if template == ExplanationTemplate.DISCARD_RESOURCES:
+            return self._discard_resources_detail()
 
         candidate = self.chosen_candidate
         plan = candidate.full_plan
@@ -423,6 +438,91 @@ class ActionExplanation:
         else:
             joined = ", ".join(phrases[:-1]) + f", and {phrases[-1]}"
         return f"This is better because {joined}."
+
+    def _robber_target_concise(self) -> Tuple[str, str]:
+        target_player = self.chosen_candidate.metadata.get("target_player_name")
+        if target_player:
+            return "Move The Robber Here", f"Move the robber to this tile and steal from {target_player} if possible."
+        return "Move The Robber Here", "Move the robber to this tile."
+
+    def _robber_target_detail(self) -> str:
+        parts = []
+        target_player = self.chosen_candidate.metadata.get("target_player_name")
+        if target_player:
+            parts.append(f"Move the robber to the highlighted tile and target {target_player} if possible.")
+        else:
+            parts.append("Move the robber to the highlighted tile.")
+        parts.append(self._detail_sentence_from_reasons(self.chosen_candidate.reasons_for))
+        return "<br><br>".join(part for part in parts if part)
+
+    def _discard_resources_concise(self) -> Tuple[str, str]:
+        discard = self.chosen_candidate.metadata.get("discard_resources", {})
+        discard_text = self._resource_count_text(discard)
+        if discard_text:
+            return "Discard These Resources", f"Discard {discard_text}."
+        return "Discard These Resources", "Discard the highlighted resources."
+
+    def _discard_resources_detail(self) -> str:
+        discard = self.chosen_candidate.metadata.get("discard_resources", {})
+        discard_text = self._resource_count_text(discard)
+        protected_plan = self._discard_protected_plan_text()
+        parts = []
+        if discard_text:
+            parts.append(f"Discard {discard_text}.")
+        else:
+            parts.append("Discard the highlighted resources.")
+        if protected_plan:
+            parts.append(protected_plan)
+        parts.append(self._detail_sentence_from_reasons(self.chosen_candidate.reasons_for))
+        return "<br><br>".join(part for part in parts if part)
+
+    def _discard_protected_plan_text(self) -> str:
+        protected_action = self.chosen_candidate.metadata.get("protected_action")
+        if not isinstance(protected_action, Action):
+            return ""
+
+        if protected_action.type in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER):
+            trade_target_resources = self.chosen_candidate.metadata.get("trade_target_resources", [])
+            trade_follow_up_action = self.chosen_candidate.metadata.get("trade_follow_up_action")
+            resource_text = self._resource_list_text(trade_target_resources)
+            if isinstance(trade_follow_up_action, Action):
+                follow_up_text = self._discard_follow_up_text(trade_follow_up_action)
+                if resource_text and follow_up_text:
+                    return (f"This keeps your plan to trade for {resource_text} available "
+                            f"so you can work toward {follow_up_text}.")
+            if resource_text:
+                return f"This keeps your plan to trade for {resource_text} available."
+
+        next_text = self._discard_follow_up_text(protected_action)
+        if next_text:
+            return f"This keeps your stronger follow-up plan available: {next_text}."
+        return ""
+
+    def _discard_follow_up_text(self, action: Action) -> str:
+        if action.type == ActionType.BUILD and isinstance(action.payload, tuple) and len(action.payload) >= 1:
+            buildable = action.payload[0]
+            if hasattr(buildable, "name"):
+                article = "an" if buildable.name.lower()[0] in "aeiou" else "a"
+                return f"the next thing we want to build: {article} {buildable.name.lower()}"
+        if action.type == ActionType.BUY_DEV_CARD:
+            return "the next thing we want to do: buy a development card"
+        if action.type == ActionType.PLAY_DEV_CARD:
+            return "the next thing we want to do: play a development card"
+        if action.type == ActionType.TRADE_WITH_BANK:
+            return "the next thing we want to do: make a bank trade"
+        if action.type == ActionType.TRADE_WITH_PLAYER:
+            return "the next thing we want to do: make a player trade"
+        return "the next thing we want to do"
+
+    def _resource_list_text(self, resources: List[Any]) -> str:
+        names = [f"<b>{getattr(resource, 'name', str(resource)).upper()}</b>" for resource in resources]
+        if not names:
+            return ""
+        if len(names) == 1:
+            return names[0]
+        if len(names) == 2:
+            return f"{names[0]} and {names[1]}"
+        return ", ".join(names[:-1]) + f", and {names[-1]}"
 
     def _vertex_intersection_text(self, vertex: Any) -> str:
         if vertex is None or not getattr(vertex, "hexes", None):
@@ -786,6 +886,16 @@ class ActionExplanation:
             return "waiting is better than accepting this trade as offered"
         if label == ReasonLabel.TRADE_RESPONSE_REJECT_RISK:
             return "the trade helps a dangerous opponent too much"
+        if label == ReasonLabel.ROBBER_BLOCKS_KEY_HEX:
+            return "it blocks an important opposing resource tile"
+        if label == ReasonLabel.ROBBER_TARGETS_THREAT:
+            return "it pressures the most dangerous opponent on that tile"
+        if label == ReasonLabel.ROBBER_AVOIDS_OWN_HEX:
+            return "it avoids hurting your own production more than necessary"
+        if label == ReasonLabel.DISCARD_PROTECTS_PLAN:
+            return "it protects the resources needed for your best next plan"
+        if label == ReasonLabel.DISCARD_USES_SURPLUS:
+            return "it throws away surplus resources first"
 
         return str(label)
 
@@ -872,6 +982,11 @@ class ActionExplanation:
                 ReasonLabel.TRADE_RESPONSE_COUNTER_VALUE,
                 ReasonLabel.TRADE_RESPONSE_REJECT_NO_GAIN,
                 ReasonLabel.TRADE_RESPONSE_REJECT_RISK,
+                ReasonLabel.ROBBER_BLOCKS_KEY_HEX,
+                ReasonLabel.ROBBER_TARGETS_THREAT,
+                ReasonLabel.ROBBER_AVOIDS_OWN_HEX,
+                ReasonLabel.DISCARD_PROTECTS_PLAN,
+                ReasonLabel.DISCARD_USES_SURPLUS,
         ):
             return self._normalise_reason_label(self._reason_label_text(reason))
 

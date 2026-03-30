@@ -292,8 +292,16 @@ class RuleBasedAI(AI):
     def select_robber_target(
             self, player: Player, game: Game, valid_hexes: List[HexTile]) -> Tuple[HexTile, Optional[Player]]:
         """Select which hex tile to place the robber on, prioritising opponents' resources."""
+        tile, steal_from, _ = self.select_robber_target_with_explanation(player, game, valid_hexes)
+        return tile, steal_from
+
+    def select_robber_target_with_explanation(
+            self, player: Player, game: Game,
+            valid_hexes: List[HexTile]) -> Tuple[HexTile, Optional[Player], Optional[ActionExplanation]]:
+        """Select robber placement and return a structured explanation."""
         best_score = float("-inf")
         best_hex: Optional[HexTile] = None
+        second_best_score = float("-inf")
 
         # Used to avoid blocking ourselves unless it's clearly worth it.
         our_resource_tiles = {h for v in (player.settlements + player.cities) for h in v.hexes}
@@ -341,29 +349,44 @@ class RuleBasedAI(AI):
                 score *= StrategyWeights.ROBBER_OWN_HEX_PENALTY
 
             if score > best_score:
+                second_best_score = best_score
                 best_score = score
                 best_hex = h
+            elif score > second_best_score:
+                second_best_score = score
 
         # Fallback if no hex has opponents on it.
         if best_hex is None:
             best_hex = random.choice(valid_hexes)
+            second_best_score = best_score
 
         # Choose who to steal from on the chosen hex (more resources + more VP = better target).
         players_on_best_hex = [p for p in game.get_players_on_hex(best_hex) if p != player]
         if not players_on_best_hex:
-            return best_hex, None
+            explanation = self._build_robber_explanation(
+                best_hex, None, best_score, second_best_score, best_hex in our_resource_tiles)
+            return best_hex, None, explanation
 
         best_player = max(players_on_best_hex, key=lambda pl: sum(pl.resources.values()) * pl.calc_victory_points()[0])
-        return best_hex, best_player
+        explanation = self._build_robber_explanation(
+            best_hex, best_player, best_score, second_best_score, best_hex in our_resource_tiles)
+        return best_hex, best_player, explanation
 
     def select_discard_resources(self, player: Player, game: Game, num_resources: int) -> ResourceCount:
         """Select resources to discard, keeping critical ones for best next action."""
+        discard, _ = self.select_discard_resources_with_explanation(player, game, num_resources)
+        return discard
+
+    def select_discard_resources_with_explanation(
+            self, player: Player, game: Game, num_resources: int) -> Tuple[ResourceCount, Optional[ActionExplanation]]:
+        """Select discard resources and return a structured explanation."""
         have = player.resources.copy()
 
         # Estimate what we are trying to build next and protect those resources.
         sim_game = make_sim_game_for_player(game, player)
-        best_action = self.etw_estimator.calculate_best_game_action(
+        best_plan_explanation = self.etw_estimator.calculate_best_game_action_with_explanation(
             sim_game=sim_game, player_number=player.player_number, dev_played=False)
+        best_action = best_plan_explanation.chosen_action
 
         needed = calc_step_resources(best_action)
 
@@ -384,7 +407,137 @@ class RuleBasedAI(AI):
 
             remaining -= 1
 
-        return discard
+        explanation = self._build_discard_explanation(discard, needed, best_plan_explanation)
+        return discard, explanation
+
+    def _build_robber_explanation(
+            self, hex_tile: HexTile, target_player: Optional[Player], best_score: float,
+            second_best_score: float, blocks_own_hex: bool) -> ActionExplanation:
+        reasons_for: List[Reason] = []
+        if best_score > float("-inf"):
+            reasons_for.append(Reason(
+                ReasonType.SLOWS_LEADING_OPPONENT, ReasonLabel.ROBBER_BLOCKS_KEY_HEX, max(0.0, best_score)))
+        if target_player is not None:
+            reasons_for.append(Reason(
+                ReasonType.SLOWS_LEADING_OPPONENT, ReasonLabel.ROBBER_TARGETS_THREAT,
+                float(target_player.calc_victory_points()[0])))
+        if not blocks_own_hex:
+            reasons_for.append(Reason(
+                ReasonType.HEURISTIC_CHOICE, ReasonLabel.ROBBER_AVOIDS_OWN_HEX, 1.0))
+
+        action = Action(ActionType.PLAY_DEV_CARD, "robber")
+        candidate = CandidateExplanation(
+            action=action,
+            full_plan=[action],
+            reasons_for=reasons_for,
+            metadata={
+                "template": ExplanationTemplate.ROBBER_TARGET,
+                "target_hex": hex_tile,
+                "target_player_name": target_player.name if target_player is not None else None,
+                "visual_plan": [("ROBBER_HEX", hex_tile)],
+            },
+        )
+        confidence = max(0.0, best_score - (second_best_score if second_best_score > float("-inf") else 0.0))
+        return ActionExplanation(
+            chosen_action=action,
+            chosen_candidate=candidate,
+            confidence=confidence,
+            confidence_label=confidence_label(confidence),
+            metadata={"template": ExplanationTemplate.ROBBER_TARGET},
+        )
+
+    def _build_discard_explanation(
+            self, discard: ResourceCount, needed: ResourceCount,
+            best_plan_explanation: ActionExplanation) -> ActionExplanation:
+        protected_resources = sum(min(needed.get(resource, 0), amount) for resource, amount in discard.items())
+        surplus_discarded = sum(discard.values()) - protected_resources
+        best_action = best_plan_explanation.chosen_action
+        plan_metadata = self._discard_plan_metadata(best_plan_explanation)
+        reasons_for = [
+            Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.DISCARD_PROTECTS_PLAN, float(sum(needed.values()))),
+            Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.DISCARD_USES_SURPLUS, float(max(0, surplus_discarded))),
+        ]
+        action = Action(ActionType.END_TURN, discard)
+        candidate = CandidateExplanation(
+            action=action,
+            full_plan=[action],
+            reasons_for=reasons_for,
+            metadata={
+                "template": ExplanationTemplate.DISCARD_RESOURCES,
+                "discard_resources": discard,
+                **plan_metadata,
+            },
+        )
+        return ActionExplanation(
+            chosen_action=action,
+            chosen_candidate=candidate,
+            confidence=float(sum(discard.values())),
+            confidence_label="medium",
+            metadata={"template": ExplanationTemplate.DISCARD_RESOURCES},
+        )
+
+    @staticmethod
+    def _discard_plan_metadata(explanation: ActionExplanation) -> Dict[str, object]:
+        action = explanation.chosen_action
+        protected_action = action
+        if action.type == ActionType.END_TURN and explanation.chosen_candidate.next_plan:
+            protected_action = explanation.chosen_candidate.next_plan[-1]
+
+        metadata: Dict[str, object] = {"protected_action": protected_action}
+
+        trade_action = None
+        if action.type in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER):
+            trade_action = action
+        elif action.type == ActionType.END_TURN and explanation.chosen_candidate.next_plan:
+            first_next = explanation.chosen_candidate.next_plan[0]
+            if first_next.type in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER):
+                trade_action = first_next
+
+        if trade_action is not None:
+            payload = trade_action.payload
+            if isinstance(payload, tuple) and len(payload) == 2:
+                _, buying = payload
+                target_resources = [resource for resource, amount in buying.items() if amount > 0]
+                if target_resources:
+                    metadata["trade_target_resources"] = target_resources
+
+                follow_up_action = protected_action if protected_action != trade_action else (
+                    RuleBasedAI._trade_follow_up_action_for_resources(target_resources)
+                )
+                if follow_up_action is not None:
+                    metadata["trade_follow_up_action"] = follow_up_action
+
+        return metadata
+
+    @staticmethod
+    def _trade_follow_up_action_for_resources(resources: List[Resource]) -> Optional[Action]:
+        resource_set = set(resources)
+
+        if Resource.ORE in resource_set and Resource.WHEAT in resource_set:
+            return Action(ActionType.BUILD, (Buildable.CITY, None))
+        if Resource.WOOD in resource_set and Resource.BRICK in resource_set and Resource.SHEEP in resource_set:
+            return Action(ActionType.BUILD, (Buildable.SETTLEMENT, None))
+        if Resource.ORE in resource_set and Resource.SHEEP in resource_set and Resource.WHEAT in resource_set:
+            return Action(ActionType.BUY_DEV_CARD)
+        if Resource.WOOD in resource_set and Resource.BRICK in resource_set:
+            return Action(ActionType.BUILD, (Buildable.ROAD, None))
+        return None
+
+    @staticmethod
+    def _action_summary_text(action: Action) -> str:
+        if action.type == ActionType.BUILD and isinstance(action.payload, tuple) and len(action.payload) >= 1:
+            buildable = action.payload[0]
+            if hasattr(buildable, "name"):
+                return f"build a {buildable.name.lower()}"
+        if action.type == ActionType.BUY_DEV_CARD:
+            return "buy a development card"
+        if action.type == ActionType.TRADE_WITH_BANK:
+            return "make a bank trade"
+        if action.type == ActionType.TRADE_WITH_PLAYER:
+            return "make a player trade"
+        if action.type == ActionType.PLAY_DEV_CARD:
+            return "play a development card"
+        return "take the next planned action"
 
     def select_year_of_plenty_resources(self, player: Player, game: Game) -> ResourceCount:
         """Select the most-needed resources for the player's next action."""

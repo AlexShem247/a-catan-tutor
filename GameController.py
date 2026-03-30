@@ -185,8 +185,14 @@ class GameController:
                     if p.is_human:
                         resources_to_discard = self.view.show_resource_chooser(
                             p, discard_count, "The robber has been rolled!", p.resources)
-                    elif player.policy is not None:
-                        resources_to_discard = player.policy.select_discard_resources(player, self._game, discard_count)
+                    elif p.policy is not None:
+                        if self.game_mode == GameMode.GUIDED and isinstance(p.policy, RuleBasedAI):
+                            resources_to_discard, explanation = p.policy.select_discard_resources_with_explanation(
+                                p, self._game, discard_count)
+                            if explanation is not None:
+                                self.view.display_board_turn_explanations(p, None, explanation)
+                        else:
+                            resources_to_discard = p.policy.select_discard_resources(p, self._game, discard_count)
                     p.remove_resources(resources_to_discard)
 
             # 2. Player who rolled dice can move robber and collect resources
@@ -228,7 +234,13 @@ class GameController:
                 hex_tile for hex_tile in self._game.get_all_hexes()
                 if not hex_tile.robber
             ]
-            tile, steal_from = player.policy.select_robber_target(player, self._game, valid_hexes)
+            if self.game_mode == GameMode.GUIDED and isinstance(player.policy, RuleBasedAI):
+                tile, steal_from, explanation = player.policy.select_robber_target_with_explanation(
+                    player, self._game, valid_hexes)
+                if explanation is not None:
+                    self.view.display_board_turn_explanations(player, None, explanation)
+            else:
+                tile, steal_from = player.policy.select_robber_target(player, self._game, valid_hexes)
 
         # Move the robber
         self._game.set_robber(tile)
