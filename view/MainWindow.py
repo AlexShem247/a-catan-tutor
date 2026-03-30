@@ -327,6 +327,10 @@ class MainWindow(QMainWindow):
             self._display_robber_preview(explanation)
         elif template == ExplanationTemplate.DISCARD_RESOURCES:
             self._display_discard_preview(explanation)
+        elif template == ExplanationTemplate.YEAR_OF_PLENTY_RESOURCES:
+            self._display_year_of_plenty_preview(explanation)
+        elif template == ExplanationTemplate.MONOPOLY_RESOURCE:
+            self._display_monopoly_preview(explanation)
 
     def _display_trade_partner_preview(self, explanation: ActionExplanation):
         partner_name = explanation.chosen_candidate.metadata.get("partner_name", "player")
@@ -416,6 +420,39 @@ class MainWindow(QMainWindow):
 
         for res in Resource:
             getattr(chooser, f"{res.name.lower()}_quantity").setText(str(discard.get(res, 0)))
+            getattr(chooser, f"{res.name.lower()}_quantity_dec").setEnabled(False)
+            getattr(chooser, f"{res.name.lower()}_quantity_inc").setEnabled(False)
+
+        chooser.submit_btn.hide()
+
+    def _display_year_of_plenty_preview(self, explanation: ActionExplanation):
+        selected = explanation.chosen_candidate.metadata.get("selected_resources", {})
+        self._display_resource_choice_preview(
+            "Year Of Plenty",
+            "Take the highlighted resources from the bank.",
+            selected,
+        )
+
+    def _display_monopoly_preview(self, explanation: ActionExplanation):
+        selected = explanation.chosen_candidate.metadata.get("selected_resources", {})
+        self._display_resource_choice_preview(
+            "Monopoly",
+            "Choose the highlighted resource to claim from the other players.",
+            selected,
+        )
+
+    def _display_resource_choice_preview(self, title: str, action_text: str, selected: ResourceCount):
+        chooser = self.resource_selector_widget
+        chooser.setParent(self.main_menu)
+        self.minimise_spacer()
+        self.main_menu.action_btn_layout.addWidget(chooser)
+        self.active_trade_preview_widget = chooser
+
+        self.main_menu.main_label.setText(title)
+        self.main_menu.action_label.setText(action_text)
+
+        for res in Resource:
+            getattr(chooser, f"{res.name.lower()}_quantity").setText(str(selected.get(res, 0)))
             getattr(chooser, f"{res.name.lower()}_quantity_dec").setEnabled(False)
             getattr(chooser, f"{res.name.lower()}_quantity_inc").setEnabled(False)
 

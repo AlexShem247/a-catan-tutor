@@ -299,7 +299,13 @@ class GameController:
                 resources = self.view.show_resource_chooser(
                     player, 2, "Year of Plenty: choose any two resources from the bank.", self._game.bank_resources)
             else:
-                resources = player.policy.select_year_of_plenty_resources(player, self._game)
+                if self.game_mode == GameMode.GUIDED and isinstance(player.policy, RuleBasedAI):
+                    resources, explanation = player.policy.select_year_of_plenty_resources_with_explanation(
+                        player, self._game)
+                    if explanation is not None:
+                        self.view.display_board_turn_explanations(player, None, explanation)
+                else:
+                    resources = player.policy.select_year_of_plenty_resources(player, self._game)
             player.add_resources(resources)
             resource_list = ", ".join(
                 f"{amt} {res.name.replace('_', ' ').title()}" for res, amt in resources.items() if amt > 0)
@@ -314,7 +320,13 @@ class GameController:
                 # Extract the single Resource enum
                 resource = next(iter(chosen.keys()))
             else:
-                resource = player.policy.select_monopoly_resource(player, self._game)
+                if self.game_mode == GameMode.GUIDED and isinstance(player.policy, RuleBasedAI):
+                    resource, explanation = player.policy.select_monopoly_resource_with_explanation(
+                        player, self._game)
+                    if explanation is not None:
+                        self.view.display_board_turn_explanations(player, None, explanation)
+                else:
+                    resource = player.policy.select_monopoly_resource(player, self._game)
             total_taken = 0
             for p in self._game.players:
                 if p == player:

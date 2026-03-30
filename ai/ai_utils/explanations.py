@@ -64,6 +64,11 @@ class ReasonLabel(Enum):
     ROBBER_AVOIDS_OWN_HEX = auto()
     DISCARD_PROTECTS_PLAN = auto()
     DISCARD_USES_SURPLUS = auto()
+    YOP_FILLS_SHORTFALL = auto()
+    YOP_SUPPORTS_FOLLOW_UP = auto()
+    YOP_FLEXIBLE_PICK = auto()
+    MONOPOLY_HIGHEST_DEMAND = auto()
+    MONOPOLY_FLEXIBLE_PICK = auto()
 
 
 class ExplanationTemplate(Enum):
@@ -73,6 +78,8 @@ class ExplanationTemplate(Enum):
     TRADE_RESPONSE = auto()
     ROBBER_TARGET = auto()
     DISCARD_RESOURCES = auto()
+    YEAR_OF_PLENTY_RESOURCES = auto()
+    MONOPOLY_RESOURCE = auto()
 
 
 class RoadExplanationKind(Enum):
@@ -163,6 +170,10 @@ class ActionExplanation:
             return self._robber_target_concise()
         if template == ExplanationTemplate.DISCARD_RESOURCES:
             return self._discard_resources_concise()
+        if template == ExplanationTemplate.YEAR_OF_PLENTY_RESOURCES:
+            return self._year_of_plenty_concise()
+        if template == ExplanationTemplate.MONOPOLY_RESOURCE:
+            return self._monopoly_resource_concise()
 
         action_text = capitalise(self._action_to_text(self.chosen_candidate.action, short=True))
         if self.chosen_candidate.action.type == ActionType.END_TURN and self.chosen_candidate.next_plan:
@@ -187,6 +198,10 @@ class ActionExplanation:
             return self._robber_target_detail()
         if template == ExplanationTemplate.DISCARD_RESOURCES:
             return self._discard_resources_detail()
+        if template == ExplanationTemplate.YEAR_OF_PLENTY_RESOURCES:
+            return self._year_of_plenty_detail()
+        if template == ExplanationTemplate.MONOPOLY_RESOURCE:
+            return self._monopoly_resource_detail()
 
         candidate = self.chosen_candidate
         plan = candidate.full_plan
@@ -476,6 +491,66 @@ class ActionExplanation:
         parts.append(self._detail_sentence_from_reasons(self.chosen_candidate.reasons_for))
         return "<br><br>".join(part for part in parts if part)
 
+    def _year_of_plenty_concise(self) -> Tuple[str, str]:
+        selected = self.chosen_candidate.metadata.get("selected_resources", {})
+        selected_text = self._resource_count_text(selected)
+        if selected_text:
+            return "Take These Resources", f"Take {selected_text} from the bank."
+        return "Take These Resources", "Take the highlighted resources from the bank."
+
+    def _year_of_plenty_detail(self) -> str:
+        selected = self.chosen_candidate.metadata.get("selected_resources", {})
+        selected_text = self._resource_count_text(selected)
+        primary_action = self.chosen_candidate.metadata.get("primary_action")
+        follow_up_action = self.chosen_candidate.metadata.get("follow_up_action")
+        supports_follow_up = bool(self.chosen_candidate.metadata.get("supports_follow_up"))
+        already_had_next_step = bool(self.chosen_candidate.metadata.get("already_had_next_step"))
+        parts = []
+        if selected_text:
+            parts.append(f"Take {selected_text} from the bank.")
+        else:
+            parts.append("Take the highlighted resources from the bank.")
+
+        primary_text = self._follow_up_action_text(primary_action)
+        follow_up_text = self._follow_up_action_text(follow_up_action)
+        if supports_follow_up and follow_up_text:
+            parts.append(f"This supports {follow_up_text}.")
+        elif already_had_next_step:
+            if primary_text and follow_up_text and primary_text != follow_up_text:
+                parts.append(
+                    f"We already have enough resources for {primary_text}. "
+                    f"These picks prepare {follow_up_text}."
+                )
+            elif primary_text:
+                parts.append(
+                    f"We already have enough resources for {primary_text}. "
+                    "These picks prepare what comes after that."
+                )
+            elif follow_up_text:
+                parts.append(
+                    "We already have enough resources for the next step. "
+                    f"These picks prepare {follow_up_text}."
+                )
+        elif follow_up_text:
+            parts.append(f"These resources work toward {follow_up_text}.")
+        else:
+            parts.append("These resources improve your resource balance for the next plan step.")
+
+        parts.append(self._detail_sentence_from_reasons(self.chosen_candidate.reasons_for))
+        return "<br><br>".join(part for part in parts if part)
+
+    def _monopoly_resource_concise(self) -> Tuple[str, str]:
+        selected_resource = self.chosen_candidate.metadata.get("selected_resource")
+        resource_name = getattr(selected_resource, "name", "resource").replace("_", " ").upper()
+        return "Choose This Resource", f"Choose <b>{resource_name}</b> for Monopoly."
+
+    def _monopoly_resource_detail(self) -> str:
+        selected_resource = self.chosen_candidate.metadata.get("selected_resource")
+        resource_name = getattr(selected_resource, "name", "resource").replace("_", " ").upper()
+        parts = [f"Choose <b>{resource_name}</b> as the Monopoly resource."]
+        parts.append(self._detail_sentence_from_reasons(self.chosen_candidate.reasons_for))
+        return "<br><br>".join(part for part in parts if part)
+
     def _discard_protected_plan_text(self) -> str:
         protected_action = self.chosen_candidate.metadata.get("protected_action")
         if not isinstance(protected_action, Action):
@@ -486,19 +561,21 @@ class ActionExplanation:
             trade_follow_up_action = self.chosen_candidate.metadata.get("trade_follow_up_action")
             resource_text = self._resource_list_text(trade_target_resources)
             if isinstance(trade_follow_up_action, Action):
-                follow_up_text = self._discard_follow_up_text(trade_follow_up_action)
+                follow_up_text = self._follow_up_action_text(trade_follow_up_action)
                 if resource_text and follow_up_text:
                     return (f"This keeps your plan to trade for {resource_text} available "
                             f"so you can work toward {follow_up_text}.")
             if resource_text:
                 return f"This keeps your plan to trade for {resource_text} available."
 
-        next_text = self._discard_follow_up_text(protected_action)
+        next_text = self._follow_up_action_text(protected_action)
         if next_text:
             return f"This keeps your stronger follow-up plan available: {next_text}."
         return ""
 
-    def _discard_follow_up_text(self, action: Action) -> str:
+    def _follow_up_action_text(self, action: Any) -> str:
+        if not isinstance(action, Action):
+            return ""
         if action.type == ActionType.BUILD and isinstance(action.payload, tuple) and len(action.payload) >= 1:
             buildable = action.payload[0]
             if hasattr(buildable, "name"):
@@ -896,6 +973,22 @@ class ActionExplanation:
             return "it protects the resources needed for your best next plan"
         if label == ReasonLabel.DISCARD_USES_SURPLUS:
             return "it throws away surplus resources first"
+        if label == ReasonLabel.YOP_FILLS_SHORTFALL:
+            return "it gives you the missing resources for your best next plan"
+        if label == ReasonLabel.YOP_SUPPORTS_FOLLOW_UP:
+            follow_up_action = metadata.get("follow_up_action")
+            follow_up_text = self._follow_up_action_text(follow_up_action)
+            if follow_up_text.startswith("the next thing we want to build: "):
+                return f"it moves you closer to {follow_up_text[len('the next thing we want to build: '):]}"
+            if follow_up_text:
+                return f"it supports {follow_up_text}"
+            return "it supports your next follow-up plan"
+        if label == ReasonLabel.YOP_FLEXIBLE_PICK:
+            return "there is no clear priority resource, so flexibility is more valuable here"
+        if label == ReasonLabel.MONOPOLY_HIGHEST_DEMAND:
+            return "it is the resource most opponents are likely to need next"
+        if label == ReasonLabel.MONOPOLY_FLEXIBLE_PICK:
+            return "no single resource stood out, so this is a flexible monopoly guess"
 
         return str(label)
 
@@ -987,6 +1080,11 @@ class ActionExplanation:
                 ReasonLabel.ROBBER_AVOIDS_OWN_HEX,
                 ReasonLabel.DISCARD_PROTECTS_PLAN,
                 ReasonLabel.DISCARD_USES_SURPLUS,
+                ReasonLabel.YOP_FILLS_SHORTFALL,
+                ReasonLabel.YOP_SUPPORTS_FOLLOW_UP,
+                ReasonLabel.YOP_FLEXIBLE_PICK,
+                ReasonLabel.MONOPOLY_HIGHEST_DEMAND,
+                ReasonLabel.MONOPOLY_FLEXIBLE_PICK,
         ):
             return self._normalise_reason_label(self._reason_label_text(reason))
 

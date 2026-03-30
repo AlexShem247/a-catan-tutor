@@ -23,7 +23,7 @@ from game.Edge import Edge
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player, PlayerNumber
-from game.PlayerAssets import Buildable
+from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import ResourceCount, Resource
 from game.Vertex import Vertex
 
@@ -451,7 +451,6 @@ class RuleBasedAI(AI):
             best_plan_explanation: ActionExplanation) -> ActionExplanation:
         protected_resources = sum(min(needed.get(resource, 0), amount) for resource, amount in discard.items())
         surplus_discarded = sum(discard.values()) - protected_resources
-        best_action = best_plan_explanation.chosen_action
         plan_metadata = self._discard_plan_metadata(best_plan_explanation)
         reasons_for = [
             Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.DISCARD_PROTECTS_PLAN, float(sum(needed.values()))),
@@ -479,9 +478,7 @@ class RuleBasedAI(AI):
     @staticmethod
     def _discard_plan_metadata(explanation: ActionExplanation) -> Dict[str, object]:
         action = explanation.chosen_action
-        protected_action = action
-        if action.type == ActionType.END_TURN and explanation.chosen_candidate.next_plan:
-            protected_action = explanation.chosen_candidate.next_plan[-1]
+        protected_action = RuleBasedAI._protected_follow_up_action_from_explanation(explanation)
 
         metadata: Dict[str, object] = {"protected_action": protected_action}
 
@@ -508,6 +505,15 @@ class RuleBasedAI(AI):
                     metadata["trade_follow_up_action"] = follow_up_action
 
         return metadata
+
+    @staticmethod
+    def _protected_follow_up_action_from_explanation(explanation: ActionExplanation) -> Action:
+        action = explanation.chosen_action
+        if action.type == ActionType.END_TURN and explanation.chosen_candidate.next_plan:
+            return explanation.chosen_candidate.next_plan[-1]
+        if explanation.chosen_candidate.full_plan and explanation.chosen_candidate.full_plan[-1] != action:
+            return explanation.chosen_candidate.full_plan[-1]
+        return action
 
     @staticmethod
     def _trade_follow_up_action_for_resources(resources: List[Resource]) -> Optional[Action]:
@@ -541,23 +547,60 @@ class RuleBasedAI(AI):
 
     def select_year_of_plenty_resources(self, player: Player, game: Game) -> ResourceCount:
         """Select the most-needed resources for the player's next action."""
-        # Look ahead to what we want to build next.
+        resources, _ = self.select_year_of_plenty_resources_with_explanation(player, game)
+        return resources
+
+    def select_year_of_plenty_resources_with_explanation(
+            self, player: Player, game: Game) -> Tuple[ResourceCount, Optional[ActionExplanation]]:
+        """Select Year of Plenty resources and return a structured explanation."""
         sim_game = make_sim_game_for_player(game, player)
-        best_action = self.etw_estimator.calculate_best_game_action(
+        best_plan_explanation = self.etw_estimator.calculate_best_game_action_with_explanation(
             sim_game=sim_game, player_number=player.player_number, dev_played=False)
+        primary_action, target_action, target_shortfalls, already_had_next_step = self._year_of_plenty_plan_target(
+            player, best_plan_explanation)
 
-        needed = calc_step_resources(best_action)
+        shortfall_priority: List[Resource] = []
+        for resource in Resource:
+            shortfall_priority.extend([resource] * target_shortfalls[resource])
 
-        # Rank resources by how short we are relative to the next action's cost.
-        sorted_needed = sorted(needed, key=lambda r: max(0, needed[r] - player.resources[r]), reverse=True)
+        if not shortfall_priority and target_action is not None:
+            target_cost = calc_step_resources(target_action)
+            for resource in Resource:
+                shortfall_priority.extend([resource] * target_cost.get(resource, 0))
 
-        # Take the two most constraining resources, fall back to anything if fewer are needed.
-        picked = sorted_needed[:2] + [r for r in Resource if r not in sorted_needed][: max(0, 2 - len(sorted_needed))]
+        if not shortfall_priority:
+            shortfall_priority = self._flexible_year_of_plenty_priority(player)
 
-        return {r: 1 for r in picked[:2]}
+        picked = shortfall_priority[:2]
+        selected: ResourceCount = {resource: 0 for resource in Resource}
+        for resource in picked:
+            selected[resource] += 1
+
+        clearly_supports_follow_up = (
+            target_action is not None
+            and 0 < sum(selected.values()) == sum(
+                min(selected[resource], target_shortfalls[resource])
+                for resource in Resource
+            )
+        )
+
+        explanation = self._build_year_of_plenty_explanation(
+            selected,
+            primary_action,
+            target_action if clearly_supports_follow_up or already_had_next_step else None,
+            clearly_supports_follow_up,
+            already_had_next_step,
+        )
+        return selected, explanation
 
     def select_monopoly_resource(self, player: Player, game: Game) -> Resource:
         """Select the resource that will most hurt opponents based on their likely next actions."""
+        resource, _ = self.select_monopoly_resource_with_explanation(player, game)
+        return resource
+
+    def select_monopoly_resource_with_explanation(
+            self, player: Player, game: Game) -> Tuple[Resource, Optional[ActionExplanation]]:
+        """Select Monopoly resource and return a structured explanation."""
 
         # Count how often each resource appears in opponents' next planned actions.
         need_counts: Dict[Resource, int] = {r: 0 for r in Resource}
@@ -581,7 +624,132 @@ class RuleBasedAI(AI):
         # Pick the resource most commonly needed across opponents.
         max_count = max(need_counts.values())
         candidates = [r for r, c in need_counts.items() if c == max_count]
-        return random.choice(candidates)
+        chosen = random.choice(candidates)
+        explanation = self._build_monopoly_resource_explanation(chosen, need_counts[chosen], max_count)
+        return chosen, explanation
+
+    def _build_year_of_plenty_explanation(
+            self, selected: ResourceCount, primary_action: Optional[Action], target_action: Optional[Action],
+            clearly_supports_follow_up: bool, already_had_next_step: bool) -> ActionExplanation:
+        reasons_for: List[Reason] = []
+        if clearly_supports_follow_up and target_action is not None:
+            reasons_for.append(Reason(
+                ReasonType.QUICK_TO_EXECUTE, ReasonLabel.YOP_FILLS_SHORTFALL, float(sum(selected.values()))))
+            reasons_for.append(Reason(
+                ReasonType.HEURISTIC_CHOICE, ReasonLabel.YOP_SUPPORTS_FOLLOW_UP, 1.0,
+                {
+                    "primary_action": primary_action,
+                    "follow_up_action": target_action,
+                    "already_had_next_step": already_had_next_step,
+                }))
+        elif target_action is not None:
+            reasons_for.append(Reason(
+                ReasonType.HEURISTIC_CHOICE, ReasonLabel.YOP_SUPPORTS_FOLLOW_UP, 1.0,
+                {
+                    "primary_action": primary_action,
+                    "follow_up_action": target_action,
+                    "already_had_next_step": already_had_next_step,
+                }))
+        else:
+            reasons_for.append(Reason(
+                ReasonType.HEURISTIC_CHOICE, ReasonLabel.YOP_FLEXIBLE_PICK, 1.0))
+
+        action = Action(ActionType.PLAY_DEV_CARD, DevelopmentCardType.YEAR_OF_PLENTY)
+        candidate = CandidateExplanation(
+            action=action,
+            full_plan=[action],
+            reasons_for=reasons_for,
+            metadata={
+                "template": ExplanationTemplate.YEAR_OF_PLENTY_RESOURCES,
+                "selected_resources": selected,
+                "primary_action": primary_action,
+                "follow_up_action": target_action,
+                "supports_follow_up": clearly_supports_follow_up,
+                "already_had_next_step": already_had_next_step,
+            },
+        )
+        return ActionExplanation(
+            chosen_action=action,
+            chosen_candidate=candidate,
+            confidence=float(sum(selected.values())),
+            confidence_label="medium",
+            metadata={"template": ExplanationTemplate.YEAR_OF_PLENTY_RESOURCES},
+        )
+
+    def _build_monopoly_resource_explanation(
+            self, selected_resource: Resource, selected_count: int, max_count: int) -> ActionExplanation:
+        reasons_for: List[Reason] = []
+        if max_count > 0:
+            reasons_for.append(Reason(
+                ReasonType.SLOWS_LEADING_OPPONENT, ReasonLabel.MONOPOLY_HIGHEST_DEMAND, float(selected_count)))
+        else:
+            reasons_for.append(Reason(
+                ReasonType.HEURISTIC_CHOICE, ReasonLabel.MONOPOLY_FLEXIBLE_PICK, 1.0))
+
+        action = Action(ActionType.PLAY_DEV_CARD, DevelopmentCardType.MONOPOLY)
+        candidate = CandidateExplanation(
+            action=action,
+            full_plan=[action],
+            reasons_for=reasons_for,
+            metadata={
+                "template": ExplanationTemplate.MONOPOLY_RESOURCE,
+                "selected_resource": selected_resource,
+                "selected_resources": {selected_resource: 1},
+            },
+        )
+        return ActionExplanation(
+            chosen_action=action,
+            chosen_candidate=candidate,
+            confidence=float(max_count),
+            confidence_label=confidence_label(float(max_count)),
+            metadata={"template": ExplanationTemplate.MONOPOLY_RESOURCE},
+        )
+
+    @staticmethod
+    def _year_of_plenty_plan_target(
+            player: Player, explanation: ActionExplanation
+    ) -> Tuple[Optional[Action], Optional[Action], ResourceCount, bool]:
+        if explanation.chosen_action.type == ActionType.END_TURN and explanation.chosen_candidate.next_plan:
+            plan = explanation.chosen_candidate.next_plan
+        elif explanation.chosen_candidate.full_plan:
+            plan = explanation.chosen_candidate.full_plan
+        else:
+            plan = [explanation.chosen_action]
+
+        simulated_resources = player.resources.copy()
+        primary_action: Optional[Action] = None
+        already_had_next_step = False
+
+        for action in plan:
+            cost = calc_step_resources(action)
+            if not any(cost.values()):
+                continue
+
+            if primary_action is None:
+                primary_action = action
+
+            shortfalls = {
+                resource: max(0, cost.get(resource, 0) - simulated_resources[resource])
+                for resource in Resource
+            }
+            if sum(shortfalls.values()) > 0:
+                return primary_action, action, shortfalls, already_had_next_step
+
+            already_had_next_step = True
+            for resource, amount in cost.items():
+                simulated_resources[resource] -= amount
+
+        if primary_action is not None:
+            return primary_action, primary_action, {resource: 0 for resource in Resource}, already_had_next_step
+
+        return None, None, {resource: 0 for resource in Resource}, False
+
+    @staticmethod
+    def _flexible_year_of_plenty_priority(player: Player) -> List[Resource]:
+        sorted_resources = sorted(Resource, key=lambda resource: (player.resources[resource], resource.value))
+        if len(sorted_resources) >= 2:
+            return sorted_resources[:2]
+        return sorted_resources
 
     def respond_to_trade(
             self, player: Player, game: Game, opponent: Player, selling: ResourceCount,
