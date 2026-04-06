@@ -1079,6 +1079,29 @@ class MainWindow(QMainWindow):
 
             self.startGame.emit(game_mode)
 
-        self.safe_connect(self.start_menu.play_game_btn, lambda: play(GameMode.PLAY))
-        self.safe_connect(self.start_menu.run_simulation_btn, lambda: play(GameMode.SIMULATION))
-        self.safe_connect(self.start_menu.run_guided_btn, lambda: play(GameMode.GUIDED))
+        def is_lab_mode() -> bool:
+            return self.start_menu.lab_mode_btn.isChecked()
+
+        def update_lab_mode(is_enabled: bool):
+            self.start_menu.standard_mode_btn.setText("Quick Simulation" if is_enabled else "Start Game")
+            self.start_menu.tutor_mode_btn.setText("Guided Simulation" if is_enabled else "Tutor Mode")
+            self.start_menu.lab_mode_btn.setText("Back" if is_enabled else "Lab Mode")
+
+        self.start_menu.lab_mode_btn.setCheckable(True)
+        try:
+            self.start_menu.lab_mode_btn.toggled.disconnect()
+        except TypeError:
+            pass
+
+        self.start_menu.lab_mode_btn.setChecked(False)
+        update_lab_mode(False)
+
+        self.safe_connect(
+            self.start_menu.standard_mode_btn,
+            lambda: play(GameMode.SIMULATION if is_lab_mode() else GameMode.PLAY)
+        )
+        self.safe_connect(
+            self.start_menu.tutor_mode_btn,
+            lambda: play(GameMode.GUIDED if is_lab_mode() else GameMode.TUTOR)
+        )
+        self.start_menu.lab_mode_btn.toggled.connect(update_lab_mode)

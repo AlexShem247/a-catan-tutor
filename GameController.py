@@ -30,11 +30,18 @@ class GameController:
 
     def reset_game(self):
         """Reset the game to a fresh state and reset round counter."""
-        self._game = Game(self.game_players if self.game_mode == GameMode.PLAY else self.simulation_players)
-        if self.view is not None:
-            self.view.ai_decision_animation_delay = (AI_DECISION_ANIMATION_DELAY if self.game_mode == GameMode.PLAY
-                                                     else AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE)
-            self.view.open_tutor_menu(self.game_mode == GameMode.GUIDED)
+        is_play_mode = self.game_mode in {GameMode.PLAY, GameMode.TUTOR}
+        is_tutor_mode = self.game_mode in {GameMode.GUIDED, GameMode.TUTOR}
+
+        players = self.game_players if is_play_mode else self.simulation_players
+        self._game = Game(players)
+
+        if self.view:
+            self.view.ai_decision_animation_delay = (
+                AI_DECISION_ANIMATION_DELAY if is_play_mode
+                else AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE
+            )
+            self.view.open_tutor_menu(is_tutor_mode)
 
     def start_game(self):
         """Run initial placement, then loop turns until game over."""

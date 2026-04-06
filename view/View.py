@@ -12,6 +12,7 @@ from game.Vertex import Vertex
 
 class GameMode(Enum):
     PLAY = auto()
+    TUTOR = auto()
     SIMULATION = auto()
     GUIDED = auto()
 

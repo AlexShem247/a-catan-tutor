@@ -547,8 +547,8 @@ class ActionExplanation:
     def _monopoly_resource_detail(self) -> str:
         selected_resource = self.chosen_candidate.metadata.get("selected_resource")
         resource_name = getattr(selected_resource, "name", "resource").replace("_", " ").upper()
-        parts = [f"Choose <b>{resource_name}</b> as the Monopoly resource."]
-        parts.append(self._detail_sentence_from_reasons(self.chosen_candidate.reasons_for))
+        parts = [f"Choose <b>{resource_name}</b> as the Monopoly resource.",
+                 self._detail_sentence_from_reasons(self.chosen_candidate.reasons_for)]
         return "<br><br>".join(part for part in parts if part)
 
     def _discard_protected_plan_text(self) -> str:
