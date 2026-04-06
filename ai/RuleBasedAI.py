@@ -2,22 +2,22 @@ import random
 from typing import Dict, List, Optional, Tuple
 
 from ai.AI import AI
-from ai.ai_utils.EtwEstimator import EtwEstimator
-from ai.ai_utils.SimGame import make_sim_game_for_player
-from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability
-from ai.ai_utils.action_utils import play_development_card_action
-from ai.ai_utils.actions import Phase, ActionType, Action
-from ai.ai_utils.board_sim_utils import (
+from ai.simulation.EtwEstimator import EtwEstimator
+from ai.simulation.SimGame import make_sim_game_for_player
+from ai.simulation.SimPlayerState import SimPlayerState, dice_probability
+from ai.utils.action_utils import play_development_card_action
+from ai.actions import Phase, ActionType, Action
+from ai.simulation.board_sim_utils import (
     find_edge_toward_vertex, find_edge_toward_vertex_from_any, find_gap_connection,
     get_legal_settlement_vertices, get_opponents, get_reachable_vertices, moves_toward_vertex,
     score_hex_for_opponent,
 )
-from ai.ai_utils.explanations import (
+from ai.tutor.explanations import (
     ActionExplanation, AssumptionCode, CandidateExplanation, ExplanationTemplate,
     RoadExplanationKind, Reason, ReasonLabel, ReasonType, confidence_label,
 )
-from ai.ai_utils.resource_utils import calc_step_resources
-from ai.ai_utils.trade_utils import respond_to_trade_batna, select_best_trade_partner
+from ai.utils.resource_utils import calc_step_resources
+from ai.utils.trade_utils import respond_to_trade_batna, select_best_trade_partner
 from config.StrategyWeights import StrategyWeights
 from game.Edge import Edge
 from game.Game import Game

@@ -5,7 +5,7 @@ from typing import Optional, List, Tuple, Dict
 
 from ai.AI import AI
 from ai.RuleBasedAI import RuleBasedAI
-from ai.ai_utils.actions import Phase, Action, ActionType
+from ai.actions import Phase, Action, ActionType
 from game.Game import Game
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Player import Player

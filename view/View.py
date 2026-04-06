@@ -1,7 +1,8 @@
 from enum import Enum, auto
 from typing import List, Tuple, Dict, Optional, Protocol
 
-from ai.ai_utils.explanations import ActionExplanation
+from ai.tutor.explanations import ActionExplanation
+from ai.tutor.tutor import TutorStage
 from game.Edge import Edge
 from game.HexTile import HexTile
 from game.Player import Player
@@ -35,6 +36,9 @@ class View(Protocol):
 
     def display_board_turn_explanations(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
                                         explanation: ActionExplanation) -> None:
+        ...
+
+    def display_tutor_init(self, player: Player, stage: TutorStage, explanation: ActionExplanation) -> None:
         ...
 
     def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False) -> Vertex:

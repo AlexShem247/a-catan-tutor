@@ -6,7 +6,7 @@ from game.Player import PlayerNumber, Player
 from game.Vertex import Vertex
 from game.Edge import Edge
 
-from ai.ai_utils.SimPlayerState import SimPlayerState
+from ai.simulation.SimPlayerState import SimPlayerState
 
 
 @dataclass

@@ -43,6 +43,8 @@ class SquareCanvas(QWidget):
         # List of shapes
         self.shapes = []
         self.interactive_shapes: List[InteractiveShape] = []
+        self.planned_builds: List[Tuple] = []
+        self.planned_overlay_shapes: List[InteractiveShape] = []
         self.hovered_shape: InteractiveShape | None = None
         self.disable_interactivity = True
 
@@ -233,6 +235,12 @@ class SquareCanvas(QWidget):
         self.shapes = [shape for shape in self.shapes if not isinstance(shape, InteractiveShape)]
         self.hovered_shape = None
 
+    def clear_planned_builds(self):
+        self.planned_builds = []
+        self.shapes = [shape for shape in self.shapes if shape not in self.planned_overlay_shapes]
+        self.planned_overlay_shapes = []
+        self.update()
+
     def screen_to_world(self, pos):
         scale = self.base_scale * self.zoom
         wx = (pos.x() - self.offset.x()) / scale
@@ -281,6 +289,8 @@ class SquareCanvas(QWidget):
         for vertex in controller.get_all_vertices():
             x, y = vertex_xy(vertex, cx, cy, HEX_TILE_RADIUS)
             self.add_shape(VertexShape(x, y, VERTEX_SIZE, vertex, self.icons))
+
+        self._draw_planned_builds(self.planned_builds)
 
     def draw_selectable_vertices(self, vertices):
         self.interactive_shapes.clear()
@@ -345,6 +355,8 @@ class SquareCanvas(QWidget):
 
     def display_start_screen(self):
         self.shapes.clear()
+        self.planned_builds = []
+        self.planned_overlay_shapes = []
         w, h = self.world_size, self.world_size
 
         self.background_image = self.icons[SEA_BACKGROUND]
@@ -360,7 +372,12 @@ class SquareCanvas(QWidget):
                                  TITLE_COLOR.lighter(150), 25, bold=True))
 
     def render_planned_builds(self, builds: List[Tuple]):
-        self.shapes = [s for s in self.shapes if not isinstance(s, InteractiveShape)]
+        self.planned_builds = builds.copy()
+        self.shapes = [shape for shape in self.shapes if shape not in self.planned_overlay_shapes]
+        self.planned_overlay_shapes = []
+        self._draw_planned_builds(self.planned_builds)
+
+    def _draw_planned_builds(self, builds: List[Tuple]):
         cx, cy = self.get_world_centre()
 
         for buildable, position in builds:
@@ -369,42 +386,55 @@ class SquareCanvas(QWidget):
                 x1, y1 = vertex_xy(v1, cx, cy, HEX_TILE_RADIUS)
                 x2, y2 = vertex_xy(v2, cx, cy, HEX_TILE_RADIUS)
 
-                self.add_shape(InteractiveRoadOverlay(
+                road_overlay = InteractiveRoadOverlay(
                     x1, y1, x2, y2, ROAD_THICKNESS * 1.5, PLAN_OUTLINE_COLOR,
                     payload=(buildable, position), solid=False,
                     normal_alpha=100, hover_alpha=255
-                ))
+                )
+                self.planned_overlay_shapes.append(road_overlay)
+                self.add_shape(road_overlay)
 
                 for vertex in (v1, v2):
                     if vertex.owner is None and vertex.building is None:
                         x, y = vertex_xy(vertex, cx, cy, HEX_TILE_RADIUS)
-                        self.add_shape(InteractiveRoadVertexOverlay(
+                        vertex_overlay = InteractiveRoadVertexOverlay(
                             x, y, VERTEX_SIZE, PLAN_OUTLINE_COLOR,
                             payload=(buildable, vertex), normal_alpha=100, hover_alpha=255
-                        ))
+                        )
+                        self.planned_overlay_shapes.append(vertex_overlay)
+                        self.add_shape(vertex_overlay)
 
             elif buildable == Buildable.SETTLEMENT and position is not None:
                 x, y = vertex_xy(position, cx, cy, HEX_TILE_RADIUS)
 
-                self.add_shape(InteractivePixmap(
+                settlement_outline = InteractivePixmap(
                     x, y, VERTEX_SIZE * 4, VERTEX_SIZE * 4,
                     self.icons[SETTLEMENT_OUTLINE], payload=(buildable, position)
-                ))
-                self.add_shape(InteractivePixmap(
+                )
+                self.planned_overlay_shapes.append(settlement_outline)
+                self.add_shape(settlement_outline)
+
+                settlement_fill = InteractivePixmap(
                     x, y, VERTEX_SIZE * 4, VERTEX_SIZE * 4,
                     self.icons[SETTLEMENT_OUTLINE_SOLID], payload=(buildable, position), normal_alpha=150
-                ))
+                )
+                self.planned_overlay_shapes.append(settlement_fill)
+                self.add_shape(settlement_fill)
 
             elif buildable == Buildable.CITY and position is not None:
                 x, y = vertex_xy(position, cx, cy, HEX_TILE_RADIUS)
 
-                self.add_shape(InteractivePixmap(
+                city_overlay = InteractivePixmap(
                     x, y, VERTEX_SIZE * 4, VERTEX_SIZE * 4,
                     self.icons[CITY_OUTLINE], payload=(buildable, position)
-                ))
+                )
+                self.planned_overlay_shapes.append(city_overlay)
+                self.add_shape(city_overlay)
             elif buildable == "ROBBER_HEX" and isinstance(position, HexTile):
                 x, y = hex_center(position.q, position.r, cx, cy, HEX_TILE_RADIUS)
-                self.add_shape(InteractiveCircle(
+                robber_overlay = InteractiveCircle(
                     x, y, HEX_TILE_RADIUS * 0.4, PLAN_OUTLINE_COLOR,
                     outline_color=OUTLINE_COLOR, payload=(buildable, position)
-                ))
+                )
+                self.planned_overlay_shapes.append(robber_overlay)
+                self.add_shape(robber_overlay)

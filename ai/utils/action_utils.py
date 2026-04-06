@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 from typing import List, Tuple, Optional, TYPE_CHECKING, Set, Dict, Any
 
-from ai.ai_utils.SimGame import SimGame, BoardOverlay
-from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability
-from ai.ai_utils.actions import ActionType, Action
-from ai.ai_utils.board_sim_utils import legal_settlement_vertex, get_opponents
-from ai.ai_utils.resource_utils import get_bank_trade_ratio, calc_step_resources
+from ai.simulation.SimGame import SimGame, BoardOverlay
+from ai.simulation.SimPlayerState import SimPlayerState, dice_probability
+from ai.actions import ActionType, Action
+from ai.simulation.board_sim_utils import legal_settlement_vertex, get_opponents
+from ai.utils.resource_utils import get_bank_trade_ratio, calc_step_resources
 from config.StrategyWeights import StrategyWeights
 from config.performance_constants import (
     MAX_EXTRA_ROADS_FOR_SETTLEMENT,
@@ -18,7 +18,7 @@ from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
 
 if TYPE_CHECKING:
-    from ai.ai_utils.EtwEstimator import EtwEstimator
+    from ai.simulation.EtwEstimator import EtwEstimator
 
 
 def distant_settlement_candidates(

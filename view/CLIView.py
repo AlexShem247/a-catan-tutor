@@ -1,6 +1,8 @@
 from typing import List, Optional, Tuple, Dict
 
 from GameController import GameController
+from ai.tutor.explanations import ActionExplanation
+from ai.tutor.tutor import TutorStage
 from game.Board import Board
 from game.Edge import EdgeDirection, Edge
 from game.Game import Game
@@ -450,6 +452,18 @@ class CLIView(View):
             if user_input in ("n", "no"):
                 return GameMode.PLAY
             print("Invalid input. Enter 'y' or 'n'.")
+
+    def display_board_turn_explanations(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
+                                        explanation: ActionExplanation) -> None:
+        action, explanation_txt = explanation.generate_text_concise()
+        print(f"\n{action}\n{explanation_txt}")
+        input("\nPress Enter to continue...")
+
+    def display_tutor_init(self, player: Player, stage: TutorStage, explanation: ActionExplanation) -> None:
+        pass
+
+    def open_tutor_menu(self, open_menu: bool):
+        pass
 
     # Additional helper methods for initial placement (not part of View interface but needed for CLI)
     def initial_settlement_placement(self, player: Player) -> Vertex:

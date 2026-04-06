@@ -1,7 +1,7 @@
 from typing import List
 
-from ai.ai_utils.SimPlayerState import SimPlayerState
-from ai.ai_utils.actions import ActionType, Action
+from ai.simulation.SimPlayerState import SimPlayerState
+from ai.actions import ActionType, Action
 from config.performance_constants import EPSILON
 from game.Game import Game
 from game.PlayerAssets import Buildable

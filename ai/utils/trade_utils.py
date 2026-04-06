@@ -1,16 +1,16 @@
 import math
 from typing import Optional, List, Tuple, Dict, TYPE_CHECKING
 
-from ai.ai_utils.SimGame import SimGame
-from ai.ai_utils.SimPlayerState import SimPlayerState
-from ai.ai_utils.actions import Action, ActionType
-from ai.ai_utils.resource_utils import expected_rolls_for_resource
+from ai.simulation.SimGame import SimGame
+from ai.simulation.SimPlayerState import SimPlayerState
+from ai.actions import Action, ActionType
+from ai.utils.resource_utils import expected_rolls_for_resource
 from config.StrategyWeights import StrategyWeights
 from config.performance_constants import EPSILON, TRADE_ETW_SHORTLIST_K, CHECK_INVALID_TRADES_EARLY
 from game.Resources import Resource, ResourceCount
 
 if TYPE_CHECKING:
-    from ai.ai_utils.EtwEstimator import EtwEstimator
+    from ai.simulation.EtwEstimator import EtwEstimator
 
 
 def _sim_game_with_replaced_player(sim_game: SimGame, sim_player: SimPlayerState) -> SimGame:

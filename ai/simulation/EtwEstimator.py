@@ -1,20 +1,20 @@
 import math
 from typing import Any, Dict, List, Optional, Tuple
 
-from ai.ai_utils.SimGame import SimGame
-from ai.ai_utils.SimPlayerState import SimPlayerState, dice_probability
-from ai.ai_utils.action_utils import (
+from ai.simulation.SimGame import SimGame
+from ai.simulation.SimPlayerState import SimPlayerState, dice_probability
+from ai.utils.action_utils import (
     compute_k_la, distant_settlement_candidates, get_bank_trade_for_action,
     play_development_card_action, purchase_development_card_action,
 )
-from ai.ai_utils.actions import ActionType, Action
-from ai.ai_utils.board_sim_utils import get_opponents
-from ai.ai_utils.explanations import (
+from ai.actions import ActionType, Action
+from ai.simulation.board_sim_utils import get_opponents
+from ai.tutor.explanations import (
     ActionExplanation, AssumptionCode, CandidateExplanation, Reason, ReasonLabel,
     ReasonType, confidence_label,
 )
-from ai.ai_utils.resource_utils import get_bank_trade_ratio, calc_step_resources
-from ai.ai_utils.trade_utils import propose_trade
+from ai.utils.resource_utils import get_bank_trade_ratio, calc_step_resources
+from ai.utils.trade_utils import propose_trade
 from config.StrategyWeights import StrategyWeights
 from config.performance_constants import (
     ETW_MAX_DEPTH_OFFSET, MAX_ETB_THRESHOLD, MAX_EVALUATIONS, MAX_SETTLEMENT_CANDIDATES,

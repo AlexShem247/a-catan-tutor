@@ -2,7 +2,7 @@ import random
 from typing import List, Optional, Tuple
 
 from ai.AI import AI
-from ai.ai_utils.actions import Action, ActionType, Phase
+from ai.actions import Action, ActionType, Phase
 from game.Edge import Edge
 from game.Game import Game
 from game.HexTile import HexTile

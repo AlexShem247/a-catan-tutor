@@ -1,3 +1,4 @@
+from html import escape
 from itertools import groupby
 from typing import Dict, Tuple, List, Callable, Optional
 
@@ -10,7 +11,8 @@ from PyQt6.QtWidgets import (
 )
 
 from GameController import GameController
-from ai.ai_utils.explanations import ActionExplanation, ExplanationTemplate
+from ai.tutor.explanations import ActionExplanation, ExplanationTemplate
+from ai.tutor.tutor import TutorStage, TUTOR_STAGE_CONTENT
 from game.Edge import Edge
 from game.Player import PlayerNumber, Player
 from game.PlayerAssets import Buildable, DevelopmentCardType, DevelopmentCard
@@ -221,6 +223,7 @@ class MainWindow(QMainWindow):
                 labels["longest_road"].setText(str(player.longest_road_length))
 
     def display_generic_info(self, player: Player, msg: str):
+        self.canvas.clear_planned_builds()
         self.main_menu.turn_label.setText(f"{player.name}'s turn")
         self.main_menu.main_label.show()
         self.main_menu.main_label.setText(msg)
@@ -234,6 +237,11 @@ class MainWindow(QMainWindow):
         self.canvas.disable_interactivity = False
         self.canvas.display_board(controller)
         self.display_resources(controller)
+
+        if controller.game_mode == GameMode.TUTOR and player.is_human:
+            explanation = controller.get_tutor_turn_explanation(player, played_dev_card)
+            if explanation is not None:
+                self.display_tutor_init(player, TutorStage.TURN_ACTION, explanation)
 
         d1, d2, total = dice_info
         self.main_menu.turn_label.setText(f"{player.name}'s turn")
@@ -267,6 +275,54 @@ class MainWindow(QMainWindow):
                 self.tutor_menu.hide()
                 self.tutor_menu.setParent(None)
             self.splitter_layout.setSizes([1000, self.SIDE_PANEL_WIDTH])
+
+    def display_tutor_init(self, _: Player, stage: TutorStage, explanation: ActionExplanation):
+        title, focus = TUTOR_STAGE_CONTENT[stage]["title"], TUTOR_STAGE_CONTENT[stage]["focus"]
+        self.tutor_menu.action_label.setText(title)
+        self.clear_trade_preview()
+        visual_plan = explanation.get_visual_build_plan()
+
+        focus_lines = "".join(f"<br>&bull; {escape(point)}" for point in focus)
+        default_text = f"<b>What matters here:</b>{focus_lines}"
+
+        concise_title, concise_explanation = explanation.generate_text_concise()
+        detailed_explanation = explanation.generate_text_detail()
+
+        def show_default():
+            self.canvas.clear_planned_builds()
+            self.tutor_menu.action_label.setText(title)
+            self.tutor_menu.explanation_edit.setHtml(default_text)
+            self.tutor_menu.explain_btn.show()
+            self.tutor_menu.explain_btn.setEnabled(True)
+            self.tutor_menu.explain_btn.setText("Hint")
+            self.tutor_menu.continue_btn.hide()
+            self.safe_connect(self.tutor_menu.explain_btn, show_concise)
+            self.safe_connect(self.tutor_menu.continue_btn, show_default)
+
+        def show_concise():
+            self.canvas.render_planned_builds(visual_plan)
+            self.tutor_menu.action_label.setText(concise_title)
+            self.tutor_menu.explanation_edit.setText(concise_explanation)
+            self.tutor_menu.explain_btn.show()
+            self.tutor_menu.explain_btn.setEnabled(True)
+            self.tutor_menu.explain_btn.setText("Explain Further")
+            self.tutor_menu.continue_btn.show()
+            self.tutor_menu.continue_btn.setEnabled(True)
+            self.tutor_menu.continue_btn.setText("Hide Hint")
+            self.safe_connect(self.tutor_menu.explain_btn, show_detailed)
+            self.safe_connect(self.tutor_menu.continue_btn, show_default)
+
+        def show_detailed():
+            self.canvas.render_planned_builds(visual_plan)
+            self.tutor_menu.action_label.setText(concise_title)
+            self.tutor_menu.explanation_edit.setText(detailed_explanation)
+            self.tutor_menu.explain_btn.hide()
+            self.tutor_menu.continue_btn.show()
+            self.tutor_menu.continue_btn.setEnabled(True)
+            self.tutor_menu.continue_btn.setText("Hide Hint")
+            self.safe_connect(self.tutor_menu.continue_btn, show_default)
+
+        show_default()
 
     def display_explanation(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
                             explanation: ActionExplanation):
@@ -691,6 +747,7 @@ class MainWindow(QMainWindow):
 
     def display_round_info_ai_start(self, player: Player, dice_info: Optional[Tuple[int, int, int]], msg: str):
         self.clear_trade_preview()
+        self.canvas.clear_planned_builds()
         if dice_info:
             d1, d2, total = dice_info
             self.main_menu.main_label.setText(f"Dice rolled: {d1} + {d2} = {total}")
@@ -970,6 +1027,7 @@ class MainWindow(QMainWindow):
         # Close tutor menu
         self.open_tutor_menu(False)
 
+        self.canvas.clear_planned_builds()
         self.canvas.interactive_shapes.clear()
         self.canvas.display_board(controller)
         self.display_resources(controller)
@@ -1058,6 +1116,7 @@ class MainWindow(QMainWindow):
         self.safe_connect(self.results_menu.quit_btn, lambda: self.closeEvent(QCloseEvent()))
 
     def display_start_screen(self):
+        self.canvas.clear_planned_builds()
         self.canvas.interactive_shapes.clear()
         self.canvas.display_start_screen()
 

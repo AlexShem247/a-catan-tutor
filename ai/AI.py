@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, List, Tuple, TYPE_CHECKING
 
-from ai.ai_utils.actions import Action, Phase
+from ai.actions import Action, Phase
 from game.Edge import Edge
 from game.HexTile import HexTile
 from game.Player import Player

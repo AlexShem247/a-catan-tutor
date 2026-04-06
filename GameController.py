@@ -1,7 +1,8 @@
 from typing import List, Tuple, Optional, Dict
 
 from ai.RuleBasedAI import RuleBasedAI
-from ai.ai_utils.actions import ActionType, Phase
+from ai.actions import ActionType, Phase
+from ai.tutor.tutor import TutorStage
 from config.view_constants import AI_DECISION_ANIMATION_DELAY, AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE, \
     SHOW_AI_BUILT_LOCATIONS
 from game.Edge import Edge, EdgeDirection
@@ -26,6 +27,7 @@ class GameController:
         self.view: View | None = None
         self.game_players = game_players
         self.simulation_players = simulation_players
+        self.tutor_ai = RuleBasedAI()
         self.reset_game()
 
     def reset_game(self):
@@ -42,6 +44,21 @@ class GameController:
                 else AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE
             )
             self.view.open_tutor_menu(is_tutor_mode)
+
+    def _show_tutor_init(self, player: Player, stage: TutorStage, explanation) -> None:
+        if self.game_mode == GameMode.TUTOR and player.is_human and explanation is not None:
+            self.view.display_tutor_init(player, stage, explanation)
+
+    def get_tutor_turn_explanation(self, player: Player, played_dev_card: bool):
+        if self.game_mode != GameMode.TUTOR or not player.is_human:
+            return None
+        _, explanation = self.tutor_ai.next_action_with_explanation(
+            player,
+            self._game,
+            phase=Phase.MAIN,
+            dev_played=played_dev_card,
+        )
+        return explanation
 
     def start_game(self):
         """Run initial placement, then loop turns until game over."""
@@ -81,6 +98,13 @@ class GameController:
             if player.is_human:
                 # Let human select position
                 vertices = self._game.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
+                if self.game_mode == GameMode.TUTOR:
+                    _, explanation = self.tutor_ai.select_initial_settlement_location_with_explanation(
+                        player,
+                        self._game,
+                        vertices,
+                    )
+                    self.view.display_tutor_init(player, TutorStage.INITIAL_SETTLEMENT, explanation)
                 self.view.display_board(player, "Select a position to build your settlement")
                 vertex: Vertex = self.view.draw_selectable_vertices(vertices)
                 self.view.display_board()
@@ -105,6 +129,16 @@ class GameController:
 
             # Road
             if player.is_human:
+                if self.game_mode == GameMode.TUTOR:
+                    available_edges = self._game.get_available_edges(player)
+                    if vertex is not None:
+                        available_edges = [edge for edge in available_edges if vertex in edge.vertices]
+                    _, explanation = self.tutor_ai.select_initial_road_location_with_explanation(
+                        player,
+                        self._game,
+                        available_edges,
+                    )
+                    self.view.display_tutor_init(player, TutorStage.INITIAL_ROAD, explanation)
                 edge = self.get_road_choice(player, vertex)
             else:
                 edge = self.get_road_choice_ai(player, vertex)
@@ -153,6 +187,10 @@ class GameController:
         for player in self._game.players:
             if player != selling_player:
                 if player.is_human:
+                    if self.game_mode == GameMode.TUTOR:
+                        _, _, explanation = self.tutor_ai.respond_to_trade_with_explanation(
+                            player, self._game, selling_player, selling, buying)
+                        self._show_tutor_init(player, TutorStage.TRADE_RESPONSE, explanation)
                     interested, counter = self.view.display_trade_manager(player, selling, buying, selling_player)
                 else:
                     # AI can only respond if it has enough resources to give
@@ -170,6 +208,11 @@ class GameController:
 
                 if interested:
                     results.append((player, counter))
+
+        if self.game_mode == GameMode.TUTOR and selling_player.is_human and results:
+            _, explanation = self.tutor_ai.choose_trade_partner_with_explanation(
+                selling_player, self._game, selling, buying, results)
+            self._show_tutor_init(selling_player, TutorStage.TRADE_DECISION, explanation)
 
         return results
 
@@ -190,6 +233,10 @@ class GameController:
                 if discard_count > 0:
                     resources_to_discard = {}
                     if p.is_human:
+                        if self.game_mode == GameMode.TUTOR:
+                            _, explanation = self.tutor_ai.select_discard_resources_with_explanation(
+                                p, self._game, discard_count)
+                            self._show_tutor_init(p, TutorStage.DISCARD_RESOURCES, explanation)
                         resources_to_discard = self.view.show_resource_chooser(
                             p, discard_count, "The robber has been rolled!", p.resources)
                     elif p.policy is not None:
@@ -218,6 +265,11 @@ class GameController:
         if player.is_human:
             # Get available hex tiles (exclude current robber tile)
             available_hexes = [tile for tile in self._game.get_all_hexes() if not tile.robber]
+            robber_explanation = None
+            if self.game_mode == GameMode.TUTOR:
+                _, _, robber_explanation = self.tutor_ai.select_robber_target_with_explanation(
+                    player, self._game, available_hexes)
+                self._show_tutor_init(player, TutorStage.ROBBER_PLACEMENT, robber_explanation)
             self.view.display_board(player, "Select a hex to move the robber")
             selected_hex: HexTile = self.view.draw_selectable_tiles(available_hexes)
 
@@ -230,6 +282,7 @@ class GameController:
             if not adjacent_player_buildings:
                 tile, steal_from = selected_hex, None
             else:
+                self._show_tutor_init(player, TutorStage.ROBBER_STEAL_TARGET, robber_explanation)
                 self.view.display_board(player, "Select a player to steal from")
                 selected_player_building: Vertex = self.view.draw_selectable_vertices(adjacent_player_buildings)
                 selected_player = selected_player_building.owner
@@ -291,8 +344,13 @@ class GameController:
             # ROAD BUILDING: Allows player to place two roads for free
             built_edges = []
             for _ in range(2):
-                if self._game.get_available_edges(player):
+                available_edges = self._game.get_available_edges(player)
+                if available_edges:
                     if player.is_human:
+                        if self.game_mode == GameMode.TUTOR:
+                            _, explanation = self.tutor_ai.select_initial_road_location_with_explanation(
+                                player, self._game, available_edges)
+                            self._show_tutor_init(player, TutorStage.ROAD_BUILDING, explanation)
                         edge = self.get_road_choice(player, None)
                     else:
                         edge = self.get_road_choice_ai(player, None)
@@ -303,6 +361,10 @@ class GameController:
         elif card_type == DevelopmentCardType.YEAR_OF_PLENTY:
             # YEAR OF PLENTY: Player chooses two resources from the bank to add to their hand
             if player.is_human:
+                if self.game_mode == GameMode.TUTOR:
+                    _, explanation = self.tutor_ai.select_year_of_plenty_resources_with_explanation(
+                        player, self._game)
+                    self._show_tutor_init(player, TutorStage.YEAR_OF_PLENTY, explanation)
                 resources = self.view.show_resource_chooser(
                     player, 2, "Year of Plenty: choose any two resources from the bank.", self._game.bank_resources)
             else:
@@ -321,6 +383,9 @@ class GameController:
         elif card_type == DevelopmentCardType.MONOPOLY:
             # MONOPOLY: Player chooses a single resource type - other players give all of that resource to the player
             if player.is_human:
+                if self.game_mode == GameMode.TUTOR:
+                    _, explanation = self.tutor_ai.select_monopoly_resource_with_explanation(player, self._game)
+                    self._show_tutor_init(player, TutorStage.MONOPOLY, explanation)
                 chosen = self.view.show_resource_chooser(
                     player, 1, "Monopoly: choose a resource to get from the other players.",
                     {res: 1 for res in Resource})
@@ -352,6 +417,9 @@ class GameController:
         return msg
 
     def make_round_move(self, player: Player):
+        if self.game_mode == GameMode.TUTOR:
+            self.tutor_ai.new_turn()
+
         playable_cards = [card for card in player.development_cards if card.playable]
         played_dev_card = False
         if playable_cards:

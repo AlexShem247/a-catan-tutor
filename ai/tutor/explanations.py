@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any, Dict, List, Tuple
 
-from ai.ai_utils.actions import Action, ActionType
+from ai.actions import Action, ActionType
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import ResourceCount
 

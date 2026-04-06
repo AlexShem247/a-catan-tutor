@@ -1,5 +1,7 @@
 from typing import List, Tuple, Dict, Optional
 
+from ai.tutor.explanations import ActionExplanation
+from ai.tutor.tutor import TutorStage
 from view.View import View
 from game.Edge import Edge
 from game.HexTile import HexTile
@@ -24,6 +26,13 @@ class HeadlessView(View):
     def display_board_turn_ai(self, player: Player,
                               dice_info: Tuple[int, int, int],
                               msg: str) -> None:
+        pass
+
+    def display_board_turn_explanations(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
+                                        explanation: ActionExplanation) -> None:
+        pass
+
+    def display_tutor_init(self, player: Player, stage: TutorStage, explanation: ActionExplanation) -> None:
         pass
 
     def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False) -> Vertex:
@@ -54,3 +63,6 @@ class HeadlessView(View):
 
     def display_start_screen(self) -> bool:
         return False
+
+    def open_tutor_menu(self, open_menu: bool):
+        pass

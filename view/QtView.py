@@ -3,7 +3,8 @@ from typing import List, Dict, Optional, Tuple, Any
 from PyQt6.QtCore import QEventLoop, QTimer, pyqtBoundSignal
 
 from GameController import GameController
-from ai.ai_utils.explanations import ActionExplanation
+from ai.tutor.explanations import ActionExplanation
+from ai.tutor.tutor import TutorStage
 from game.Edge import Edge
 from game.HexTile import HexTile
 from game.Player import Player
@@ -104,6 +105,11 @@ class QtView(View):
         self.window.display_resources(self.controller)
         return select_blocking(self, self.window.turnMade, self.window.display_explanation,
                                player, dice_info, explanation)
+
+    def display_tutor_init(self, player: Player, stage: TutorStage, explanation: ActionExplanation) -> None:
+        self.canvas.display_board(self.controller)
+        self.window.display_resources(self.controller)
+        self.window.display_tutor_init(player, stage, explanation)
 
     def open_tutor_menu(self, open_menu: bool):
         self.window.open_tutor_menu(open_menu)
