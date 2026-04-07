@@ -383,6 +383,190 @@ class EtwEstimator:
 
         return ReasonLabel.QUICK_GENERIC, {}
 
+    def _estimate_single_action_etb(
+        self,
+        player: SimPlayerState,
+        sim_game: SimGame,
+        action: Action,
+        include_player_trades: bool = True,
+    ) -> float:
+        cost = calc_step_resources(action)
+        if not any(cost.values()):
+            return 0.0
+        return self.estimated_time_to_build(
+            player, sim_game, cost, include_player_trades=include_player_trades,
+        )
+
+    def _evaluate_action_plan(
+        self,
+        player: SimPlayerState,
+        sim_game: SimGame,
+        dev_played: bool,
+        actions: List[Action],
+        etb: float,
+        vp_inc: float,
+        etw_before: float,
+        opponents_etw_before: Dict[PlayerNumber, float],
+    ) -> Optional[CandidateExplanation]:
+        if etb > MAX_ETB_THRESHOLD or not actions:
+            return None
+
+        next_step = actions[0]
+        next_plan, waiting_resources = self._future_plan_fields(player, actions)
+
+        player_copy = player.copy()
+        sim_game_copy = _sim_game_with_replaced_player(sim_game, player_copy)
+
+        did_build_road = False
+        did_play_knight = False
+
+        for step in actions:
+            if step.type == ActionType.BUILD and step.payload[0] == Buildable.ROAD:
+                did_build_road = True
+            elif step.type == ActionType.PLAY_DEV_CARD and step.payload == DevelopmentCardType.KNIGHT:
+                did_play_knight = True
+
+            self._simulate_step(sim_game_copy, player_copy, step)
+            if player_copy.victory_points() >= Game.VICTORY_POINTS_TO_WIN:
+                break
+
+        etw_after = self.estimated_time_to_win(
+            player_copy, sim_game_copy, dev_played, max_depth_override=EVAL_UTIL_MAX_DEPTH,
+        )
+
+        etw_delta = etw_before - etw_after
+        u_self = 0.0 if etw_before <= 0 else max(0.0, etw_delta / etw_before * 100.0)
+
+        affects_board = any(
+            step.type == ActionType.BUILD and step.payload[0] in (Buildable.ROAD, Buildable.SETTLEMENT)
+            for step in actions
+        )
+
+        leading_opp_num, opp_etw_before = None, None
+        if opponents_etw_before:
+            leading_opp_num = min(opponents_etw_before, key=opponents_etw_before.get)
+            opp_etw_before = opponents_etw_before.get(leading_opp_num)
+
+        u_opp = 0.0
+        blocks_opponent = False
+        if affects_board and leading_opp_num is not None and opp_etw_before and opp_etw_before > 0:
+            opp_state = sim_game_copy.overlay.get_sim_player(leading_opp_num).copy()
+            sim_game_opp = _sim_game_with_replaced_player(sim_game_copy, opp_state)
+
+            opp_etw_after = self.estimated_time_to_win(
+                opp_state, sim_game_opp, False, max_depth_override=EVAL_UTIL_MAX_DEPTH,
+            )
+
+            delay_caused = (opp_etw_after - opp_etw_before) / opp_etw_before * 100.0
+            u_opp = StrategyWeights.OPPONENT_INTERFERENCE_LEADING * delay_caused
+            blocks_opponent = delay_caused > 0.0
+
+        u_special = 0.0
+        improves_longest_road = False
+        improves_largest_army = False
+
+        if did_build_road:
+            delta_lr = max(0, player_copy.longest_road_length - player.longest_road_length)
+            if delta_lr > 0 and player_copy.longest_road_length >= StrategyWeights.LR_ROAD_THRESHOLD:
+                u_special += StrategyWeights.LR_UTILITY_MULTIPLIER * delta_lr
+                improves_longest_road = True
+
+        if did_play_knight and player_copy.army_size >= StrategyWeights.LA_ARMY_THRESHOLD:
+            u_special += compute_k_la(player_copy, sim_game)
+            improves_largest_army = True
+
+        took_lr_now = (not player.has_longest_road) and player_copy.has_longest_road
+        vp_after = player_copy.victory_points()
+
+        u_attention = 0.0
+        if took_lr_now and vp_after < StrategyWeights.ATTENTION_LR_VP_THRESHOLD:
+            u_attention -= StrategyWeights.ATTENTION_LR_EARLY_PENALTY
+
+        discount_rate = StrategyWeights.TIME_DISCOUNT_RATE
+        utility_total = (
+            (StrategyWeights.BUILD_SELF_UTILITY * u_self + StrategyWeights.BUILD_OPPONENT_UTILITY * u_opp
+             + StrategyWeights.BUILD_SPECIAL_UTILITY * u_special + u_attention)
+            / ((1.0 + discount_rate) ** max(1.0, etb))
+        )
+
+        reasons_for: List[Reason] = []
+        reasons_against: List[Reason] = []
+        final_step = actions[-1]
+
+        if final_step.type == ActionType.BUILD:
+            building, _ = final_step.payload
+            if building == Buildable.SETTLEMENT:
+                reasons_for.append(Reason(
+                    type=ReasonType.ENABLES_EXPANSION, label=ReasonLabel.PLAN_SETTLEMENT_VALUE,
+                    value=max(u_self * 0.9, 1.0),
+                ))
+            elif building == Buildable.CITY:
+                reasons_for.append(Reason(
+                    type=ReasonType.IMPROVES_PRODUCTION, label=ReasonLabel.PLAN_CITY_VALUE,
+                    value=max(u_self * 0.8, 1.0),
+                ))
+            elif building == Buildable.ROAD:
+                reasons_for.append(Reason(
+                    type=ReasonType.ENABLES_EXPANSION, label=ReasonLabel.PLAN_ROAD_VALUE,
+                    value=max(u_self * 0.7, 1.0),
+                ))
+
+        if etb <= 2.5:
+            quick_label, quick_meta = self._quick_reason_label(next_step, final_step)
+            reasons_for.append(Reason(
+                type=ReasonType.QUICK_TO_EXECUTE, label=quick_label, metadata=quick_meta,
+                value=max(0.0, 5.0 - etb),
+            ))
+
+        if blocks_opponent and u_opp > 0:
+            reasons_for.append(
+                Reason(type=ReasonType.SLOWS_LEADING_OPPONENT, label=ReasonLabel.SLOWS_LEADER, value=u_opp)
+            )
+        if improves_longest_road:
+            reasons_for.append(Reason(
+                type=ReasonType.ADVANCES_LONGEST_ROAD, label=ReasonLabel.ADVANCES_LONGEST_ROAD, value=u_special,
+            ))
+        if improves_largest_army:
+            reasons_for.append(Reason(
+                type=ReasonType.ADVANCES_LARGEST_ARMY, label=ReasonLabel.ADVANCES_LARGEST_ARMY, value=u_special,
+            ))
+        if next_step.type in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER):
+            reasons_for.append(Reason(type=ReasonType.REQUIRES_TRADE, label=ReasonLabel.REQUIRES_TRADE, value=1.0))
+        if next_step.type == ActionType.BUY_DEV_CARD and vp_inc > 0:
+            reasons_for.append(Reason(type=ReasonType.HIDDEN_VALUE, label=ReasonLabel.HIDDEN_DEV_VALUE, value=vp_inc))
+        if u_attention < 0:
+            reasons_against.append(Reason(
+                type=ReasonType.AVOIDS_EARLY_ATTENTION, label=ReasonLabel.EARLY_ATTENTION_RISK,
+                value=abs(u_attention),
+            ))
+
+        reasons_for.sort(key=lambda reason: reason.value, reverse=True)
+        reasons_against.sort(key=lambda reason: reason.value, reverse=True)
+
+        return CandidateExplanation(
+            action=next_step,
+            full_plan=actions,
+            next_plan=next_plan,
+            waiting_resources=waiting_resources,
+            etb=etb,
+            etw_before=etw_before,
+            etw_after=etw_after,
+            etw_delta=etw_delta,
+            utility_total=utility_total,
+            utility_self=u_self,
+            utility_opponent=u_opp,
+            utility_special=u_special,
+            utility_attention=u_attention,
+            expected_vp_gain=vp_inc,
+            reasons_for=reasons_for,
+            reasons_against=reasons_against,
+            metadata={
+                "blocks_opponent": blocks_opponent,
+                "improves_longest_road": improves_longest_road,
+                "improves_largest_army": improves_largest_army,
+            },
+        )
+
     def _get_candidate_actions(
         self, player: SimPlayerState, sim_game: SimGame, dev_played: bool,
         include_player_trades: bool = True,
@@ -803,182 +987,77 @@ class EtwEstimator:
             opp_etw_before = opponents_etw_before.get(leading_opp_num)
 
         for actions, etb, vp_inc in candidates[:max_eval]:
-            if etb > MAX_ETB_THRESHOLD or not actions:
-                continue
-
-            next_step = actions[0]
-            next_plan, waiting_resources = self._future_plan_fields(player, actions)
-
-            player_copy = player.copy()
-            sim_game_copy = _sim_game_with_replaced_player(sim_game, player_copy)
-
-            did_build_road = False
-            did_play_knight = False
-
-            for s in actions:
-                if s.type == ActionType.BUILD and s.payload[0] == Buildable.ROAD:
-                    did_build_road = True
-                elif s.type == ActionType.PLAY_DEV_CARD and s.payload == DevelopmentCardType.KNIGHT:
-                    did_play_knight = True
-
-                self._simulate_step(sim_game_copy, player_copy, s)
-                if player_copy.victory_points() >= Game.VICTORY_POINTS_TO_WIN:
-                    break
-
-            etw_after = self.estimated_time_to_win(
-                player_copy, sim_game_copy, dev_played, max_depth_override=EVAL_UTIL_MAX_DEPTH,
+            candidate = self._evaluate_action_plan(
+                player, sim_game, dev_played, actions, etb, vp_inc, etw_before, opponents_etw_before,
             )
-
-            etw_delta = etw_before - etw_after
-            u_self = 0.0 if etw_before <= 0 else max(0.0, etw_delta / etw_before * 100.0)
-
-            affects_board = any(
-                s.type == ActionType.BUILD and s.payload[0] in (Buildable.ROAD, Buildable.SETTLEMENT)
-                for s in actions
-            )
-
-            u_opp = 0.0
-            blocks_opponent = False
-            if affects_board and leading_opp_num is not None and opp_etw_before and opp_etw_before > 0:
-                opp_state = sim_game_copy.overlay.get_sim_player(leading_opp_num).copy()
-                sim_game_opp = _sim_game_with_replaced_player(sim_game_copy, opp_state)
-
-                opp_etw_after = self.estimated_time_to_win(
-                    opp_state, sim_game_opp, False, max_depth_override=EVAL_UTIL_MAX_DEPTH,
-                )
-
-                delay_caused = (opp_etw_after - opp_etw_before) / opp_etw_before * 100.0
-                u_opp = StrategyWeights.OPPONENT_INTERFERENCE_LEADING * delay_caused
-                blocks_opponent = delay_caused > 0.0
-
-            u_special = 0.0
-            improves_longest_road = False
-            improves_largest_army = False
-
-            if did_build_road:
-                delta_lr = max(0, player_copy.longest_road_length - player.longest_road_length)
-                if delta_lr > 0 and player_copy.longest_road_length >= StrategyWeights.LR_ROAD_THRESHOLD:
-                    u_special += StrategyWeights.LR_UTILITY_MULTIPLIER * delta_lr
-                    improves_longest_road = True
-
-            if did_play_knight:
-                if player_copy.army_size >= StrategyWeights.LA_ARMY_THRESHOLD:
-                    u_special += compute_k_la(player_copy, sim_game)
-                    improves_largest_army = True
-
-            took_lr_now = (not player.has_longest_road) and player_copy.has_longest_road
-            vp_after = player_copy.victory_points()
-
-            u_attention = 0.0
-            if took_lr_now and vp_after < StrategyWeights.ATTENTION_LR_VP_THRESHOLD:
-                u_attention -= StrategyWeights.ATTENTION_LR_EARLY_PENALTY
-
-            discount_rate = StrategyWeights.TIME_DISCOUNT_RATE
-            utility_total = (
-                (StrategyWeights.BUILD_SELF_UTILITY * u_self + StrategyWeights.BUILD_OPPONENT_UTILITY * u_opp
-                 + StrategyWeights.BUILD_SPECIAL_UTILITY * u_special + u_attention)
-                / ((1.0 + discount_rate) ** max(1.0, etb))
-            )
-
-            reasons_for: List[Reason] = []
-            reasons_against: List[Reason] = []
-
-            final_step = actions[-1]
-
-            if final_step.type == ActionType.BUILD:
-                building, _ = final_step.payload
-
-                if building == Buildable.SETTLEMENT:
-                    reasons_for.append(
-                        Reason(
-                            type=ReasonType.ENABLES_EXPANSION, label=ReasonLabel.PLAN_SETTLEMENT_VALUE,
-                            value=max(u_self * 0.9, 1.0),
-                        )
-                    )
-
-                elif building == Buildable.CITY:
-                    reasons_for.append(
-                        Reason(
-                            type=ReasonType.IMPROVES_PRODUCTION, label=ReasonLabel.PLAN_CITY_VALUE,
-                            value=max(u_self * 0.8, 1.0),
-                        )
-                    )
-
-                elif building == Buildable.ROAD:
-                    reasons_for.append(
-                        Reason(
-                            type=ReasonType.ENABLES_EXPANSION, label=ReasonLabel.PLAN_ROAD_VALUE,
-                            value=max(u_self * 0.7, 1.0),
-                        )
-                    )
-
-            if etb <= 2.5:
-                quick_label, quick_meta = self._quick_reason_label(next_step, final_step)
-                reasons_for.append(
-                    Reason(
-                        type=ReasonType.QUICK_TO_EXECUTE, label=quick_label, metadata=quick_meta,
-                        value=max(0.0, 5.0 - etb),
-                    )
-                )
-
-            if blocks_opponent and u_opp > 0:
-                reasons_for.append(
-                    Reason(type=ReasonType.SLOWS_LEADING_OPPONENT, label=ReasonLabel.SLOWS_LEADER, value=u_opp)
-                )
-
-            if improves_longest_road:
-                reasons_for.append(
-                    Reason(
-                        type=ReasonType.ADVANCES_LONGEST_ROAD, label=ReasonLabel.ADVANCES_LONGEST_ROAD,
-                        value=u_special,
-                    )
-                )
-
-            if improves_largest_army:
-                reasons_for.append(
-                    Reason(
-                        type=ReasonType.ADVANCES_LARGEST_ARMY, label=ReasonLabel.ADVANCES_LARGEST_ARMY,
-                        value=u_special,
-                    )
-                )
-
-            if next_step.type in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER):
-                reasons_for.append(Reason(type=ReasonType.REQUIRES_TRADE, label=ReasonLabel.REQUIRES_TRADE, value=1.0))
-
-            if next_step.type == ActionType.BUY_DEV_CARD and vp_inc > 0:
-                reasons_for.append(
-                    Reason(type=ReasonType.HIDDEN_VALUE, label=ReasonLabel.HIDDEN_DEV_VALUE, value=vp_inc)
-                )
-
-            if u_attention < 0:
-                reasons_against.append(
-                    Reason(
-                        type=ReasonType.AVOIDS_EARLY_ATTENTION, label=ReasonLabel.EARLY_ATTENTION_RISK,
-                        value=abs(u_attention),
-                    )
-                )
-
-            reasons_for.sort(key=lambda r: r.value, reverse=True)
-            reasons_against.sort(key=lambda r: r.value, reverse=True)
-
-            explained.append(
-                CandidateExplanation(
-                    action=next_step, full_plan=actions, next_plan=next_plan,
-                    waiting_resources=waiting_resources, etb=etb, etw_before=etw_before, etw_after=etw_after,
-                    etw_delta=etw_delta, utility_total=utility_total, utility_self=u_self,
-                    utility_opponent=u_opp, utility_special=u_special, utility_attention=u_attention,
-                    expected_vp_gain=vp_inc, reasons_for=reasons_for, reasons_against=reasons_against,
-                    metadata={
-                        "blocks_opponent": blocks_opponent, "improves_longest_road": improves_longest_road,
-                        "improves_largest_army": improves_largest_army,
-                    },
-                )
-            )
+            if candidate is not None:
+                explained.append(candidate)
 
         deferred_candidate = max(explained, key=lambda c: c.utility_total, default=None)
         explained.append(self._build_end_turn_candidate(player, sim_game, etw_before, deferred_candidate))
         explained.sort(key=lambda c: c.utility_total, reverse=True)
         return explained
+
+    def explain_action(
+        self,
+        sim_game: SimGame,
+        player_number: PlayerNumber,
+        dev_played: bool,
+        action: Action,
+        ignore_opponents: bool = False,
+    ) -> ActionExplanation:
+        sim_player = sim_game.overlay.get_sim_player(player_number)
+        etw_before = self.estimated_time_to_win(sim_player.copy(), sim_game, dev_played)
+
+        opponents_etw_before: Dict[PlayerNumber, float] = {}
+        if not ignore_opponents:
+            for opp in get_opponents(sim_game, player_number):
+                opponents_etw_before[opp.player_number] = self.estimated_time_to_win(opp.copy(), sim_game, False)
+
+        candidates = self._get_candidate_actions(sim_player, sim_game, dev_played)
+        explained_candidates = self.evaluate_candidates_with_explanations(
+            sim_player, sim_game, dev_played, candidates, etw_before, opponents_etw_before,
+        ) if candidates else []
+
+        chosen_candidate = next((candidate for candidate in explained_candidates if candidate.action == action), None)
+        if chosen_candidate is None:
+            chosen_candidate = self._evaluate_action_plan(
+                sim_player,
+                sim_game,
+                dev_played,
+                [action],
+                self._estimate_single_action_etb(sim_player, sim_game, action),
+                0.0,
+                etw_before,
+                opponents_etw_before,
+            )
+
+        if chosen_candidate is None:
+            chosen_candidate = CandidateExplanation(
+                action=action,
+                full_plan=[action],
+                etw_before=etw_before,
+                etw_after=etw_before,
+                etw_delta=0.0,
+                utility_total=0.0,
+                reasons_for=[],
+            )
+
+        alternatives = [candidate for candidate in explained_candidates if candidate.action != chosen_candidate.action][:3]
+        worst_utility = explained_candidates[-1].utility_total if explained_candidates else chosen_candidate.utility_total
+
+        return ActionExplanation(
+            chosen_action=chosen_candidate.action,
+            chosen_candidate=chosen_candidate,
+            alternatives=alternatives,
+            move_quality=strategic_turn_move_quality(
+                chosen_candidate,
+                alternatives[0].utility_total if alternatives else None,
+                worst_utility,
+            ),
+            assumptions=[AssumptionCode.EXPECTED_PRODUCTION, AssumptionCode.LEGALITY_AND_AFFORDABILITY],
+            metadata={"player_number": player_number, "etw_before": etw_before},
+        )
 
     def calculate_best_game_action_with_explanation(
         self, sim_game: SimGame, player_number: PlayerNumber, dev_played: bool,

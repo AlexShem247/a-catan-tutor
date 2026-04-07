@@ -37,14 +37,17 @@ def move_quality_from_margin(best_value: float, second_value: Optional[float],
     return clamp_move_quality(margin / spread)
 
 
-def initial_settlement_move_quality(chosen_vertex_utility: float, max_vertex_utility: float) -> float:
-    q = move_quality_from_ratio(chosen_vertex_utility, max_vertex_utility)
+def opening_move_quality(chosen_utility: float, max_utility: float) -> float:
+    q = move_quality_from_ratio(chosen_utility, max_utility)
     return q ** 1.2  # slight compression
+
+
+def initial_settlement_move_quality(chosen_vertex_utility: float, max_vertex_utility: float) -> float:
+    return opening_move_quality(chosen_vertex_utility, max_vertex_utility)
 
 
 def initial_road_expansion_move_quality(target_vertex_utility: float, max_legal_vertex_utility: float) -> float:
-    q = move_quality_from_ratio(target_vertex_utility, max_legal_vertex_utility)
-    return q ** 1.2  # slight compression
+    return opening_move_quality(target_vertex_utility, max_legal_vertex_utility)
 
 
 def initial_road_connection_move_quality(valid_connection_edges: int) -> float:

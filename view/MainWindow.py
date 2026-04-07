@@ -153,6 +153,12 @@ class MainWindow(QMainWindow):
                 else:
                     widget.hide()
 
+    def set_main_action_btns_enabled(self, enabled: bool):
+        for i in range(self.main_menu.action_btn_layout.count()):
+            widget: QWidget = self.main_menu.action_btn_layout.itemAt(i).widget()
+            if widget:
+                widget.setEnabled(enabled)
+
     def closeEvent(self, _):
         quit()
 
@@ -251,6 +257,7 @@ class MainWindow(QMainWindow):
 
         # Actions
         self.toggle_main_action_btns(True)
+        self.set_main_action_btns_enabled(True)
 
         self.draw_buildables_if_can_build(controller, player)
         can_afford_card = controller.get_buildable_options(player)[Buildable.DEVELOPMENT_CARD]
@@ -383,6 +390,24 @@ class MainWindow(QMainWindow):
 
         self.canvas.render_planned_builds(explanation.get_visual_build_plan())
         self.display_trade_preview(explanation)
+
+    def display_tutor_action_feedback(self, title: str, explanation_html: str) -> None:
+        self.canvas.clear_planned_builds()
+        self.clear_trade_preview()
+        self.set_main_action_btns_enabled(False)
+        self.tutor_menu.action_label.setText(title)
+        self.tutor_menu.explanation_edit.setHtml(explanation_html)
+        self.tutor_menu.continue_btn.show()
+        self.tutor_menu.continue_btn.setEnabled(True)
+        self.tutor_menu.continue_btn.setText("Continue")
+        self.safe_connect(self.tutor_menu.continue_btn, lambda: self.turnMade.emit(True))
+        self.tutor_menu.explain_btn.show()
+        self.tutor_menu.explain_btn.setEnabled(True)
+        self.tutor_menu.explain_btn.setText("Explain Further")
+        self.safe_connect(
+            self.tutor_menu.explain_btn,
+            lambda: self.tutor_menu.explanation_edit.setText("This feature has not been implemented yet.")
+        )
 
     def clear_trade_preview(self):
         if self.active_trade_preview_widget is None:

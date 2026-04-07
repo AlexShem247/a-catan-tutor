@@ -124,6 +124,11 @@ class QtView(View):
         self.window.display_resources(self.controller)
         self.window.display_tutor_init(player, stage, explanation)
 
+    def display_tutor_action_feedback(self, title: str, explanation_html: str) -> None:
+        self.canvas.display_board(self.controller)
+        self.window.display_resources(self.controller)
+        select_blocking(self, self.window.turnMade, self.window.display_tutor_action_feedback, title, explanation_html)
+
     def open_tutor_menu(self, open_menu: bool):
         self.window.open_tutor_menu(open_menu)
 

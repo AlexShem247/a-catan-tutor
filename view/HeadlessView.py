@@ -36,6 +36,9 @@ class HeadlessView(View):
     def display_tutor_init(self, player: Player, stage: TutorStage, explanation: ActionExplanation) -> None:
         pass
 
+    def display_tutor_action_feedback(self, title: str, explanation_html: str) -> None:
+        pass
+
     def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False) -> Vertex:
         return vertices[0]
 
