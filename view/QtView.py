@@ -3,6 +3,7 @@ from typing import List, Dict, Optional, Tuple, Any
 from PyQt6.QtCore import QEventLoop, QTimer, pyqtBoundSignal
 
 from GameController import GameController
+from ai.actions import Action
 from ai.tutor.explanations import ActionExplanation
 from ai.tutor.tutor import TutorStage
 from game.Edge import Edge
@@ -38,10 +39,10 @@ class QtView(View):
         self.window.display_generic_info(player, msg)
         ai_time_delay(self.ai_decision_animation_delay * 1)
 
-    def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int], played_dev_card: bool = False):
+    def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int], played_dev_card: bool = False) -> Action:
         """Hook to display the board in the Qt window."""
-        select_blocking(self, self.window.turnMade, self.window.display_round_info, self.controller,
-                        player, dice_info, played_dev_card)
+        return select_blocking(self, self.window.turnMade, self.window.display_round_info, self.controller,
+                               player, dice_info, played_dev_card)
 
     def display_board_turn_ai(self, player: Player, dice_info: Tuple[int, int, int], msg: str, increase_delay=False):
         """Hook to display the board in the Qt window."""
@@ -85,6 +86,18 @@ class QtView(View):
         return select_blocking(
             self, self.window.tradeDecisionMade, self.window.display_trade_manager, player, selling,
             buying, selling_player
+        )
+
+    def select_player_trade_offer(
+            self,
+            player: Player,
+            selling: ResourceCount,
+            buying: ResourceCount,
+            willing_players: List[Tuple[Player, Optional[ResourceCount]]],
+    ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+        return select_blocking(
+            self, self.window.tradeSelected, self.window.select_player_to_trade,
+            self.controller, player, selling, buying, willing_players,
         )
 
     def pre_roll(self, player: Player) -> DevelopmentCardType | bool:

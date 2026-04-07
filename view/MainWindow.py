@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 )
 
 from GameController import GameController
+from ai.actions import Action, ActionType
 from ai.tutor.explanations import ActionExplanation, ExplanationTemplate
 from ai.tutor.tutor import TutorStage, TUTOR_STAGE_CONTENT
 from game.Edge import Edge
@@ -30,6 +31,7 @@ class MainWindow(QMainWindow):
     startGame = pyqtSignal(object)
     turnMade = pyqtSignal(object)
     tradeDecisionMade = pyqtSignal(object)
+    tradeSelected = pyqtSignal(object)
     resourcesPicked = pyqtSignal(object)
 
     def __init__(self):
@@ -82,7 +84,7 @@ class MainWindow(QMainWindow):
 
         self.verticalSpacer = self.find_last_vertical_spacer()
         self.active_trade_preview_widget: QWidget | None = None
-        self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(True))
+        self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(Action(ActionType.END_TURN)))
 
     def safe_connect(self, button: QToolButton | QPushButton, slot: Callable):
         try:
@@ -259,6 +261,7 @@ class MainWindow(QMainWindow):
         self.safe_connect(self.main_menu.dev_btn, lambda: self.show_development_menu(
             controller, player, played_dev_card,
             lambda played: self.display_round_info(controller, player, dice_info, played)))
+        self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(Action(ActionType.END_TURN)))
 
     def open_tutor_menu(self, open_menu: bool):
         if open_menu:
@@ -654,24 +657,27 @@ class MainWindow(QMainWindow):
             back_action()
 
         def trade_with_bank():
-            controller.try_trade_with_bank(player, selling, buying)
-            self.display_trade_menu(controller, player, back_action)
-            self.draw_buildables_if_can_build(controller, player)
-
-        def trade_with_players():
-            willing_players = controller.trade_with_players(player, selling, buying)
+            self.restore_spacer()
             self.main_menu.action_btn_layout.removeWidget(trade_designer)
             trade_designer.setParent(None)
-            self.select_player_to_trade(controller, player, selling, buying, willing_players,
-                                        lambda: self.display_trade_menu(controller, player, back_action))
+            self.main_menu.main_label.show()
+            self.main_menu.action_label.show()
+            self.turnMade.emit(Action(ActionType.TRADE_WITH_BANK, (selling.copy(), buying.copy())))
+
+        def trade_with_players():
+            self.restore_spacer()
+            self.main_menu.action_btn_layout.removeWidget(trade_designer)
+            trade_designer.setParent(None)
+            self.main_menu.main_label.show()
+            self.main_menu.action_label.show()
+            self.turnMade.emit(Action(ActionType.TRADE_WITH_PLAYER, (selling.copy(), buying.copy())))
 
         self.safe_connect(trade_designer.terminate_btn, terminate_trade)
         self.safe_connect(trade_designer.bank_trade_btn, trade_with_bank)
         self.safe_connect(trade_designer.player_trade_btn, trade_with_players)
 
     def select_player_to_trade(self, controller: GameController, player: Player, selling: ResourceCount,
-                               buying: ResourceCount, willing_players: List[Tuple[Player, ResourceCount | None]],
-                               back_action):
+                               buying: ResourceCount, willing_players: List[Tuple[Player, ResourceCount | None]]):
         self.display_resources(controller)
         self.clear_trade_preview()
         select_trade = self.select_trade_widget
@@ -692,7 +698,7 @@ class MainWindow(QMainWindow):
             def back():
                 self.main_menu.action_btn_layout.removeWidget(select_trade)
                 select_trade.setParent(None)
-                back_action()
+                self.tradeSelected.emit(None)
 
             self.safe_connect(select_trade.submit_btn, back)
             return
@@ -734,21 +740,13 @@ class MainWindow(QMainWindow):
 
         # Accept a trade when the user double-clicks an item
         def accept_trade(trade: QListWidgetItem):
-            nonlocal selling
             deal = trade.data(Qt.ItemDataRole.UserRole)
             if not deal:
                 return
 
             self.main_menu.action_btn_layout.removeWidget(select_trade)
             select_trade.setParent(None)
-
-            buying_player, counter_offer = deal
-            if counter_offer is not None:
-                selling = counter_offer  # Player accepted counteroffer
-
-            controller.trade_between_players(player, selling, buying_player, buying)
-            self.draw_buildables_if_can_build(controller, player)
-            back_action()
+            self.tradeSelected.emit(deal)
 
         try:
             select_trade.trade_list.itemDoubleClicked.disconnect()
@@ -760,7 +758,7 @@ class MainWindow(QMainWindow):
         def cancel():
             self.main_menu.action_btn_layout.removeWidget(select_trade)
             select_trade.setParent(None)
-            back_action()
+            self.tradeSelected.emit(None)
 
         self.safe_connect(select_trade.submit_btn, cancel)
 
@@ -983,16 +981,12 @@ class MainWindow(QMainWindow):
                 clean_up()
                 back_action(selected_card.card_type)
             else:
-                back()
-            controller.play_development_card(player, selected_card.card_type)
-            if not pre_roll_mode:
-                self.display_resources(controller)
-                self.show_development_menu(controller, player, True, back_action)
+                self.turnMade.emit(Action(ActionType.PLAY_DEV_CARD, selected_card.card_type))
+                clean_up()
 
         def buy_card():
-            controller.try_buy_development_card(player)
-            self.display_resources(controller)
-            self.show_development_menu(controller, player, played_dev_card, back_action)
+            clean_up()
+            self.turnMade.emit(Action(ActionType.BUY_DEV_CARD))
 
         can_afford_card = controller.get_buildable_options(player)[Buildable.DEVELOPMENT_CARD]
 
@@ -1017,17 +1011,12 @@ class MainWindow(QMainWindow):
         def build(selected_buildable: Vertex | Edge):
             match selected_buildable:
                 case Edge():
-                    controller.try_build_road(player, selected_buildable)
+                    self.turnMade.emit(Action(ActionType.BUILD, (Buildable.ROAD, selected_buildable)))
                 case Vertex():
                     if selected_buildable.building is None:
-                        controller.try_build_settlement(player, selected_buildable)
+                        self.turnMade.emit(Action(ActionType.BUILD, (Buildable.SETTLEMENT, selected_buildable)))
                     else:
-                        controller.try_build_city(player, selected_buildable)
-
-            self.canvas.interactive_shapes.clear()
-            self.canvas.display_board(controller)
-            self.display_resources(controller)
-            self.draw_buildables_if_can_build(controller, player)
+                        self.turnMade.emit(Action(ActionType.BUILD, (Buildable.CITY, selected_buildable)))
 
         buildable = controller.get_buildable_options(player)
         can_build = buildable[Buildable.ROAD] or buildable[Buildable.SETTLEMENT] or buildable[Buildable.CITY]

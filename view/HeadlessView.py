@@ -1,5 +1,6 @@
 from typing import List, Tuple, Dict, Optional
 
+from ai.actions import Action, ActionType
 from ai.tutor.explanations import ActionExplanation
 from ai.tutor.tutor import TutorStage
 from view.View import View
@@ -20,8 +21,8 @@ class HeadlessView(View):
 
     def display_board_turn(self, player: Player,
                            dice_info: Tuple[int, int, int],
-                           played_dev_card: bool = False) -> None:
-        pass
+                           played_dev_card: bool = False) -> Action:
+        return Action(ActionType.END_TURN)
 
     def display_board_turn_ai(self, player: Player,
                               dice_info: Tuple[int, int, int],
@@ -54,6 +55,15 @@ class HeadlessView(View):
     def display_trade_manager(self, player: Player, selling: ResourceCount,
                               buying: ResourceCount, selling_player: Player):
         return False, None
+
+    def select_player_trade_offer(
+            self,
+            player: Player,
+            selling: ResourceCount,
+            buying: ResourceCount,
+            willing_players: List[Tuple[Player, Optional[ResourceCount]]],
+    ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+        return willing_players[0] if willing_players else None
 
     def pre_roll(self, player: Player) -> DevelopmentCardType | bool:
         return False

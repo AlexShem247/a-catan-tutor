@@ -181,7 +181,7 @@ p, li { white-space: pre-wrap; }
       </font>
      </property>
      <property name="toolTip">
-      <string>Let the AI play the game quickly without stopping to explain its moves.</string>
+      <string/>
      </property>
      <property name="text">
       <string>Tutor Mode</string>
@@ -202,7 +202,7 @@ p, li { white-space: pre-wrap; }
       </font>
      </property>
      <property name="toolTip">
-      <string>Explore the AI's decision-making by stepping through moves with detailed explanations.</string>
+      <string/>
      </property>
      <property name="text">
       <string>Lab</string>

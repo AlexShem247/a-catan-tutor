@@ -1,6 +1,7 @@
 from enum import Enum, auto
 from typing import List, Tuple, Dict, Optional, Protocol
 
+from ai.actions import Action
 from ai.tutor.explanations import ActionExplanation
 from ai.tutor.tutor import TutorStage
 from game.Edge import Edge
@@ -27,7 +28,7 @@ class View(Protocol):
         ...
 
     def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int],
-                           played_dev_card: bool = False) -> None:
+                           played_dev_card: bool = False) -> Action:
         ...
 
     def display_board_turn_ai(self, player: Player, dice_info: Tuple[int, int, int], msg: str, increase_delay=False,
@@ -59,6 +60,15 @@ class View(Protocol):
 
     def display_trade_manager(self, player: Player, selling: ResourceCount,
                               buying: ResourceCount, selling_player: Player) -> Tuple[bool, Optional[ResourceCount]]:
+        ...
+
+    def select_player_trade_offer(
+            self,
+            player: Player,
+            selling: ResourceCount,
+            buying: ResourceCount,
+            willing_players: List[Tuple[Player, Optional[ResourceCount]]],
+    ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
         ...
 
     def pre_roll(self, player: Player) -> DevelopmentCardType | bool:

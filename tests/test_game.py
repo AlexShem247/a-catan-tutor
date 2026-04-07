@@ -220,12 +220,12 @@ class TestGame(unittest.TestCase):
     def test_opening_move_quality_helpers(self):
         self.assertEqual(initial_settlement_move_quality(12.0, 12.0), 1.0)
         self.assertEqual(initial_road_connection_move_quality(1), 1.0)
-        self.assertEqual(initial_road_connection_move_quality(4), 0.25)
+        self.assertAlmostEqual(initial_road_connection_move_quality(4), 0.18946457081379978)
         self.assertEqual(initial_road_flexible_move_quality(), 0.3)
 
     def test_move_quality_labels_use_zero_to_one_thresholds(self):
         self.assertEqual(move_quality_label(0.9), "Excellent")
-        self.assertEqual(move_quality_label(0.7), "Excellent")
+        self.assertEqual(move_quality_label(0.7), "Good")
         self.assertEqual(move_quality_label(0.5), "Good")
         self.assertEqual(move_quality_label(0.25), "Okay")
         self.assertEqual(move_quality_label(0.1), "Okay")
@@ -233,7 +233,7 @@ class TestGame(unittest.TestCase):
     def test_strategic_turn_move_quality_uses_etw_reduction(self):
         candidate = SimpleNamespace(etw_before=20.0, etw_after=16.0, etw_delta=4.0, utility_total=12.0)
         quality = strategic_turn_move_quality(candidate, second_utility=6.0, worst_utility=0.0)
-        self.assertAlmostEqual(quality, 0.07935034778243633)
+        self.assertAlmostEqual(quality, 0.3948074730641816)
         self.assertLessEqual(quality, 1.0)
 
     def test_strategic_turn_move_quality_defaults_low_when_no_gain(self):

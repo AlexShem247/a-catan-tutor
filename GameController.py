@@ -2,7 +2,7 @@ from random import Random
 from typing import List, Tuple, Optional, Dict
 
 from ai.RuleBasedAI import RuleBasedAI
-from ai.actions import ActionType, Phase
+from ai.actions import Action, ActionType, Phase
 from ai.tutor.tutor import TutorStage
 from config.view_constants import AI_DECISION_ANIMATION_DELAY, AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE, \
     SHOW_AI_BUILT_LOCATIONS
@@ -453,10 +453,51 @@ class GameController:
         if playable_cards:
             # Player can play card before rolling dice
             played_card = self.view.pre_roll(player)
-            played_dev_card = played_card is not False
+            if played_card is not False:
+                self.play_development_card(player, played_card)
+                played_dev_card = True
 
         d1, d2, total, _ = self.roll_dice(player)
-        self.view.display_board_turn(player, (d1, d2, total), played_dev_card)
+
+        while True:
+            action = self.view.display_board_turn(player, (d1, d2, total), played_dev_card)
+            if action.type == ActionType.END_TURN:
+                break
+
+            match action.type:
+                case ActionType.BUILD:
+                    buildable, location = action.payload
+                    if buildable == Buildable.ROAD:
+                        self.try_build_road(player, location)
+                    elif buildable == Buildable.SETTLEMENT:
+                        self.try_build_settlement(player, location)
+                    elif buildable == Buildable.CITY:
+                        self.try_build_city(player, location)
+
+                case ActionType.TRADE_WITH_BANK:
+                    selling, buying = action.payload
+                    self.try_trade_with_bank(player, selling, buying)
+
+                case ActionType.TRADE_WITH_PLAYER:
+                    selling, buying = action.payload
+                    willing_players = self.trade_with_players(player, selling, buying)
+                    affordable_offers = [
+                        (p, counter) for (p, counter) in willing_players
+                        if counter is None or player.can_afford(counter)
+                    ]
+                    deal = self.view.select_player_trade_offer(player, selling, buying, affordable_offers)
+                    if deal is not None:
+                        buying_player, counter = deal
+                        final_selling = counter if counter is not None else selling
+                        self.trade_between_players(player, final_selling, buying_player, buying)
+
+                case ActionType.BUY_DEV_CARD:
+                    self.try_buy_development_card(player)
+
+                case ActionType.PLAY_DEV_CARD:
+                    if not played_dev_card:
+                        self.play_development_card(player, action.payload)
+                        played_dev_card = True
 
     def _is_guided_turn(self, player: Player):
         return (self.game_mode == GameMode.GUIDED and player.player_number == PlayerNumber.P1
