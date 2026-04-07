@@ -1,3 +1,4 @@
+from random import Random
 from typing import List, Tuple, Optional, Dict
 
 from ai.RuleBasedAI import RuleBasedAI
@@ -23,11 +24,14 @@ class GameController:
     _game: Game
     game_mode = GameMode.PLAY
 
-    def __init__(self, game_players: PlayerConfig, simulation_players: PlayerConfig):
+    def __init__(self, game_players: PlayerConfig, simulation_players: PlayerConfig, game_seed: Optional[int] = None):
         self.view: View | None = None
         self.game_players = game_players
         self.simulation_players = simulation_players
-        self.tutor_ai = RuleBasedAI()
+        self.game_seed = game_seed
+        self.game_rng = Random(game_seed)
+        self._tutor_dev_played = False
+        self.tutor_ai = RuleBasedAI(self.game_rng)
         self.reset_game()
 
     def reset_game(self):
@@ -35,8 +39,11 @@ class GameController:
         is_play_mode = self.game_mode in {GameMode.PLAY, GameMode.TUTOR}
         is_tutor_mode = self.game_mode in {GameMode.GUIDED, GameMode.TUTOR}
 
+        self.game_rng = Random(self.game_seed)
+        self._tutor_dev_played = False
+        self.tutor_ai = RuleBasedAI(self.game_rng)
         players = self.game_players if is_play_mode else self.simulation_players
-        self._game = Game(players)
+        self._game = Game(players, self.game_rng)
 
         if self.view:
             self.view.ai_decision_animation_delay = (
@@ -49,9 +56,11 @@ class GameController:
         if self.game_mode == GameMode.TUTOR and player.is_human and explanation is not None:
             self.view.display_tutor_init(player, stage, explanation)
 
-    def get_tutor_turn_explanation(self, player: Player, played_dev_card: bool):
+    def get_tutor_turn_explanation(self, player: Player, played_dev_card: Optional[bool] = None):
         if self.game_mode != GameMode.TUTOR or not player.is_human:
             return None
+        if played_dev_card is None:
+            played_dev_card = self._tutor_dev_played
         _, explanation = self.tutor_ai.next_action_with_explanation(
             player,
             self._game,
@@ -59,6 +68,14 @@ class GameController:
             dev_played=played_dev_card,
         )
         return explanation
+
+    def _refresh_tutor_turn_explanation(self, player: Player) -> None:
+        if self.game_mode != GameMode.TUTOR or not player.is_human or self.view is None:
+            return
+
+        explanation = self.get_tutor_turn_explanation(player)
+        if explanation is not None:
+            self.view.display_tutor_init(player, TutorStage.TURN_ACTION, explanation)
 
     def start_game(self):
         """Run initial placement, then loop turns until game over."""
@@ -414,11 +431,16 @@ class GameController:
                 player.development_cards.remove(card)
                 break
 
+        if player.is_human:
+            self._tutor_dev_played = True
+            self._refresh_tutor_turn_explanation(player)
+
         return msg
 
     def make_round_move(self, player: Player):
         if self.game_mode == GameMode.TUTOR:
             self.tutor_ai.new_turn()
+            self._tutor_dev_played = False
 
         playable_cards = [card for card in player.development_cards if card.playable]
         played_dev_card = False
@@ -588,7 +610,11 @@ class GameController:
             road_restriction: bool = True
     ) -> tuple[bool, str]:
         """Attempt to build a settlement with rules enforced."""
-        return self._game.try_build_settlement(player, vertex, build, use_resources, road_restriction)
+        result = self._game.try_build_settlement(player, vertex, build, use_resources, road_restriction)
+        success, _ = result
+        if success and build:
+            self._refresh_tutor_turn_explanation(player)
+        return result
 
     def get_edge(self, q: int, r: int, edge_index: EdgeDirection) -> Optional[Edge]:
         """Return the Edge object for hex (q,r) at edge_index 0-5."""
@@ -603,7 +629,11 @@ class GameController:
             use_resources: bool = True
     ) -> tuple[bool, str]:
         """Attempt to build a road with rules enforced."""
-        return self._game.try_build_road(player, edge, on_vertex, build, use_resources)
+        result = self._game.try_build_road(player, edge, on_vertex, build, use_resources)
+        success, _ = result
+        if success and build:
+            self._refresh_tutor_turn_explanation(player)
+        return result
 
     def get_buildable_options(self, player: Player) -> Dict:
         """
@@ -620,19 +650,28 @@ class GameController:
             use_resources: bool = True
     ) -> tuple[bool, str]:
         """Attempt to upgrade a settlement to a city."""
-        return self._game.try_build_city(player, vertex, build, use_resources)
+        result = self._game.try_build_city(player, vertex, build, use_resources)
+        success, _ = result
+        if success and build:
+            self._refresh_tutor_turn_explanation(player)
+        return result
 
     def try_trade_with_bank(
             self, player: Player, selling: ResourceCount,
             buying: ResourceCount, use_resources: bool = True
     ) -> bool:
         """Attempt a bank trade using correct port discounts (2:1, 3:1, 4:1)."""
-        return self._game.try_trade_with_bank(player, selling, buying, use_resources)
+        success = self._game.try_trade_with_bank(player, selling, buying, use_resources)
+        if success and use_resources:
+            self._refresh_tutor_turn_explanation(player)
+        return success
 
     def trade_between_players(self, player: Player, selling: ResourceCount,
                               buying_player: Player, buying: ResourceCount):
         """Execute a trade of resources between two players."""
-        return self._game.trade_between_players(player, selling, buying_player, buying)
+        result = self._game.trade_between_players(player, selling, buying_player, buying)
+        self._refresh_tutor_turn_explanation(player)
+        return result
 
     def get_available_vertices(self, player: Player, building_type: Buildable, road_restriction: bool = True) -> \
             List[Vertex]:
@@ -665,7 +704,11 @@ class GameController:
 
     def try_buy_development_card(self, player) -> Tuple[bool, str]:
         """Attempt to buy a development card for a player."""
-        return self._game.try_buy_development_card(player)
+        result = self._game.try_buy_development_card(player)
+        success, _ = result
+        if success:
+            self._refresh_tutor_turn_explanation(player)
+        return result
 
     def get_available_edges(self, player: Player) -> List[Edge]:
         """Return a list of edges where the player can build a road."""

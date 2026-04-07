@@ -1,7 +1,7 @@
 import sys
 import time
 from collections import defaultdict
-from random import shuffle, seed as set_seed
+from random import Random
 from typing import Dict, Type
 import multiprocessing as mp
 
@@ -22,13 +22,12 @@ def run_single_game(args):
     """Run a single game simulation - must be at module level for multiprocessing."""
     seed, player_policies, first_policy_class, game_id = args
 
-    # Set seed for reproducibility
-    set_seed(seed)
+    rng = Random(seed)
 
     if SHUFFLE_ORDER:
         other_policies = list(player_policies.values())[1:]
         all_players = other_policies + [first_policy_class]
-        shuffle(all_players)
+        rng.shuffle(all_players)
         shuffled_config = {pn: pol for pn, pol in zip(player_policies.keys(), all_players)}
         first_player_number = [pn for pn, pol in shuffled_config.items() if pol == first_policy_class][0]
     else:
@@ -36,7 +35,7 @@ def run_single_game(args):
         first_player_number = list(player_policies.keys())[0]
 
     # Run the game
-    controller = GameController({}, shuffled_config)
+    controller = GameController({}, shuffled_config, game_seed=seed)
     controller.view = HeadlessView()
     controller.start_game()
     game = controller.get_game_state()

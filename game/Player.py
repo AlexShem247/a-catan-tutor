@@ -1,5 +1,5 @@
-import random
 from enum import Enum
+from random import Random
 from typing import List, Optional, Tuple, TYPE_CHECKING
 
 from game.Edge import Edge
@@ -19,12 +19,13 @@ class PlayerNumber(Enum):
 
 
 class Player:
-    def __init__(self, is_human: bool, player_number: PlayerNumber, bank_resources: ResourceCount,
+    def __init__(self, is_human: bool, player_number: PlayerNumber, bank_resources: ResourceCount, rng: Random,
                  name: Optional[str] = None, policy: Optional["AI"] = None):
         self.is_human = is_human
         self.name = player_number.name if name is None else name
         self.player_number = player_number
         self.bank_resources = bank_resources
+        self.rng = rng
         self.policy = policy
 
         # Resources (0 for each)
@@ -141,5 +142,5 @@ class Player:
         if not pool:
             return {}
 
-        resource_to_give = random.choice(pool)
+        resource_to_give = self.rng.choice(pool)
         return {resource_to_give: 1}

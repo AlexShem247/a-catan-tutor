@@ -52,14 +52,14 @@ class QtView(View):
         # delay *= 3 if "\n" in msg else 1
         ai_time_delay(self.ai_decision_animation_delay)
 
-    def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False) -> Vertex:
+    def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False) -> Optional[Vertex]:
         """Draws which vertices are selectable"""
         self.canvas.disable_interactivity = disable_interactivity
         self.canvas.draw_selectable_vertices(vertices)
         if not disable_interactivity:
             return select_blocking(self, self.canvas.selectionMade, self.canvas.draw_selectable_vertices, vertices)
 
-    def draw_selectable_edges(self, edges: List[Edge], disable_interactivity: bool = False) -> Edge:
+    def draw_selectable_edges(self, edges: List[Edge], disable_interactivity: bool = False) -> Optional[Edge]:
         """Draws which edges are selectable"""
         self.canvas.disable_interactivity = disable_interactivity
         self.canvas.draw_selectable_edges(edges)
@@ -149,7 +149,7 @@ def select_blocking(view: QtView, signal: pyqtBoundSignal, draw_fn, *args, **kwa
     return selected
 
 
-def ai_time_delay(seconds: int):
+def ai_time_delay(seconds: float):
     if seconds > 0:
         loop = QEventLoop()
 

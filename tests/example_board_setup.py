@@ -1,15 +1,17 @@
 import unittest
+from random import Random
 
 from game.Edge import EdgeDirection
 from game.Game import Game
 from game.Vertex import VertexDirection
+from config.player_policies import ALL_RANDOM
 from view.display_utils import display_board
 
 
 class ExampleBoardSetup(unittest.TestCase):
 
     def test_example_board_setup(self):
-        game = Game(human_player_one=False)
+        game = Game(ALL_RANDOM, rng=Random(0))
         p1, p2, p3, p4 = game.players
 
         # Settlements

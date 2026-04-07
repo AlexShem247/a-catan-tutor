@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from random import Random
 from typing import Optional, List, Tuple, TYPE_CHECKING
 
 from ai.actions import Action, Phase
@@ -14,6 +15,9 @@ if TYPE_CHECKING:
 
 class AI(ABC):
     """Abstract interface for AI decision-making logic in the game."""
+
+    def __init__(self, rng: Random):
+        self.rng = rng
 
     @abstractmethod
     def choose_trade_partner(self, player: Player, game: "Game", selling: ResourceCount, buying: ResourceCount,

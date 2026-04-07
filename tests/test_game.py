@@ -1,17 +1,25 @@
 import unittest
+from random import Random
 
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game
 from game.HexTile import HexTile
+from game.Player import PlayerNumber
 from game.PlayerAssets import Buildable
-from game.Resources import Resource
+from game.Resources import Resource, HexType
 from game.Vertex import Vertex, Building, VertexDirection, Port
 
 
 class TestGame(unittest.TestCase):
 
     def setUp(self):
-        self.game = Game(human_player_one=True)
+        player_config = {
+            PlayerNumber.P1: None,
+            PlayerNumber.P2: None,
+            PlayerNumber.P3: None,
+            PlayerNumber.P4: None,
+        }
+        self.game = Game(player_config, Random(0))
         self.player = self.game.players[0]
         self.opponent = self.game.players[1]
 
@@ -20,7 +28,7 @@ class TestGame(unittest.TestCase):
         self.opponent.resources = {res: 5 for res in Resource}
 
         # Set up basic board objects
-        self.hex_tile = HexTile(q=0, r=0, hex_type="forest", production_number=8)
+        self.hex_tile = HexTile(q=0, r=0, hex_type=HexType.FOREST, production_number=8)
         self.vertex = Vertex(pos=(0, 0, VertexDirection.TOP))
         v2 = Vertex(pos=(0, 0, VertexDirection.TOP_RIGHT))
         self.edge = Edge(self.vertex, v2, pos=(0, 0, EdgeDirection.NORTH_EAST))

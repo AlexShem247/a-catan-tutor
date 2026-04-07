@@ -1,4 +1,4 @@
-import random
+from random import Random
 from typing import Dict, List, Optional, Tuple
 
 from ai.AI import AI
@@ -29,7 +29,8 @@ from game.Vertex import Vertex
 
 
 class RuleBasedAI(AI):
-    def __init__(self):
+    def __init__(self, rng: Random):
+        super().__init__(rng)
         self.etw_estimator = EtwEstimator()
 
     def new_turn(self):
@@ -120,7 +121,7 @@ class RuleBasedAI(AI):
                         edge, target_vertex=best_vertex, explanation_kind=RoadExplanationKind.EXPANSION)
                     return edge, explanation
 
-        edge = random.choice(available_edges)
+        edge = self.rng.choice(available_edges)
         explanation = self._build_initial_road_explanation(
             edge, target_vertex=None, explanation_kind=RoadExplanationKind.FLEXIBLE)
         return edge, explanation
@@ -357,7 +358,7 @@ class RuleBasedAI(AI):
 
         # Fallback if no hex has opponents on it.
         if best_hex is None:
-            best_hex = random.choice(valid_hexes)
+            best_hex = self.rng.choice(valid_hexes)
             second_best_score = best_score
 
         # Choose who to steal from on the chosen hex (more resources + more VP = better target).
@@ -624,7 +625,7 @@ class RuleBasedAI(AI):
         # Pick the resource most commonly needed across opponents.
         max_count = max(need_counts.values())
         candidates = [r for r, c in need_counts.items() if c == max_count]
-        chosen = random.choice(candidates)
+        chosen = self.rng.choice(candidates)
         explanation = self._build_monopoly_resource_explanation(chosen, need_counts[chosen], max_count)
         return chosen, explanation
 
@@ -1019,7 +1020,7 @@ class RuleBasedAI(AI):
                 return find_edge_toward_vertex_from_any(player.player_number, sim_game, best_vertex, available_edges)
 
         # Fallback: keep the agent moving even if no clear preference exists.
-        return random.choice(available_edges) if available_edges else None
+        return self.rng.choice(available_edges) if available_edges else None
 
     def next_action_with_explanation(
             self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Tuple[Action, ActionExplanation]:

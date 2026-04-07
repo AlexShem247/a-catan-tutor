@@ -1,5 +1,5 @@
-import random
 from collections import defaultdict
+from random import Random
 from typing import List, Optional, Dict, Tuple, Set
 
 from game.Edge import Edge, EdgeDirection
@@ -28,7 +28,8 @@ class Board:
     MIN_R: int = 0
     MAX_R: int = 4
 
-    def __init__(self):
+    def __init__(self, rng: Random):
+        self.rng = rng
         self.hexes: List[HexTile] = []
         self.vertices: List[Vertex] = []
         self.edges: List[Edge] = []
@@ -54,7 +55,7 @@ class Board:
             HexType.DESERT
         ]
 
-        random.shuffle(hex_types_sequence)
+        self.rng.shuffle(hex_types_sequence)
         numbers = PRODUCTION_NUMBERS.copy()
 
         def get_adjacent_coords(q_val: int, r_val: int) -> List[Tuple[int, int]]:
@@ -64,7 +65,7 @@ class Board:
 
         def assign_number(q_val: int, r_val: int, available: List[int]) -> Optional[int]:
             # Assign numbers with constraint that 6/8 are not adjacent
-            random.shuffle(available)
+            self.rng.shuffle(available)
             for number in available:
                 if number in (6, 8):
                     conflict = False
@@ -165,7 +166,7 @@ class Board:
         blocked_edges = set()
 
         ports = PORT_TYPES[:]
-        random.shuffle(ports)
+        self.rng.shuffle(ports)
 
         for port in ports:
             candidates = [i for i in available_edges if i not in blocked_edges]
@@ -174,7 +175,7 @@ class Board:
                 # No legal placement left
                 break
 
-            i = random.choice(candidates)
+            i = self.rng.choice(candidates)
 
             edge = water_edges[i]
             v1, v2 = edge.vertices
