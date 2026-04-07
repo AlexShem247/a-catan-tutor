@@ -299,6 +299,10 @@ class GameController:
             if not adjacent_player_buildings:
                 tile, steal_from = selected_hex, None
             else:
+                if self.game_mode == GameMode.TUTOR:
+                    _, _, robber_explanation = self.tutor_ai.select_robber_target_with_explanation(
+                        player, self._game, [selected_hex]
+                    )
                 self._show_tutor_init(player, TutorStage.ROBBER_STEAL_TARGET, robber_explanation)
                 self.view.display_board(player, "Select a player to steal from")
                 selected_player_building: Vertex = self.view.draw_selectable_vertices(adjacent_player_buildings)

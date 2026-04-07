@@ -9,7 +9,7 @@ from ai.utils.action_utils import (
 )
 from ai.actions import ActionType, Action
 from ai.simulation.board_sim_utils import get_opponents
-from ai.tutor.confidence import confidence_from_margin, forced_choice_confidence
+from ai.tutor.move_quality import strategic_turn_move_quality
 from ai.tutor.explanations import (
     ActionExplanation, AssumptionCode, CandidateExplanation, Reason, ReasonLabel,
     ReasonType,
@@ -296,6 +296,67 @@ class EtwEstimator:
             return [], {}
         return list(actions), self._next_step_waiting_resources(player, actions)
 
+    def _build_end_turn_candidate(
+        self,
+        player: SimPlayerState,
+        sim_game: SimGame,
+        etw_before: float,
+        deferred_candidate: Optional[CandidateExplanation] = None,
+    ) -> CandidateExplanation:
+        player_after_wait = player.copy()
+        for resource in Resource:
+            player_after_wait.resources[resource] = (
+                player_after_wait.resources.get(resource, 0) + player.get_production_rate(resource)
+            )
+
+        sim_game_after_wait = _sim_game_with_replaced_player(sim_game, player_after_wait)
+        etw_after_wait = 1.0 + self.estimated_time_to_win(
+            player_after_wait,
+            sim_game_after_wait,
+            False,
+            max_depth_override=EVAL_UTIL_MAX_DEPTH,
+        )
+        etw_delta = etw_before - etw_after_wait
+        u_self = 0.0 if etw_before <= 0 else max(0.0, (etw_delta / etw_before) * 100.0)
+
+        discount_rate = StrategyWeights.TIME_DISCOUNT_RATE
+        utility_total = (
+            StrategyWeights.BUILD_SELF_UTILITY * u_self
+        ) / ((1.0 + discount_rate) ** 1.0)
+
+        next_plan: List[Action] = []
+        waiting_resources: ResourceCount = {}
+        reasons_for: List[Reason] = [
+            Reason(type=ReasonType.HEURISTIC_CHOICE, label=ReasonLabel.NO_IMMEDIATE_ACTION, value=max(0.0, u_self))
+        ]
+        reasons_against: List[Reason] = []
+        if deferred_candidate is not None:
+            next_plan = list(deferred_candidate.next_plan or deferred_candidate.full_plan)
+            waiting_resources = dict(
+                deferred_candidate.waiting_resources or self._plan_waiting_resources(player, next_plan)
+            )
+            reasons_against = list(deferred_candidate.reasons_against)
+
+        action = Action(ActionType.END_TURN)
+        return CandidateExplanation(
+            action=action,
+            full_plan=[action],
+            next_plan=next_plan,
+            waiting_resources=waiting_resources,
+            etb=1.0,
+            etw_before=etw_before,
+            etw_after=etw_after_wait,
+            etw_delta=etw_delta,
+            utility_total=utility_total,
+            utility_self=u_self,
+            utility_opponent=0.0,
+            utility_special=0.0,
+            utility_attention=0.0,
+            expected_vp_gain=0.0,
+            reasons_for=reasons_for,
+            reasons_against=reasons_against,
+        )
+
     def _quick_reason_label(self, next_step: Action, final_step: Action) -> Tuple[ReasonLabel, Dict[str, Any]]:
         """Return a concise timing reason key and metadata for the plan outcome."""
         if next_step.type in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER) and final_step != next_step:
@@ -482,6 +543,9 @@ class EtwEstimator:
             )
 
             utilities.append((next_step, eu))
+
+        end_turn_candidate = self._build_end_turn_candidate(player, sim_game, etw_before)
+        utilities.append((end_turn_candidate.action, end_turn_candidate.utility_total))
 
         return utilities
 
@@ -671,25 +735,11 @@ class EtwEstimator:
         if best_action is not None and best_candidate is not None:
             return best_action, best_candidate
 
-        deferred_candidate = max(candidates, key=lambda c: c.utility_total, default=None)
-        next_plan, waiting_resources = ([], {})
-        reasons_for: List[Reason] = [
-            Reason(type=ReasonType.HEURISTIC_CHOICE, label=ReasonLabel.NO_IMMEDIATE_ACTION, value=0.0)
-        ]
-        reasons_against: List[Reason] = []
-        if deferred_candidate is not None:
-            next_plan = list(deferred_candidate.next_plan or deferred_candidate.full_plan)
-            waiting_resources = dict(
-                deferred_candidate.waiting_resources or self._plan_waiting_resources(player, next_plan)
-            )
-            if deferred_candidate.reasons_for:
-                reasons_for = list(deferred_candidate.reasons_for)
-            reasons_against = list(deferred_candidate.reasons_against)
-
-        fallback = CandidateExplanation(
-            action=Action(ActionType.END_TURN), full_plan=[Action(ActionType.END_TURN)], next_plan=next_plan,
-            waiting_resources=waiting_resources, utility_total=0.0, reasons_for=reasons_for,
-            reasons_against=reasons_against,
+        fallback = self._build_end_turn_candidate(
+            player,
+            sim_game,
+            max((candidate.etw_before for candidate in candidates), default=0.0),
+            max(candidates, key=lambda c: c.utility_total, default=None),
         )
         return fallback.action, fallback
 
@@ -925,6 +975,8 @@ class EtwEstimator:
                 )
             )
 
+        deferred_candidate = max(explained, key=lambda c: c.utility_total, default=None)
+        explained.append(self._build_end_turn_candidate(player, sim_game, etw_before, deferred_candidate))
         explained.sort(key=lambda c: c.utility_total, reverse=True)
         return explained
 
@@ -952,7 +1004,7 @@ class EtwEstimator:
                 chosen_action=chosen.action,
                 chosen_candidate=chosen,
                 alternatives=[],
-                confidence=forced_choice_confidence(),
+                move_quality=strategic_turn_move_quality(chosen),
                 assumptions=[AssumptionCode.NO_CANDIDATE_ACTION],
             )
 
@@ -973,7 +1025,7 @@ class EtwEstimator:
                 chosen_action=chosen.action,
                 chosen_candidate=chosen,
                 alternatives=[],
-                confidence=forced_choice_confidence(),
+                move_quality=strategic_turn_move_quality(chosen),
                 assumptions=[AssumptionCode.FILTERED_CANDIDATES],
             )
 
@@ -985,8 +1037,8 @@ class EtwEstimator:
 
         return ActionExplanation(
             chosen_action=chosen_action, chosen_candidate=chosen_candidate, alternatives=alternatives,
-            confidence=confidence_from_margin(
-                chosen_candidate.utility_total,
+            move_quality=strategic_turn_move_quality(
+                chosen_candidate,
                 alternatives[0].utility_total if alternatives else None,
                 explained_candidates[-1].utility_total if explained_candidates else None,
             ),

@@ -276,12 +276,26 @@ class MainWindow(QMainWindow):
                 self.tutor_menu.setParent(None)
             self.splitter_layout.setSizes([1000, self.SIDE_PANEL_WIDTH])
 
-    def display_tutor_init(self, _: Player, stage: TutorStage, explanation: ActionExplanation):
+    @staticmethod
+    def _move_quality_color(label: str) -> str:
+        if label == "Excellent":
+            return "#248f24"  # Green
+        if label == "Good":
+            return "#89b538"  # Lime
+        return "#666666"  # Grey
+
+    def _concise_explanation_html(self, explanation: ActionExplanation) -> Tuple[str, str]:
         concise_title, concise_explanation = explanation.generate_text_concise()
-        print(
-            f"Tutor confidence: {explanation.confidence_label} ({explanation.confidence:.2f}) | "
-            f"title: {concise_title} | explanation: {concise_explanation}"
+        move_quality_label = explanation.move_quality_label
+        move_quality_color = self._move_quality_color(move_quality_label)
+        concise_html = (
+            f"{concise_explanation}"
+            f"<br><br><b>Move Quality:</b> "
+            f"<span style=\"color: {move_quality_color};\"><b>{escape(move_quality_label)}</b></span>"
         )
+        return concise_title, concise_html
+
+    def display_tutor_init(self, _: Player, stage: TutorStage, explanation: ActionExplanation):
         title, focus = TUTOR_STAGE_CONTENT[stage]["title"], TUTOR_STAGE_CONTENT[stage]["focus"]
         self.tutor_menu.action_label.setText(title)
         self.clear_trade_preview()
@@ -290,7 +304,7 @@ class MainWindow(QMainWindow):
         focus_lines = "".join(f"<br>&bull; {escape(point)}" for point in focus)
         default_text = f"<b>What matters here:</b>{focus_lines}"
 
-        concise_title, concise_explanation = explanation.generate_text_concise()
+        concise_title, concise_explanation_html = self._concise_explanation_html(explanation)
         detailed_explanation = explanation.generate_text_detail()
 
         def show_default():
@@ -307,7 +321,7 @@ class MainWindow(QMainWindow):
         def show_concise():
             self.canvas.render_planned_builds(visual_plan)
             self.tutor_menu.action_label.setText(concise_title)
-            self.tutor_menu.explanation_edit.setText(concise_explanation)
+            self.tutor_menu.explanation_edit.setHtml(concise_explanation_html)
             self.tutor_menu.explain_btn.show()
             self.tutor_menu.explain_btn.setEnabled(True)
             self.tutor_menu.explain_btn.setText("Explain Further")
@@ -331,16 +345,12 @@ class MainWindow(QMainWindow):
 
     def display_explanation(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
                             explanation: ActionExplanation):
-        action, explanation_txt = explanation.generate_text_concise()
-        print(
-            f"Tutor confidence: {explanation.confidence_label} ({explanation.confidence:.2f}) | "
-            f"title: {action} | explanation: {explanation_txt}"
-        )
+        action, explanation_html = self._concise_explanation_html(explanation)
         self.display_round_info_ai_start(player, dice_info, "")
         self.toggle_main_action_btns(False)
 
         self.tutor_menu.action_label.setText(action)
-        self.tutor_menu.explanation_edit.setText(explanation_txt)
+        self.tutor_menu.explanation_edit.setHtml(explanation_html)
         self.main_menu.action_label.setText(f"{player} is thinking")
 
         self.tutor_menu.continue_btn.setEnabled(True)
@@ -356,9 +366,9 @@ class MainWindow(QMainWindow):
             nonlocal showing_comparative
 
             if showing_comparative:
-                action_, explanation_txt_ = explanation.generate_text_concise()
+                action_, explanation_html_ = self._concise_explanation_html(explanation)
                 self.tutor_menu.action_label.setText(action_)
-                self.tutor_menu.explanation_edit.setText(explanation_txt_)
+                self.tutor_menu.explanation_edit.setHtml(explanation_html_)
                 self.tutor_menu.explain_btn.setText("Why this move?")
                 showing_comparative = False
             else:

@@ -3,7 +3,7 @@ from enum import Enum, auto
 from typing import Any, Dict, List, Tuple
 
 from ai.actions import Action, ActionType
-from ai.tutor.confidence import clamp_confidence, confidence_label
+from ai.tutor.move_quality import clamp_move_quality, move_quality_label
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import ResourceCount
 
@@ -143,17 +143,17 @@ class ActionExplanation:
     chosen_candidate: CandidateExplanation
     alternatives: List[CandidateExplanation] = field(default_factory=list)
 
-    confidence: float = 0.0
+    move_quality: float = 0.0
 
     assumptions: List[Any] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
-        self.confidence = clamp_confidence(self.confidence)
+        self.move_quality = clamp_move_quality(self.move_quality)
 
     @property
-    def confidence_label(self) -> str:
-        return confidence_label(self.confidence)
+    def move_quality_label(self) -> str:
+        return move_quality_label(self.move_quality)
 
     def generate_text_concise(self) -> Tuple[str, str]:
         template = self._explanation_template()

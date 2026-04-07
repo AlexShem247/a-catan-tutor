@@ -12,14 +12,17 @@ from ai.simulation.board_sim_utils import (
     get_legal_settlement_vertices, get_opponents, get_reachable_vertices, moves_toward_vertex,
     score_hex_for_opponent,
 )
-from ai.tutor.confidence import (
-    confidence_from_margin,
-    confidence_from_ratio,
-    forced_choice_confidence,
-    initial_road_connection_confidence,
-    initial_road_expansion_confidence,
-    initial_road_flexible_confidence,
-    initial_settlement_confidence,
+from ai.tutor.move_quality import (
+    discard_move_quality,
+    initial_road_connection_move_quality,
+    initial_road_expansion_move_quality,
+    initial_road_flexible_move_quality,
+    initial_settlement_move_quality,
+    monopoly_move_quality,
+    robber_move_quality,
+    strategic_turn_move_quality,
+    trade_partner_move_quality,
+    year_of_plenty_move_quality,
 )
 from ai.tutor.explanations import (
     ActionExplanation, AssumptionCode, CandidateExplanation, ExplanationTemplate,
@@ -94,7 +97,7 @@ class RuleBasedAI(AI):
                 edge,
                 target_vertex=None,
                 explanation_kind=RoadExplanationKind.FLEXIBLE,
-                confidence=initial_road_flexible_confidence(),
+                move_quality=initial_road_flexible_move_quality(),
             )
             return edge, explanation
 
@@ -115,7 +118,7 @@ class RuleBasedAI(AI):
                         edge,
                         target_vertex=best_vertex,
                         explanation_kind=RoadExplanationKind.EXPANSION,
-                        confidence=initial_road_expansion_confidence(
+                        move_quality=initial_road_expansion_move_quality(
                             vertex_scores[best_vertex],
                             max_legal_vertex_utility,
                         ),
@@ -131,7 +134,7 @@ class RuleBasedAI(AI):
                     connection_edges[0],
                     target_vertex=player.settlements[0],
                     explanation_kind=RoadExplanationKind.CONNECTION,
-                    confidence=initial_road_connection_confidence(len(connection_edges)),
+                    move_quality=initial_road_connection_move_quality(len(connection_edges)),
                 )
                 return connection_edges[0], explanation
 
@@ -143,7 +146,7 @@ class RuleBasedAI(AI):
                         edge,
                         target_vertex=best_vertex,
                         explanation_kind=RoadExplanationKind.EXPANSION,
-                        confidence=initial_road_expansion_confidence(
+                        move_quality=initial_road_expansion_move_quality(
                             vertex_scores[best_vertex],
                             max_legal_vertex_utility,
                         ),
@@ -155,7 +158,7 @@ class RuleBasedAI(AI):
             edge,
             target_vertex=None,
             explanation_kind=RoadExplanationKind.FLEXIBLE,
-            confidence=initial_road_flexible_confidence(),
+            move_quality=initial_road_flexible_move_quality(),
         )
         return edge, explanation
 
@@ -218,12 +221,12 @@ class RuleBasedAI(AI):
         return ActionExplanation(
             chosen_action=action,
             chosen_candidate=candidate,
-            confidence=initial_settlement_confidence(best_score, max_score),
+            move_quality=initial_settlement_move_quality(best_score, max_score),
         )
 
     def _build_initial_road_explanation(
             self, edge: Edge, target_vertex: Optional[Vertex],
-            explanation_kind: RoadExplanationKind, confidence: float) -> ActionExplanation:
+            explanation_kind: RoadExplanationKind, move_quality: float) -> ActionExplanation:
         reasons_for = self._initial_road_reasons(target_vertex, explanation_kind)
         visual_plan: List[Tuple[Buildable, object]] = [(Buildable.ROAD, edge)]
         if target_vertex is not None and explanation_kind == RoadExplanationKind.EXPANSION:
@@ -237,7 +240,7 @@ class RuleBasedAI(AI):
         return ActionExplanation(
             chosen_action=action,
             chosen_candidate=candidate,
-            confidence=confidence,
+            move_quality=move_quality,
         )
 
     def _initial_settlement_reasons(
@@ -396,16 +399,34 @@ class RuleBasedAI(AI):
             best_hex = self.rng.choice(valid_hexes)
             second_best_score = best_score
 
+        self_harm = 0.0
+        if best_hex in our_resource_tiles:
+            self_harm = sum(
+                dice_probability(best_hex.production_number) * (2.0 if vertex in player.cities else 1.0)
+                for vertex in (player.settlements + player.cities)
+                if best_hex in vertex.hexes
+            )
+
         # Choose who to steal from on the chosen hex (more resources + more VP = better target).
         players_on_best_hex = [p for p in game.get_players_on_hex(best_hex) if p != player]
         if not players_on_best_hex:
             explanation = self._build_robber_explanation(
-                best_hex, None, best_score, second_best_score, best_hex in our_resource_tiles)
+                best_hex, None, best_score, second_best_score, best_hex in our_resource_tiles, self_harm, 0.0)
             return best_hex, None, explanation
 
         best_player = max(players_on_best_hex, key=lambda pl: sum(pl.resources.values()) * pl.calc_victory_points()[0])
+        leader_vp_ratio = 0.0
+        if best_opp_vp > 0:
+            leader_vp_ratio = best_player.calc_victory_points()[0] / best_opp_vp
         explanation = self._build_robber_explanation(
-            best_hex, best_player, best_score, second_best_score, best_hex in our_resource_tiles)
+            best_hex,
+            best_player,
+            best_score,
+            second_best_score,
+            best_hex in our_resource_tiles,
+            self_harm,
+            leader_vp_ratio,
+        )
         return best_hex, best_player, explanation
 
     def select_discard_resources(self, player: Player, game: Game, num_resources: int) -> ResourceCount:
@@ -443,12 +464,13 @@ class RuleBasedAI(AI):
 
             remaining -= 1
 
-        explanation = self._build_discard_explanation(discard, needed, best_plan_explanation)
+        explanation = self._build_discard_explanation(discard, player.resources, needed, best_plan_explanation)
         return discard, explanation
 
     def _build_robber_explanation(
             self, hex_tile: HexTile, target_player: Optional[Player], best_score: float,
-            second_best_score: float, blocks_own_hex: bool) -> ActionExplanation:
+            second_best_score: float, blocks_own_hex: bool, self_harm: float,
+            leader_vp_ratio: float) -> ActionExplanation:
         reasons_for: List[Reason] = []
         if best_score > float("-inf"):
             reasons_for.append(Reason(
@@ -476,15 +498,17 @@ class RuleBasedAI(AI):
         return ActionExplanation(
             chosen_action=action,
             chosen_candidate=candidate,
-            confidence=confidence_from_margin(
-                best_score,
-                second_best_score if second_best_score > float("-inf") else None,
+            move_quality=robber_move_quality(
+                opponent_production_blocked=max(0.0, best_score),
+                steal_value=float(sum(target_player.resources.values())) if target_player is not None else 0.0,
+                self_harm=self_harm if blocks_own_hex else 0.0,
+                leader_vp_ratio=leader_vp_ratio,
             ),
             metadata={"template": ExplanationTemplate.ROBBER_TARGET},
         )
 
     def _build_discard_explanation(
-            self, discard: ResourceCount, needed: ResourceCount,
+            self, discard: ResourceCount, current_resources: ResourceCount, needed: ResourceCount,
             best_plan_explanation: ActionExplanation) -> ActionExplanation:
         protected_resources = sum(min(needed.get(resource, 0), amount) for resource, amount in discard.items())
         surplus_discarded = sum(discard.values()) - protected_resources
@@ -507,7 +531,7 @@ class RuleBasedAI(AI):
         return ActionExplanation(
             chosen_action=action,
             chosen_candidate=candidate,
-            confidence=forced_choice_confidence(clearly_beneficial=True),
+            move_quality=discard_move_quality(discard, current_resources, needed),
             metadata={"template": ExplanationTemplate.DISCARD_RESOURCES},
         )
 
@@ -626,6 +650,7 @@ class RuleBasedAI(AI):
             target_action if clearly_supports_follow_up or already_had_next_step else None,
             clearly_supports_follow_up,
             already_had_next_step,
+            best_plan_explanation,
         )
         return selected, explanation
 
@@ -640,6 +665,9 @@ class RuleBasedAI(AI):
 
         # Count how often each resource appears in opponents' next planned actions.
         need_counts: Dict[Resource, int] = {r: 0 for r in Resource}
+        held_counts: Dict[Resource, int] = {r: 0 for r in Resource}
+        leader_counts: Dict[Resource, int] = {r: 0 for r in Resource}
+        leader_vp = max((opponent.calc_victory_points()[0] for opponent in game.players if opponent != player), default=0)
 
         for opponent in game.players:
             if opponent == player:
@@ -656,17 +684,36 @@ class RuleBasedAI(AI):
             for r, amt in required.items():
                 if amt > 0:
                     need_counts[r] += 1
+            for resource, amount in opponent.resources.items():
+                held_counts[resource] += amount
+                if opponent.calc_victory_points()[0] == leader_vp:
+                    leader_counts[resource] += amount
 
         # Pick the resource most commonly needed across opponents.
         max_count = max(need_counts.values())
         candidates = [r for r, c in need_counts.items() if c == max_count]
         chosen = self.rng.choice(candidates)
-        explanation = self._build_monopoly_resource_explanation(chosen, need_counts[chosen], max_count)
+        best_self_action = self.etw_estimator.calculate_best_game_action(
+            sim_game=make_sim_game_for_player(game, player),
+            player_number=player.player_number,
+            dev_played=False,
+            ignore_affordability=True,
+            ignore_opponents=True,
+        )
+        self_gain_efficiency = float(calc_step_resources(best_self_action).get(chosen, 0))
+        leader_share = leader_counts[chosen] / max(held_counts[chosen], 1) if held_counts[chosen] > 0 else 0.0
+        explanation = self._build_monopoly_resource_explanation(
+            chosen,
+            held_counts[chosen],
+            self_gain_efficiency,
+            leader_share,
+        )
         return chosen, explanation
 
     def _build_year_of_plenty_explanation(
             self, selected: ResourceCount, primary_action: Optional[Action], target_action: Optional[Action],
-            clearly_supports_follow_up: bool, already_had_next_step: bool) -> ActionExplanation:
+            clearly_supports_follow_up: bool, already_had_next_step: bool,
+            best_plan_explanation: ActionExplanation) -> ActionExplanation:
         reasons_for: List[Reason] = []
         if clearly_supports_follow_up and target_action is not None:
             reasons_for.append(Reason(
@@ -707,16 +754,21 @@ class RuleBasedAI(AI):
         return ActionExplanation(
             chosen_action=action,
             chosen_candidate=candidate,
-            confidence=forced_choice_confidence(clearly_beneficial=clearly_supports_follow_up),
+            move_quality=year_of_plenty_move_quality(
+                etw_gain=max(0.0, best_plan_explanation.chosen_candidate.etw_delta),
+                utility_gain=max(0.0, best_plan_explanation.chosen_candidate.utility_total),
+                enables_immediate_build=clearly_supports_follow_up,
+            ),
             metadata={"template": ExplanationTemplate.YEAR_OF_PLENTY_RESOURCES},
         )
 
     def _build_monopoly_resource_explanation(
-            self, selected_resource: Resource, selected_count: int, max_count: int) -> ActionExplanation:
+            self, selected_resource: Resource, total_resource_count: int, self_gain_efficiency: float,
+            leader_share: float) -> ActionExplanation:
         reasons_for: List[Reason] = []
-        if max_count > 0:
+        if total_resource_count > 0:
             reasons_for.append(Reason(
-                ReasonType.SLOWS_LEADING_OPPONENT, ReasonLabel.MONOPOLY_HIGHEST_DEMAND, float(selected_count)))
+                ReasonType.SLOWS_LEADING_OPPONENT, ReasonLabel.MONOPOLY_HIGHEST_DEMAND, float(total_resource_count)))
         else:
             reasons_for.append(Reason(
                 ReasonType.HEURISTIC_CHOICE, ReasonLabel.MONOPOLY_FLEXIBLE_PICK, 1.0))
@@ -735,7 +787,7 @@ class RuleBasedAI(AI):
         return ActionExplanation(
             chosen_action=action,
             chosen_candidate=candidate,
-            confidence=confidence_from_ratio(float(selected_count), float(max_count)) if max_count > 0 else 0.3,
+            move_quality=monopoly_move_quality(total_resource_count, self_gain_efficiency, leader_share),
             metadata={"template": ExplanationTemplate.MONOPOLY_RESOURCE},
         )
 
@@ -891,6 +943,9 @@ class RuleBasedAI(AI):
                     "partner_player_number": opponent.player_number,
                     "payment": payment,
                     "buying": buying,
+                    "self_gain": delta_ai,
+                    "opponent_gain": delta_opp,
+                    "partner_is_leader": is_leader,
                 },
             ))
 
@@ -924,10 +979,10 @@ class RuleBasedAI(AI):
             chosen_action=chosen_candidate.action,
             chosen_candidate=chosen_candidate,
             alternatives=alternatives,
-            confidence=confidence_from_margin(
-                chosen_candidate.utility_total,
-                alternatives[0].utility_total if alternatives else None,
-                candidate_explanations[-1].utility_total if candidate_explanations else None,
+            move_quality=trade_partner_move_quality(
+                self_gain=float(chosen_candidate.metadata.get("self_gain", 0.0)),
+                opponent_gain=float(chosen_candidate.metadata.get("opponent_gain", 0.0)),
+                partner_is_leader=bool(chosen_candidate.metadata.get("partner_is_leader", False)),
             ),
             metadata={"template": ExplanationTemplate.TRADE_PARTNER},
         )
@@ -1027,7 +1082,7 @@ class RuleBasedAI(AI):
         return ActionExplanation(
             chosen_action=chosen_action,
             chosen_candidate=candidate,
-            confidence=confidence_from_ratio(max(0.0, etw_delta), max(etw_before, 1e-6)),
+            move_quality=strategic_turn_move_quality(candidate),
             metadata={"template": ExplanationTemplate.TRADE_RESPONSE},
         )
 
@@ -1082,8 +1137,8 @@ class RuleBasedAI(AI):
                                 chosen_action=best_candidate.action,
                                 chosen_candidate=best_candidate,
                                 alternatives=explained_candidates[1:4],
-                                confidence=confidence_from_margin(
-                                    best_candidate.utility_total,
+                                move_quality=strategic_turn_move_quality(
+                                    best_candidate,
                                     explained_candidates[1].utility_total if len(explained_candidates) > 1 else None,
                                     explained_candidates[-1].utility_total if explained_candidates else None,
                                 ),
@@ -1099,7 +1154,7 @@ class RuleBasedAI(AI):
                     action=roll_action, full_plan=[roll_action],
                     reasons_for=[Reason(type=ReasonType.HEURISTIC_CHOICE, label=ReasonLabel.PRE_ROLL_NO_DEV_PLAY,
                                         value=0.0)]),
-                alternatives=[], confidence=forced_choice_confidence(), assumptions=[],
+                alternatives=[], move_quality=0.0, assumptions=[],
                 metadata={"phase": "pre_roll"})
             return roll_action, explanation
 

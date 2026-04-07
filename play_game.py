@@ -16,7 +16,7 @@ def main():
     args = parser.parse_args()
 
     args.seed = randint(0, 2**31 - 1)
-    args.seed = 593585961
+    # args.seed = 538362124
     print(f"Game seed: {args.seed}")
     controller = GameController(STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC, game_seed=args.seed)
 
