@@ -9,9 +9,10 @@ from ai.utils.action_utils import (
 )
 from ai.actions import ActionType, Action
 from ai.simulation.board_sim_utils import get_opponents
+from ai.tutor.confidence import confidence_from_margin, forced_choice_confidence
 from ai.tutor.explanations import (
     ActionExplanation, AssumptionCode, CandidateExplanation, Reason, ReasonLabel,
-    ReasonType, confidence_label,
+    ReasonType,
 )
 from ai.utils.resource_utils import get_bank_trade_ratio, calc_step_resources
 from ai.utils.trade_utils import propose_trade
@@ -948,8 +949,11 @@ class EtwEstimator:
                 etw_delta=0.0, utility_total=0.0, reasons_for=[],
             )
             return ActionExplanation(
-                chosen_action=chosen.action, chosen_candidate=chosen, alternatives=[], confidence=0.0,
-                confidence_label="low", assumptions=[AssumptionCode.NO_CANDIDATE_ACTION],
+                chosen_action=chosen.action,
+                chosen_candidate=chosen,
+                alternatives=[],
+                confidence=forced_choice_confidence(),
+                assumptions=[AssumptionCode.NO_CANDIDATE_ACTION],
             )
 
         explained_candidates = self.evaluate_candidates_with_explanations(
@@ -966,8 +970,11 @@ class EtwEstimator:
                 etw_after=etw_before, etw_delta=0.0, utility_total=0.0, reasons_for=[],
             )
             return ActionExplanation(
-                chosen_action=chosen.action, chosen_candidate=chosen, alternatives=[], confidence=0.0,
-                confidence_label="low", assumptions=[AssumptionCode.FILTERED_CANDIDATES],
+                chosen_action=chosen.action,
+                chosen_candidate=chosen,
+                alternatives=[],
+                confidence=forced_choice_confidence(),
+                assumptions=[AssumptionCode.FILTERED_CANDIDATES],
             )
 
         chosen_action, chosen_candidate = self._choose_max_utility_action_with_candidate(
@@ -976,13 +983,13 @@ class EtwEstimator:
 
         alternatives = [c for c in explained_candidates if c.full_plan != chosen_candidate.full_plan][:3]
 
-        confidence = 0.0
-        if alternatives:
-            confidence = max(0.0, chosen_candidate.utility_total - alternatives[0].utility_total)
-
         return ActionExplanation(
             chosen_action=chosen_action, chosen_candidate=chosen_candidate, alternatives=alternatives,
-            confidence=confidence, confidence_label=confidence_label(confidence),
+            confidence=confidence_from_margin(
+                chosen_candidate.utility_total,
+                alternatives[0].utility_total if alternatives else None,
+                explained_candidates[-1].utility_total if explained_candidates else None,
+            ),
             assumptions=[AssumptionCode.EXPECTED_PRODUCTION, AssumptionCode.LEGALITY_AND_AFFORDABILITY],
             metadata={"player_number": player_number, "etw_before": etw_before},
         )

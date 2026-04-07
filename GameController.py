@@ -431,6 +431,8 @@ class GameController:
                 player.development_cards.remove(card)
                 break
 
+        self._game.update_best_opponent_victory_points()
+
         if player.is_human:
             self._tutor_dev_played = True
             self._refresh_tutor_turn_explanation(player)

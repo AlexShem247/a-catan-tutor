@@ -277,6 +277,11 @@ class MainWindow(QMainWindow):
             self.splitter_layout.setSizes([1000, self.SIDE_PANEL_WIDTH])
 
     def display_tutor_init(self, _: Player, stage: TutorStage, explanation: ActionExplanation):
+        concise_title, concise_explanation = explanation.generate_text_concise()
+        print(
+            f"Tutor confidence: {explanation.confidence_label} ({explanation.confidence:.2f}) | "
+            f"title: {concise_title} | explanation: {concise_explanation}"
+        )
         title, focus = TUTOR_STAGE_CONTENT[stage]["title"], TUTOR_STAGE_CONTENT[stage]["focus"]
         self.tutor_menu.action_label.setText(title)
         self.clear_trade_preview()
@@ -326,10 +331,14 @@ class MainWindow(QMainWindow):
 
     def display_explanation(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
                             explanation: ActionExplanation):
+        action, explanation_txt = explanation.generate_text_concise()
+        print(
+            f"Tutor confidence: {explanation.confidence_label} ({explanation.confidence:.2f}) | "
+            f"title: {action} | explanation: {explanation_txt}"
+        )
         self.display_round_info_ai_start(player, dice_info, "")
         self.toggle_main_action_btns(False)
 
-        action, explanation_txt = explanation.generate_text_concise()
         self.tutor_menu.action_label.setText(action)
         self.tutor_menu.explanation_edit.setText(explanation_txt)
         self.main_menu.action_label.setText(f"{player} is thinking")

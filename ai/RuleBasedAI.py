@@ -12,9 +12,18 @@ from ai.simulation.board_sim_utils import (
     get_legal_settlement_vertices, get_opponents, get_reachable_vertices, moves_toward_vertex,
     score_hex_for_opponent,
 )
+from ai.tutor.confidence import (
+    confidence_from_margin,
+    confidence_from_ratio,
+    forced_choice_confidence,
+    initial_road_connection_confidence,
+    initial_road_expansion_confidence,
+    initial_road_flexible_confidence,
+    initial_settlement_confidence,
+)
 from ai.tutor.explanations import (
     ActionExplanation, AssumptionCode, CandidateExplanation, ExplanationTemplate,
-    RoadExplanationKind, Reason, ReasonLabel, ReasonType, confidence_label,
+    RoadExplanationKind, Reason, ReasonLabel, ReasonType,
 )
 from ai.utils.resource_utils import calc_step_resources
 from ai.utils.trade_utils import respond_to_trade_batna, select_best_trade_partner
@@ -56,19 +65,18 @@ class RuleBasedAI(AI):
             return None, None
 
         first_settlement = len(player.settlements) == 0
-        ranked_vertices = sorted(
-            available_vertices,
-            key=lambda vertex: self.vertex_utility(vertex, player, game, available_vertices, first_settlement),
+        scored_vertices = sorted(
+            [
+                (vertex, self.vertex_utility(vertex, player, game, available_vertices, first_settlement))
+                for vertex in available_vertices
+            ],
+            key=lambda item: item[1],
             reverse=True,
         )
-        best_vertex = ranked_vertices[0]
-        best_score = self.vertex_utility(best_vertex, player, game, available_vertices, first_settlement)
-        second_score = (
-            self.vertex_utility(ranked_vertices[1], player, game, available_vertices, first_settlement)
-            if len(ranked_vertices) > 1 else best_score
-        )
+        best_vertex, best_score = scored_vertices[0]
+        max_score = scored_vertices[0][1]
 
-        explanation = self._build_initial_settlement_explanation(player, best_vertex, best_score, second_score)
+        explanation = self._build_initial_settlement_explanation(player, best_vertex, best_score, max_score)
         return best_vertex, explanation
 
     def select_initial_road_location_with_explanation(
@@ -83,47 +91,72 @@ class RuleBasedAI(AI):
             if edge is None:
                 return None, None
             explanation = self._build_initial_road_explanation(
-                edge, target_vertex=None, explanation_kind=RoadExplanationKind.FLEXIBLE)
+                edge,
+                target_vertex=None,
+                explanation_kind=RoadExplanationKind.FLEXIBLE,
+                confidence=initial_road_flexible_confidence(),
+            )
             return edge, explanation
 
         current_settlement = player.settlements[-1]
         legal_vertices = get_legal_settlement_vertices(make_sim_game_for_player(game, player))
+        vertex_scores = {
+            vertex: self.vertex_utility(vertex, player, game, legal_vertices, first_settlement=False)
+            for vertex in legal_vertices
+        }
+        max_legal_vertex_utility = max(vertex_scores.values(), default=0.0)
 
         if len(player.settlements) == 1:
-            best_vertex = max(
-                legal_vertices,
-                key=lambda vertex: self.vertex_utility(vertex, player, game, legal_vertices, first_settlement=False),
-                default=None,
-            )
+            best_vertex = max(vertex_scores, key=vertex_scores.get, default=None)
             if best_vertex is not None:
                 edge = find_edge_toward_vertex(current_settlement, best_vertex, available_edges)
                 if edge is not None:
                     explanation = self._build_initial_road_explanation(
-                        edge, target_vertex=best_vertex, explanation_kind=RoadExplanationKind.EXPANSION)
+                        edge,
+                        target_vertex=best_vertex,
+                        explanation_kind=RoadExplanationKind.EXPANSION,
+                        confidence=initial_road_expansion_confidence(
+                            vertex_scores[best_vertex],
+                            max_legal_vertex_utility,
+                        ),
+                    )
                     return edge, explanation
         else:
-            for edge in available_edges:
-                other_vertex = edge.get_other_vertex(current_settlement)
-                if moves_toward_vertex(other_vertex, player.settlements[0]):
-                    explanation = self._build_initial_road_explanation(
-                        edge, target_vertex=player.settlements[0], explanation_kind=RoadExplanationKind.CONNECTION)
-                    return edge, explanation
+            connection_edges = [
+                edge for edge in available_edges
+                if moves_toward_vertex(edge.get_other_vertex(current_settlement), player.settlements[0])
+            ]
+            if connection_edges:
+                explanation = self._build_initial_road_explanation(
+                    connection_edges[0],
+                    target_vertex=player.settlements[0],
+                    explanation_kind=RoadExplanationKind.CONNECTION,
+                    confidence=initial_road_connection_confidence(len(connection_edges)),
+                )
+                return connection_edges[0], explanation
 
-            best_vertex = max(
-                legal_vertices,
-                key=lambda vertex: self.vertex_utility(vertex, player, game, legal_vertices, first_settlement=False),
-                default=None,
-            )
+            best_vertex = max(vertex_scores, key=vertex_scores.get, default=None)
             if best_vertex is not None:
                 edge = find_edge_toward_vertex(current_settlement, best_vertex, available_edges)
                 if edge is not None:
                     explanation = self._build_initial_road_explanation(
-                        edge, target_vertex=best_vertex, explanation_kind=RoadExplanationKind.EXPANSION)
+                        edge,
+                        target_vertex=best_vertex,
+                        explanation_kind=RoadExplanationKind.EXPANSION,
+                        confidence=initial_road_expansion_confidence(
+                            vertex_scores[best_vertex],
+                            max_legal_vertex_utility,
+                        ),
+                    )
                     return edge, explanation
 
         edge = self.rng.choice(available_edges)
         explanation = self._build_initial_road_explanation(
-            edge, target_vertex=None, explanation_kind=RoadExplanationKind.FLEXIBLE)
+            edge,
+            target_vertex=None,
+            explanation_kind=RoadExplanationKind.FLEXIBLE,
+            confidence=initial_road_flexible_confidence(),
+        )
         return edge, explanation
 
     @staticmethod
@@ -174,7 +207,7 @@ class RuleBasedAI(AI):
         return utility
 
     def _build_initial_settlement_explanation(
-            self, player: Player, vertex: Vertex, best_score: float, second_score: float) -> ActionExplanation:
+            self, player: Player, vertex: Vertex, best_score: float, max_score: float) -> ActionExplanation:
         first_settlement = len(player.settlements) == 0
         reasons_for = self._initial_settlement_reasons(player, vertex, first_settlement)
 
@@ -183,12 +216,14 @@ class RuleBasedAI(AI):
             action=action, full_plan=[action], reasons_for=reasons_for,
             metadata={"template": ExplanationTemplate.INITIAL_SETTLEMENT, "target_vertex": vertex, "port": vertex.port})
         return ActionExplanation(
-            chosen_action=action, chosen_candidate=candidate, confidence=max(0.0, best_score - second_score),
-            confidence_label=confidence_label(max(0.0, best_score - second_score)))
+            chosen_action=action,
+            chosen_candidate=candidate,
+            confidence=initial_settlement_confidence(best_score, max_score),
+        )
 
     def _build_initial_road_explanation(
             self, edge: Edge, target_vertex: Optional[Vertex],
-            explanation_kind: RoadExplanationKind) -> ActionExplanation:
+            explanation_kind: RoadExplanationKind, confidence: float) -> ActionExplanation:
         reasons_for = self._initial_road_reasons(target_vertex, explanation_kind)
         visual_plan: List[Tuple[Buildable, object]] = [(Buildable.ROAD, edge)]
         if target_vertex is not None and explanation_kind == RoadExplanationKind.EXPANSION:
@@ -200,10 +235,10 @@ class RuleBasedAI(AI):
             metadata={"template": ExplanationTemplate.INITIAL_ROAD, "target_vertex": target_vertex,
                       "road_explanation_kind": explanation_kind, "visual_plan": visual_plan})
         return ActionExplanation(
-            chosen_action=action, chosen_candidate=candidate, confidence=1.0,
-            confidence_label=(
-                "high" if target_vertex is not None or explanation_kind == RoadExplanationKind.CONNECTION else "medium"
-            ))
+            chosen_action=action,
+            chosen_candidate=candidate,
+            confidence=confidence,
+        )
 
     def _initial_settlement_reasons(
             self, player: Player, vertex: Vertex, first_settlement: bool) -> List[Reason]:
@@ -438,12 +473,13 @@ class RuleBasedAI(AI):
                 "visual_plan": [("ROBBER_HEX", hex_tile)],
             },
         )
-        confidence = max(0.0, best_score - (second_best_score if second_best_score > float("-inf") else 0.0))
         return ActionExplanation(
             chosen_action=action,
             chosen_candidate=candidate,
-            confidence=confidence,
-            confidence_label=confidence_label(confidence),
+            confidence=confidence_from_margin(
+                best_score,
+                second_best_score if second_best_score > float("-inf") else None,
+            ),
             metadata={"template": ExplanationTemplate.ROBBER_TARGET},
         )
 
@@ -471,8 +507,7 @@ class RuleBasedAI(AI):
         return ActionExplanation(
             chosen_action=action,
             chosen_candidate=candidate,
-            confidence=float(sum(discard.values())),
-            confidence_label="medium",
+            confidence=forced_choice_confidence(clearly_beneficial=True),
             metadata={"template": ExplanationTemplate.DISCARD_RESOURCES},
         )
 
@@ -672,8 +707,7 @@ class RuleBasedAI(AI):
         return ActionExplanation(
             chosen_action=action,
             chosen_candidate=candidate,
-            confidence=float(sum(selected.values())),
-            confidence_label="medium",
+            confidence=forced_choice_confidence(clearly_beneficial=clearly_supports_follow_up),
             metadata={"template": ExplanationTemplate.YEAR_OF_PLENTY_RESOURCES},
         )
 
@@ -701,8 +735,7 @@ class RuleBasedAI(AI):
         return ActionExplanation(
             chosen_action=action,
             chosen_candidate=candidate,
-            confidence=float(max_count),
-            confidence_label=confidence_label(float(max_count)),
+            confidence=confidence_from_ratio(float(selected_count), float(max_count)) if max_count > 0 else 0.3,
             metadata={"template": ExplanationTemplate.MONOPOLY_RESOURCE},
         )
 
@@ -887,15 +920,15 @@ class RuleBasedAI(AI):
             candidate for candidate in candidate_explanations
             if candidate is not chosen_candidate
         ][:3]
-        confidence = chosen_candidate.utility_total - (
-            alternatives[0].utility_total if alternatives else 0.0
-        )
         return ActionExplanation(
             chosen_action=chosen_candidate.action,
             chosen_candidate=chosen_candidate,
             alternatives=alternatives,
-            confidence=max(0.0, confidence),
-            confidence_label=confidence_label(max(0.0, confidence)),
+            confidence=confidence_from_margin(
+                chosen_candidate.utility_total,
+                alternatives[0].utility_total if alternatives else None,
+                candidate_explanations[-1].utility_total if candidate_explanations else None,
+            ),
             metadata={"template": ExplanationTemplate.TRADE_PARTNER},
         )
 
@@ -994,8 +1027,7 @@ class RuleBasedAI(AI):
         return ActionExplanation(
             chosen_action=chosen_action,
             chosen_candidate=candidate,
-            confidence=max(0.0, etw_delta),
-            confidence_label=confidence_label(max(0.0, etw_delta)),
+            confidence=confidence_from_ratio(max(0.0, etw_delta), max(etw_before, 1e-6)),
             metadata={"template": ExplanationTemplate.TRADE_RESPONSE},
         )
 
@@ -1046,13 +1078,18 @@ class RuleBasedAI(AI):
                     if explained_candidates:
                         best_candidate = explained_candidates[0]
                         if best_candidate.utility_total > 0.0:
-                            confidence = best_candidate.utility_total - (
-                                explained_candidates[1].utility_total if len(explained_candidates) > 1 else 0.0)
                             explanation = ActionExplanation(
-                                chosen_action=best_candidate.action, chosen_candidate=best_candidate,
-                                alternatives=explained_candidates[1:4], confidence=max(0.0, confidence),
-                                confidence_label=confidence_label(max(0.0, confidence)),
-                                assumptions=[AssumptionCode.PRE_ROLL_DEV_ONLY], metadata={"phase": "pre_roll"})
+                                chosen_action=best_candidate.action,
+                                chosen_candidate=best_candidate,
+                                alternatives=explained_candidates[1:4],
+                                confidence=confidence_from_margin(
+                                    best_candidate.utility_total,
+                                    explained_candidates[1].utility_total if len(explained_candidates) > 1 else None,
+                                    explained_candidates[-1].utility_total if explained_candidates else None,
+                                ),
+                                assumptions=[AssumptionCode.PRE_ROLL_DEV_ONLY],
+                                metadata={"phase": "pre_roll"},
+                            )
                             return best_candidate.action, explanation
 
             roll_action = Action(ActionType.ROLL)
@@ -1062,7 +1099,7 @@ class RuleBasedAI(AI):
                     action=roll_action, full_plan=[roll_action],
                     reasons_for=[Reason(type=ReasonType.HEURISTIC_CHOICE, label=ReasonLabel.PRE_ROLL_NO_DEV_PLAY,
                                         value=0.0)]),
-                alternatives=[], confidence=0.0, confidence_label="medium", assumptions=[],
+                alternatives=[], confidence=forced_choice_confidence(), assumptions=[],
                 metadata={"phase": "pre_roll"})
             return roll_action, explanation
 

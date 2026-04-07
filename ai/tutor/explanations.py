@@ -3,6 +3,7 @@ from enum import Enum, auto
 from typing import Any, Dict, List, Tuple
 
 from ai.actions import Action, ActionType
+from ai.tutor.confidence import clamp_confidence, confidence_label
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import ResourceCount
 
@@ -136,14 +137,6 @@ def capitalise(text: str) -> str:
     return text[0].upper() + text[1:]
 
 
-def confidence_label(confidence: float) -> str:
-    if confidence >= 15.0:
-        return "high"
-    if confidence >= 5.0:
-        return "medium"
-    return "low"
-
-
 @dataclass
 class ActionExplanation:
     chosen_action: Action
@@ -151,10 +144,16 @@ class ActionExplanation:
     alternatives: List[CandidateExplanation] = field(default_factory=list)
 
     confidence: float = 0.0
-    confidence_label: str = "medium"
 
     assumptions: List[Any] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        self.confidence = clamp_confidence(self.confidence)
+
+    @property
+    def confidence_label(self) -> str:
+        return confidence_label(self.confidence)
 
     def generate_text_concise(self) -> Tuple[str, str]:
         template = self._explanation_template()

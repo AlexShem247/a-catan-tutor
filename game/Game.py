@@ -444,6 +444,7 @@ class Game:
         card = self.development_deck.draw()
         player.development_cards.append(card)
         player.remove_resources(Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD])
+        self.update_best_opponent_victory_points()
 
         return True, f"You got a {card.card_type.name.replace('_', ' ').capitalize()} card!"
 

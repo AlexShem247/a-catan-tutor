@@ -1,11 +1,20 @@
 import unittest
 from random import Random
 
+from ai.tutor.confidence import (
+    confidence_from_margin,
+    confidence_from_ratio,
+    confidence_label,
+    initial_road_connection_confidence,
+    initial_road_flexible_confidence,
+    initial_settlement_confidence,
+)
+from GameController import GameController
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import PlayerNumber
-from game.PlayerAssets import Buildable
+from game.PlayerAssets import Buildable, DevelopmentCard, DevelopmentCardType
 from game.Resources import Resource, HexType
 from game.Vertex import Vertex, Building, VertexDirection, Port
 
@@ -155,6 +164,66 @@ class TestGame(unittest.TestCase):
         self.assertIsInstance(vertices, list)
         edges = self.game.get_available_edges(self.player)
         self.assertIsInstance(edges, list)
+
+    def test_buy_victory_point_card_sets_game_over(self):
+        self.player.settlements = [Vertex(pos=(0, 0, VertexDirection.TOP))]
+        self.player.cities = [
+            Vertex(pos=(0, 0, VertexDirection.TOP_RIGHT)),
+            Vertex(pos=(0, 0, VertexDirection.BOTTOM_RIGHT)),
+            Vertex(pos=(0, 0, VertexDirection.BOTTOM)),
+            Vertex(pos=(0, 0, VertexDirection.BOTTOM_LEFT)),
+        ]
+        self.game.development_deck._deck = [DevelopmentCard(DevelopmentCardType.VICTORY_POINT)]
+
+        success, _ = self.game.try_buy_development_card(self.player)
+
+        self.assertTrue(success)
+        self.assertTrue(self.game.game_over)
+
+    def test_knight_largest_army_sets_game_over(self):
+        player_config = {
+            PlayerNumber.P1: None,
+            PlayerNumber.P2: None,
+            PlayerNumber.P3: None,
+            PlayerNumber.P4: None,
+        }
+        controller = GameController(player_config, player_config, game_seed=0)
+        player = controller.get_all_players()[0]
+        player.cities = [
+            Vertex(pos=(0, 0, VertexDirection.TOP)),
+            Vertex(pos=(0, 0, VertexDirection.TOP_RIGHT)),
+            Vertex(pos=(0, 0, VertexDirection.BOTTOM_RIGHT)),
+            Vertex(pos=(0, 0, VertexDirection.BOTTOM)),
+        ]
+        player.army_size = 2
+        player.development_cards.append(DevelopmentCard(DevelopmentCardType.KNIGHT, playable=True))
+        controller.handle_robber_action = lambda _: None
+
+        controller.play_development_card(player, DevelopmentCardType.KNIGHT)
+
+        self.assertTrue(player.has_largest_army)
+        self.assertTrue(controller.get_game_state().game_over)
+
+    def test_confidence_ratio_is_clamped_to_zero_to_one(self):
+        self.assertEqual(confidence_from_ratio(8.0, 10.0), 0.8)
+        self.assertEqual(confidence_from_ratio(15.0, 10.0), 1.0)
+
+    def test_confidence_from_margin_normalises_by_spread(self):
+        self.assertAlmostEqual(confidence_from_margin(10.0, 8.0, 0.0), 0.2)
+        self.assertEqual(confidence_from_margin(10.0, None, 0.0), 0.0)
+
+    def test_opening_confidence_helpers(self):
+        self.assertEqual(initial_settlement_confidence(12.0, 12.0), 1.0)
+        self.assertEqual(initial_road_connection_confidence(1), 1.0)
+        self.assertEqual(initial_road_connection_confidence(4), 0.25)
+        self.assertEqual(initial_road_flexible_confidence(), 0.3)
+
+    def test_confidence_labels_use_zero_to_one_thresholds(self):
+        self.assertEqual(confidence_label(0.9), "Excellent")
+        self.assertEqual(confidence_label(0.7), "Good")
+        self.assertEqual(confidence_label(0.5), "Okay")
+        self.assertEqual(confidence_label(0.25), "Questionable")
+        self.assertEqual(confidence_label(0.1), "Poor")
 
 
 if __name__ == "__main__":
