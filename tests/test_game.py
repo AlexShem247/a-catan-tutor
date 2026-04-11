@@ -227,8 +227,9 @@ class TestGame(unittest.TestCase):
         self.assertEqual(move_quality_label(0.9), "Excellent")
         self.assertEqual(move_quality_label(0.7), "Good")
         self.assertEqual(move_quality_label(0.5), "Good")
-        self.assertEqual(move_quality_label(0.25), "Okay")
-        self.assertEqual(move_quality_label(0.1), "Okay")
+        self.assertEqual(move_quality_label(0.3), "Okay")
+        self.assertEqual(move_quality_label(0.25), "Poor")
+        self.assertEqual(move_quality_label(0.1), "Poor")
 
     def test_strategic_turn_move_quality_uses_etw_reduction(self):
         candidate = SimpleNamespace(etw_before=20.0, etw_after=16.0, etw_delta=4.0, utility_total=12.0)

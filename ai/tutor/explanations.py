@@ -3,7 +3,7 @@ from enum import Enum, auto
 from typing import Any, Dict, List, Tuple
 
 from ai.actions import Action, ActionType
-from ai.tutor.move_quality import clamp_move_quality, move_quality_label
+from ai.tutor.move_quality import clamp_move_quality, move_quality_label, tutor_move_quality_label
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import ResourceCount
 
@@ -154,6 +154,24 @@ class ActionExplanation:
     @property
     def move_quality_label(self) -> str:
         return move_quality_label(self.move_quality)
+
+    @property
+    def tutor_move_quality_label(self) -> str:
+        return tutor_move_quality_label(self.move_quality)
+
+    def describe_action(self, action: Action | None = None, short: bool = True) -> str:
+        return self._action_to_text(action or self.chosen_action, short=short)
+
+    def describe_reason(self, reason: Reason, detail: bool = True) -> str:
+        if detail:
+            return self._reason_to_detail_phrase(reason)
+        return self._normalise_reason_label(self._reason_label_text(reason))
+
+    def sorted_reasons_for(self) -> List[Reason]:
+        return self._sorted_reasons(self.chosen_candidate.reasons_for)
+
+    def sorted_reasons_against(self) -> List[Reason]:
+        return self._sorted_reasons(self.chosen_candidate.reasons_against)
 
     def generate_text_concise(self) -> Tuple[str, str]:
         template = self._explanation_template()

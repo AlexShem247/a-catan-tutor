@@ -14,7 +14,14 @@ def move_quality_label(move_quality: float) -> str:
         return "Excellent"
     if move_quality >= 0.5:
         return "Good"
-    return "Okay"
+    if move_quality >= 0.3:
+        return "Okay"
+    return "Poor"
+
+
+def tutor_move_quality_label(move_quality: float) -> str:
+    label = move_quality_label(move_quality)
+    return "Okay" if label == "Poor" else label
 
 
 def move_quality_from_ratio(chosen_value: float, max_value: float) -> float:

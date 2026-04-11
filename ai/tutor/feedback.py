@@ -1,11 +1,32 @@
 from copy import deepcopy
-from dataclasses import dataclass
-from typing import Any, Optional, List, Tuple
+from dataclasses import dataclass, field
+from enum import Enum, auto
+from html import escape
+from typing import Any, List, Optional, Tuple
 
-from ai.actions import ActionType
-from ai.tutor.explanations import ActionExplanation
-from ai.tutor.move_quality import move_quality_label
 from game.PlayerAssets import Buildable
+
+
+def move_quality_colour(label: str) -> str:
+    if label == "Excellent":
+        return "#248f24"
+    if label == "Good":
+        return "#89b538"
+    if label == "Poor":
+        return "#b34700"
+    return "#666666"
+
+
+class TutorDecisionType(Enum):
+    OPENING_SETTLEMENT = auto()
+    OPENING_ROAD = auto()
+    ROBBER = auto()
+    DISCARD = auto()
+    TRADE_RESPONSE = auto()
+    TRADE_PARTNER = auto()
+    YEAR_OF_PLENTY = auto()
+    MONOPOLY = auto()
+    MAIN_TURN = auto()
 
 
 @dataclass
@@ -39,66 +60,107 @@ class BoardStateSnapshot:
 
 
 @dataclass
+class TutorAssessment:
+    decision_type: TutorDecisionType
+    internal_score: float
+    best_internal_score: float
+    label: str
+    judgment_sentence: str
+    your_move: str
+    better_move: Optional[str] = None
+    top_strengths: List[str] = field(default_factory=list)
+    top_weaknesses: List[str] = field(default_factory=list)
+    better_move_reasons: List[str] = field(default_factory=list)
+    tip: str = ""
+
+    @staticmethod
+    def _normalise_display_text(text: str) -> str:
+        return " ".join(text.split()).strip().lower()
+
+    @classmethod
+    def _dedupe_display_texts(cls, texts: List[str]) -> List[str]:
+        deduped: List[str] = []
+        seen = set()
+        for text in texts:
+            if not text:
+                continue
+            key = cls._normalise_display_text(text)
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(text)
+        return deduped
+
+    def concise_html(self) -> str:
+        label_colour = move_quality_colour(self.label)
+        parts = [
+            f"<span style=\"color: {label_colour};\"><b>{escape(self.label)}.</b></span> "
+            f"{escape(self.judgment_sentence)}"
+        ]
+        if self.better_move and self._normalise_display_text(self.better_move) != self._normalise_display_text(self.your_move):
+            parts.append(f"<b>Better move:</b> {escape(self.better_move)}")
+        return "<br>".join(parts)
+
+    def detailed_html(self) -> str:
+        parts = [f"<b>Your move:</b> {escape(self.your_move)}"]
+        if self.better_move and self._normalise_display_text(self.better_move) != self._normalise_display_text(self.your_move):
+            parts.append(f"<b>Better move:</b> {escape(self.better_move)}")
+
+        reasons = self._dedupe_display_texts([
+            *self.top_strengths[:1],
+            *self.top_weaknesses[:1],
+            *self.better_move_reasons[:1],
+        ])
+        if not reasons:
+            reasons.append("This matched the tutor's preferred line.")
+        reason_items = "".join(f"<li>&nbsp;{escape(reason)}</li>" for reason in reasons[:3])
+        parts.append(f"<b>Why:</b><ul>{reason_items}</ul>")
+
+        if self.tip:
+            # Append to last element instead of adding a new one
+            parts[-1] += f" <b>Takeaway:</b> {escape(self.tip)}"
+
+        return "<br>".join(parts)
+
+    def history_summary(self) -> str:
+        better_text = f" Better move: {self.better_move}" if self.better_move else ""
+        return f"[{self.label}] {self.judgment_sentence}{better_text}"
+
+    @property
+    def score_gap(self) -> float:
+        return max(0.0, self.best_internal_score - self.internal_score)
+
+
+@dataclass
 class TutorFeedbackExplanation:
     title: str
     concise_html: str
     detailed_html: str
-    move_quality_label: str
+    label: str
     board_snapshot: BoardStateSnapshot
     visual_build_plan: List[Tuple[Any, Any, Any]]
+    recommended_visual_plan: List[Tuple[Any, Any]]
+    history_summary: str
+    assessment: TutorAssessment
 
     @classmethod
-    def from_action_scores(
+    def from_assessment(
             cls,
             title: str,
-            actual_label: str,
-            actual_score: float,
-            best_label: str,
-            best_score: float,
+            assessment: TutorAssessment,
             game_state: Any,
-            detailed_html: Optional[str] = None,
+            visual_build_plan: Optional[List[Tuple[Any, Any, Any]]] = None,
     ) -> "TutorFeedbackExplanation":
-        gap = best_score - actual_score
-        concise_html = (
-            f"<b>Your move:</b> {actual_label} ({actual_score:.4f})"
-            f"<br><b>Tutor move:</b> {best_label} ({best_score:.4f})"
-            f"<br><b>Difference:</b> {gap:.4f}"
-        )
         return cls(
             title=title,
-            concise_html=concise_html,
-            detailed_html=detailed_html or "This feature has not been implemented yet.",
-            move_quality_label=move_quality_label(actual_score),
+            concise_html=assessment.concise_html(),
+            detailed_html=assessment.detailed_html(),
+            label=assessment.label,
             board_snapshot=BoardStateSnapshot.from_game(game_state),
-            visual_build_plan=[],
-        )
-
-    @classmethod
-    def from_action_explanations(
-            cls,
-            actual_explanation: Optional[ActionExplanation],
-            best_explanation: Optional[ActionExplanation],
-            game_state: Any,
-            detailed_html: Optional[str] = None,
-    ) -> Optional["TutorFeedbackExplanation"]:
-        if actual_explanation is None or best_explanation is None:
-            return None
-
-        actual_title, _ = actual_explanation.generate_text_concise()
-        best_title, _ = best_explanation.generate_text_concise()
-        gap = best_explanation.move_quality - actual_explanation.move_quality
-        concise_html = (
-            f"<b>Your move:</b> {actual_title} ({actual_explanation.move_quality:.4f})"
-            f"<br><b>Tutor move:</b> {best_title} ({best_explanation.move_quality:.4f})"
-            f"<br><b>Difference:</b> {gap:.4f}"
-        )
-        return cls(
-            title=actual_title,
-            concise_html=concise_html,
-            detailed_html=detailed_html or "This feature has not been implemented yet.",
-            move_quality_label=actual_explanation.move_quality_label,
-            board_snapshot=BoardStateSnapshot.from_game(game_state),
-            visual_build_plan=[],
+            visual_build_plan=list(visual_build_plan or []),
+            recommended_visual_plan=[],
+            history_summary=assessment.history_summary(),
+            assessment=assessment,
         )
 
     def render_html(self, detailed: bool = False) -> str:
@@ -109,3 +171,6 @@ class TutorFeedbackExplanation:
             self.visual_build_plan = []
             return
         self.visual_build_plan = [(buildable, position, player_number)]
+
+    def set_recommended_visual_plan(self, visual_plan: List[Tuple[Any, Any]]):
+        self.recommended_visual_plan = list(visual_plan)

@@ -45,7 +45,7 @@ TUTOR_STAGE_CONTENT: Dict[TutorStage, Dict] = {
         "focus": [
             "Check what your roll unlocked before spending resources",
             "Prioritise the action that improves your position fastest",
-            "Keep enough flexibility for trades, expansion, or defense",
+            "Keep enough flexibility for trades, expansion, or defence",
         ]
     },
     TutorStage.TRADE_DECISION: {

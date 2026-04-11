@@ -7,14 +7,14 @@ from PyQt6 import uic
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QCloseEvent, QIcon
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel, QToolButton, QListWidgetItem, QSpacerItem,
-    QSizePolicy, QPushButton, QAbstractScrollArea
+    QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel, QToolButton, QSpacerItem,
+    QSizePolicy, QPushButton, QAbstractScrollArea, QListWidgetItem
 )
 
 from GameController import GameController
 from ai.actions import Action, ActionType
 from ai.tutor.explanations import ActionExplanation, ExplanationTemplate
-from ai.tutor.feedback import TutorFeedbackExplanation
+from ai.tutor.feedback import TutorFeedbackExplanation, move_quality_colour
 from ai.tutor.tutor import TutorStage, TUTOR_STAGE_CONTENT
 from game.Edge import Edge
 from game.Player import PlayerNumber, Player
@@ -22,7 +22,13 @@ from game.PlayerAssets import Buildable, DevelopmentCardType, DevelopmentCard
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
 from view.SquareCanvas import SquareCanvas
-from config.view_constants import CROWN_SYM, TUTOR_FEEDBACK_DISPLAY_SECONDS, TUTOR_FEEDBACK_FADE_STEPS, HOME_ICON
+from config.view_constants import (
+    CROWN_SYM,
+    TUTOR_FEEDBACK_FADE_STEPS,
+    TUTOR_FEEDBACK_MAX_DISPLAY_SECONDS,
+    TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS,
+    HOME_ICON,
+)
 from view.View import GameMode
 from view.display_utils import format_counter_offer, get_player_lead_status
 
@@ -120,7 +126,9 @@ class MainWindow(QMainWindow):
         self.history_enabled_on_turn = False
         self.history_available_in_mode = False
         self.history_mode_active = False
+        self.main_action_btn_enabled_states: List[bool] = []
         self.restore_tutor_menu_callback: Optional[Callable[[], None]] = None
+        self.dismiss_tutor_hint_callback: Optional[Callable[[], None]] = None
         self.restore_board_state_callback: Optional[Callable[[], None]] = None
         self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(Action(ActionType.END_TURN)))
         self.safe_connect(self.main_menu.home_btn, self.return_to_start_screen)
@@ -156,6 +164,9 @@ class MainWindow(QMainWindow):
         self.restore_tutor_menu_callback = callback
         self._set_history_enabled(allow_history)
 
+    def _set_dismiss_tutor_hint_callback(self, callback: Optional[Callable[[], None]]):
+        self.dismiss_tutor_hint_callback = callback
+
     def set_restore_board_state_callback(self, callback: Optional[Callable[[], None]]):
         self.restore_board_state_callback = callback
 
@@ -171,6 +182,9 @@ class MainWindow(QMainWindow):
 
         feedback = self.tutor_feedback_history[self.history_feedback_index]
         self.canvas.display_board(feedback.board_snapshot)
+        self.canvas.clear_planned_builds()
+        if feedback.recommended_visual_plan:
+            self.canvas.render_planned_builds(feedback.recommended_visual_plan)
         self.canvas.render_feedback_builds(feedback.visual_build_plan)
         self.display_resources(feedback.board_snapshot)
         item_num = self.history_feedback_index + 1
@@ -186,7 +200,10 @@ class MainWindow(QMainWindow):
             return
 
         self._stop_auto_tutor_feedback()
-        self.toggle_main_action_btns(False)
+        if self.dismiss_tutor_hint_callback is not None:
+            self.dismiss_tutor_hint_callback()
+        self.main_action_btn_enabled_states = self._capture_main_action_btn_enabled_states()
+        self.set_main_action_btns_enabled(False)
         self.history_mode_active = True
         self._update_previous_feedback_button()
         self.history_feedback_index = len(self.tutor_feedback_history) - 1
@@ -229,6 +246,7 @@ class MainWindow(QMainWindow):
         elif self.live_board_source is not None:
             self.canvas.display_board(self.live_board_source)
             self.display_resources(self.live_board_source)
+        self._restore_main_action_btn_enabled_states()
         self.history_feedback_index = None
         self.history_feedback_detailed = False
 
@@ -306,6 +324,25 @@ class MainWindow(QMainWindow):
             widget: QWidget = self.main_menu.action_btn_layout.itemAt(i).widget()
             if widget:
                 widget.setEnabled(enabled)
+
+    def _capture_main_action_btn_enabled_states(self) -> List[bool]:
+        states: List[bool] = []
+        for i in range(self.main_menu.action_btn_layout.count()):
+            widget: QWidget = self.main_menu.action_btn_layout.itemAt(i).widget()
+            if widget:
+                states.append(widget.isEnabled())
+        return states
+
+    def _restore_main_action_btn_enabled_states(self):
+        if not self.main_action_btn_enabled_states:
+            return
+        state_index = 0
+        for i in range(self.main_menu.action_btn_layout.count()):
+            widget: QWidget = self.main_menu.action_btn_layout.itemAt(i).widget()
+            if widget:
+                widget.setEnabled(self.main_action_btn_enabled_states[state_index])
+                state_index += 1
+        self.main_action_btn_enabled_states = []
 
     def closeEvent(self, _):
         quit()
@@ -498,6 +535,7 @@ class MainWindow(QMainWindow):
 
     def _continue_after_tutor_feedback(self):
         self._stop_auto_tutor_feedback()
+        self.canvas.clear_planned_builds()
         self.tutor_menu.action_label.setText("Wait For Your Turn")
         self.tutor_menu.explanation_edit.setText("Opponent is making move")
         self.tutor_menu.explain_btn.hide()
@@ -522,15 +560,18 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _move_quality_color(label: str) -> str:
-        if label == "Excellent":
-            return "#248f24"  # Green
-        if label == "Good":
-            return "#89b538"  # Lime
-        return "#666666"  # Grey
+        return move_quality_colour(label)
+
+    @staticmethod
+    def _tutor_feedback_display_seconds(feedback: TutorFeedbackExplanation) -> float:
+        gap = max(0.0, min(1.0, feedback.assessment.score_gap))
+        return TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS + (
+            (TUTOR_FEEDBACK_MAX_DISPLAY_SECONDS - TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS) * gap
+        )
 
     def _concise_explanation_html(self, explanation: ActionExplanation) -> Tuple[str, str]:
         concise_title, concise_explanation = explanation.generate_text_concise()
-        move_quality_label = explanation.move_quality_label
+        move_quality_label = explanation.tutor_move_quality_label
         move_quality_color = self._move_quality_color(move_quality_label)
         concise_html = (
             f"{concise_explanation}"
@@ -550,8 +591,8 @@ class MainWindow(QMainWindow):
         self.clear_trade_preview()
         visual_plan = explanation.get_visual_build_plan()
 
-        focus_lines = "".join(f"<br>&bull; {escape(point)}" for point in focus)
-        default_text = f"<b>What matters here:</b>{focus_lines}"
+        focus_items = "".join(f"<li>{escape(point)}</li>" for point in focus)
+        default_text = f"<b>What matters here:</b><ul>{focus_items}</ul>"
 
         concise_title, concise_explanation_html = self._concise_explanation_html(explanation)
         detailed_explanation = explanation.generate_text_detail()
@@ -567,6 +608,7 @@ class MainWindow(QMainWindow):
             self.safe_connect(self.tutor_menu.explain_btn, show_concise)
             self.safe_connect(self.tutor_menu.continue_btn, show_default)
             self._set_restore_tutor_menu_callback(show_default, player.is_human)
+            self._set_dismiss_tutor_hint_callback(show_default)
 
         def show_concise():
             self.canvas.render_planned_builds(visual_plan)
@@ -581,6 +623,7 @@ class MainWindow(QMainWindow):
             self.safe_connect(self.tutor_menu.explain_btn, show_detailed)
             self.safe_connect(self.tutor_menu.continue_btn, show_default)
             self._set_restore_tutor_menu_callback(show_concise, player.is_human)
+            self._set_dismiss_tutor_hint_callback(show_default)
 
         def show_detailed():
             self.canvas.render_planned_builds(visual_plan)
@@ -592,6 +635,7 @@ class MainWindow(QMainWindow):
             self.tutor_menu.continue_btn.setText("Hide Hint")
             self.safe_connect(self.tutor_menu.continue_btn, show_default)
             self._set_restore_tutor_menu_callback(show_detailed, player.is_human)
+            self._set_dismiss_tutor_hint_callback(show_default)
 
         show_default()
 
@@ -603,6 +647,7 @@ class MainWindow(QMainWindow):
         self._hide_history_controls()
         self.canvas.clear_feedback_builds()
         self._set_restore_tutor_menu_callback(None, False)
+        self._set_dismiss_tutor_hint_callback(None)
         self.set_restore_board_state_callback(None)
         action, explanation_html = self._concise_explanation_html(explanation)
         self.display_round_info_ai_start(player, dice_info, "")
@@ -648,6 +693,7 @@ class MainWindow(QMainWindow):
         self.set_main_action_btns_enabled(False)
         self._hide_history_controls()
         self._set_restore_tutor_menu_callback(None, False)
+        self._set_dismiss_tutor_hint_callback(None)
         self.set_restore_board_state_callback(None)
         self._append_tutor_feedback_history(feedback)
         self.tutor_menu.action_label.setText(feedback.title)
@@ -661,6 +707,9 @@ class MainWindow(QMainWindow):
 
         def switch_to_manual_continue():
             self._stop_auto_tutor_feedback()
+            self.canvas.clear_planned_builds()
+            if feedback.recommended_visual_plan:
+                self.canvas.render_planned_builds(feedback.recommended_visual_plan)
             self.tutor_menu.explanation_edit.setHtml(feedback.detailed_html)
             self.tutor_menu.explain_btn.hide()
             self.tutor_menu.continue_btn.show()
@@ -668,9 +717,7 @@ class MainWindow(QMainWindow):
             self.safe_connect(self.tutor_menu.continue_btn, self._continue_after_tutor_feedback)
 
         self.safe_connect(self.tutor_menu.explain_btn, switch_to_manual_continue)
-        display_seconds = TUTOR_FEEDBACK_DISPLAY_SECONDS.get(
-            feedback.move_quality_label, TUTOR_FEEDBACK_DISPLAY_SECONDS["Okay"]
-        )
+        display_seconds = self._tutor_feedback_display_seconds(feedback)
         self._start_tutor_feedback_fade(display_seconds)
 
     def clear_trade_preview(self):
@@ -1058,6 +1105,7 @@ class MainWindow(QMainWindow):
         self._hide_history_controls()
         self.canvas.clear_feedback_builds()
         self._set_restore_tutor_menu_callback(None, False)
+        self._set_dismiss_tutor_hint_callback(None)
         self.set_restore_board_state_callback(None)
         self.clear_trade_preview()
         self.canvas.clear_planned_builds()
@@ -1071,7 +1119,6 @@ class MainWindow(QMainWindow):
         self.main_menu.turn_label.setText(f"{player.name}'s turn")
         self.main_menu.action_label.setText(msg)
         self.toggle_main_action_btns(False)
-
         self.tutor_menu.action_label.setText("Wait For Your Turn")
         self.tutor_menu.explanation_edit.setText("Opponent is making move")
         self.tutor_menu.explain_btn.setEnabled(False)
@@ -1432,6 +1479,9 @@ class MainWindow(QMainWindow):
 
     def display_start_screen(self):
         self._stop_auto_tutor_feedback()
+        self.history_enabled_on_turn = False
+        self.tutor_feedback_history = []
+        self._set_dismiss_tutor_hint_callback(None)
         self.open_tutor_menu(False)
         self.clear_trade_preview()
         self.restore_spacer()
