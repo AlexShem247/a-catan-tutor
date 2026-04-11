@@ -62,13 +62,55 @@
              </item>
              <item>
               <widget class="QToolButton" name="help_btn">
+               <property name="minimumSize">
+                <size>
+                 <width>25</width>
+                 <height>25</height>
+                </size>
+               </property>
+               <property name="maximumSize">
+                <size>
+                 <width>25</width>
+                 <height>25</height>
+                </size>
+               </property>
                <property name="font">
                 <font>
                  <pointsize>10</pointsize>
                 </font>
                </property>
+               <property name="toolTip">
+                <string>View Catan Rules</string>
+               </property>
                <property name="text">
                 <string>?</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QToolButton" name="home_btn">
+               <property name="minimumSize">
+                <size>
+                 <width>25</width>
+                 <height>25</height>
+                </size>
+               </property>
+               <property name="maximumSize">
+                <size>
+                 <width>25</width>
+                 <height>25</height>
+                </size>
+               </property>
+               <property name="font">
+                <font>
+                 <pointsize>10</pointsize>
+                </font>
+               </property>
+               <property name="toolTip">
+                <string>Go Back to Main Menu</string>
+               </property>
+               <property name="text">
+                <string>🏠</string>
                </property>
               </widget>
              </item>

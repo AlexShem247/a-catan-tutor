@@ -16,6 +16,7 @@ class ActionType(Enum):
     BUY_DEV_CARD = auto()
     PLAY_DEV_CARD = auto()
     END_TURN = auto()
+    RETURN_HOME = auto()
 
 
 @dataclass

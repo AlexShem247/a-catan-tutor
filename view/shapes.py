@@ -204,6 +204,84 @@ class PixmapShape(Shape):
         )
 
 
+class PulsingPixmapShape(Shape):
+    def __init__(self, x: float, y: float, width: float, height: float, pixmap: QPixmap,
+                 min_alpha=70, max_alpha=255, pulse_speed=1.2):
+        self.x = int(x)
+        self.y = int(y)
+        self.width = int(width)
+        self.height = int(height)
+        self.pixmap = pixmap
+        self.min_alpha = min_alpha
+        self.max_alpha = max_alpha
+        self.pulse_speed = pulse_speed
+        self._start_time = time.time()
+
+    def current_alpha(self):
+        if not HIGHLIGHT_ANIMATION:
+            return self.max_alpha
+        t = time.time() - self._start_time
+        pulse = (math.sin(2 * math.pi * self.pulse_speed * t) + 1) / 2
+        return int(self.min_alpha + pulse * (self.max_alpha - self.min_alpha))
+
+    def draw(self, painter, scale, offset):
+        w = self.width * scale
+        h = self.height * scale
+        px = self.x * scale + offset.x() - w / 2
+        py = self.y * scale + offset.y() - h / 2
+
+        painter.save()
+        painter.setOpacity(self.current_alpha() / 255.0)
+        painter.drawPixmap(
+            int(px),
+            int(py),
+            self.pixmap.scaled(
+                int(w),
+                int(h),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation
+            )
+        )
+        painter.restore()
+
+
+class PulsingLineShape(Shape):
+    def __init__(self, x1: float, y1: float, x2: float, y2: float, thickness: float, color: QColor,
+                 min_alpha=70, max_alpha=255, pulse_speed=1.2):
+        self.x1 = x1
+        self.y1 = y1
+        self.x2 = x2
+        self.y2 = y2
+        self.thickness = thickness
+        self.color = QColor(color)
+        self.min_alpha = min_alpha
+        self.max_alpha = max_alpha
+        self.pulse_speed = pulse_speed
+        self._start_time = time.time()
+
+    def current_alpha(self):
+        if not HIGHLIGHT_ANIMATION:
+            return self.max_alpha
+        t = time.time() - self._start_time
+        pulse = (math.sin(2 * math.pi * self.pulse_speed * t) + 1) / 2
+        return int(self.min_alpha + pulse * (self.max_alpha - self.min_alpha))
+
+    def draw(self, painter, scale, offset):
+        color = QColor(self.color)
+        color.setAlpha(self.current_alpha())
+        pen = QPen(color)
+        pen.setWidthF(self.thickness * scale)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+
+        px1 = self.x1 * scale + offset.x()
+        py1 = self.y1 * scale + offset.y()
+        px2 = self.x2 * scale + offset.x()
+        py2 = self.y2 * scale + offset.y()
+        painter.drawLine(int(px1), int(py1), int(px2), int(py2))
+
+
 class HexTileShape(Shape):
     def __init__(self, x: float, y: float, radius: float, tile: HexTile, icons: Dict[str, QPixmap]):
         """
@@ -368,6 +446,7 @@ class InteractivePixmap(InteractiveShape):
 
         self.pulse_amplitude, self.pulse_speed = 0.10, 0.5
         self._start_time = time.time()
+        self.alpha_amplitude, self.alpha_speed = 70, 0.9
 
     def current_scale_factor(self):
         if not HIGHLIGHT_ANIMATION:
@@ -384,13 +463,22 @@ class InteractivePixmap(InteractiveShape):
         super().set_hover(hovered)
         self.alpha = self.hover_alpha if hovered else self.normal_alpha
 
+    def current_alpha(self):
+        if not HIGHLIGHT_ANIMATION:
+            return self.hover_alpha if self.hovered else self.normal_alpha
+        if self.hovered:
+            return self.hover_alpha
+        t = time.time() - self._start_time
+        pulse = (math.sin(2 * math.pi * self.alpha_speed * t) + 1) / 2
+        return int(max(20, min(255, self.normal_alpha + pulse * self.alpha_amplitude)))
+
     def draw(self, painter, scale, offset):
         f = self.current_scale_factor()
         w, h = self.base_width * f * scale, self.base_height * f * scale
         px, py = self.x * scale + offset.x() - w / 2, self.y * scale + offset.y() - h / 2
 
         painter.save()
-        painter.setOpacity(self.alpha / 255.0)
+        painter.setOpacity(self.current_alpha() / 255.0)
         painter.drawPixmap(int(px), int(py),
                            self.pixmap.scaled(int(w), int(h),
                                               Qt.AspectRatioMode.KeepAspectRatio,

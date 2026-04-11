@@ -5,6 +5,7 @@ from PyQt6.QtCore import QEventLoop, QTimer, pyqtBoundSignal
 from GameController import GameController
 from ai.actions import Action
 from ai.tutor.explanations import ActionExplanation
+from ai.tutor.feedback import TutorFeedbackExplanation
 from ai.tutor.tutor import TutorStage
 from game.Edge import Edge
 from game.HexTile import HexTile
@@ -58,18 +59,33 @@ class QtView(View):
         self.canvas.disable_interactivity = disable_interactivity
         self.canvas.draw_selectable_vertices(vertices)
         if not disable_interactivity:
-            return select_blocking(self, self.canvas.selectionMade, self.canvas.draw_selectable_vertices, vertices)
+            self.window.set_restore_board_state_callback(
+                lambda: self._restore_selectable_vertices(vertices)
+            )
+            selected = select_blocking(self, self.canvas.selectionMade, self.canvas.draw_selectable_vertices, vertices)
+            self.window.set_restore_board_state_callback(None)
+            return selected
 
     def draw_selectable_edges(self, edges: List[Edge], disable_interactivity: bool = False) -> Optional[Edge]:
         """Draws which edges are selectable"""
         self.canvas.disable_interactivity = disable_interactivity
         self.canvas.draw_selectable_edges(edges)
         if not disable_interactivity:
-            return select_blocking(self, self.canvas.selectionMade, self.canvas.draw_selectable_edges, edges)
+            self.window.set_restore_board_state_callback(
+                lambda: self._restore_selectable_edges(edges)
+            )
+            selected = select_blocking(self, self.canvas.selectionMade, self.canvas.draw_selectable_edges, edges)
+            self.window.set_restore_board_state_callback(None)
+            return selected
 
     def draw_selectable_tiles(self, tiles: List[HexTile]) -> HexTile:
         """Draws which tiles are selectable"""
-        return select_blocking(self, self.canvas.selectionMade, self.canvas.draw_selectable_tiles, tiles)
+        self.window.set_restore_board_state_callback(
+            lambda: self._restore_selectable_tiles(tiles)
+        )
+        selected = select_blocking(self, self.canvas.selectionMade, self.canvas.draw_selectable_tiles, tiles)
+        self.window.set_restore_board_state_callback(None)
+        return selected
 
     def draw_buildables(self, buildables: Dict):
         """Draws which tiles are selectable"""
@@ -113,7 +129,7 @@ class QtView(View):
         return select_blocking(self, self.window.startGame, self.window.display_start_screen)
 
     def display_board_turn_explanations(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
-                                        explanation: ActionExplanation) -> None:
+                                        explanation: ActionExplanation):
         self.canvas.display_board(self.controller)
         self.window.display_resources(self.controller)
         return select_blocking(self, self.window.turnMade, self.window.display_explanation,
@@ -124,13 +140,32 @@ class QtView(View):
         self.window.display_resources(self.controller)
         self.window.display_tutor_init(player, stage, explanation)
 
-    def display_tutor_action_feedback(self, title: str, explanation_html: str) -> None:
+    def display_tutor_action_feedback(self, feedback: TutorFeedbackExplanation):
         self.canvas.display_board(self.controller)
         self.window.display_resources(self.controller)
-        select_blocking(self, self.window.turnMade, self.window.display_tutor_action_feedback, title, explanation_html)
+        return select_blocking(self, self.window.turnMade, self.window.display_tutor_action_feedback, feedback)
 
     def open_tutor_menu(self, open_menu: bool):
+        self.window.configure_tutor_panel(self.controller.game_mode)
         self.window.open_tutor_menu(open_menu)
+
+    def _restore_selectable_vertices(self, vertices: List[Vertex]):
+        self.canvas.display_board(self.controller)
+        self.window.display_resources(self.controller)
+        self.canvas.disable_interactivity = False
+        self.canvas.draw_selectable_vertices(vertices)
+
+    def _restore_selectable_edges(self, edges: List[Edge]):
+        self.canvas.display_board(self.controller)
+        self.window.display_resources(self.controller)
+        self.canvas.disable_interactivity = False
+        self.canvas.draw_selectable_edges(edges)
+
+    def _restore_selectable_tiles(self, tiles: List[HexTile]):
+        self.canvas.display_board(self.controller)
+        self.window.display_resources(self.controller)
+        self.canvas.disable_interactivity = False
+        self.canvas.draw_selectable_tiles(tiles)
 
 
 def select_blocking(view: QtView, signal: pyqtBoundSignal, draw_fn, *args, **kwargs) -> Any:

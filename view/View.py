@@ -3,6 +3,7 @@ from typing import List, Tuple, Dict, Optional, Protocol
 
 from ai.actions import Action
 from ai.tutor.explanations import ActionExplanation
+from ai.tutor.feedback import TutorFeedbackExplanation
 from ai.tutor.tutor import TutorStage
 from game.Edge import Edge
 from game.HexTile import HexTile
@@ -36,13 +37,13 @@ class View(Protocol):
         ...
 
     def display_board_turn_explanations(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
-                                        explanation: ActionExplanation) -> None:
+                                        explanation: ActionExplanation):
         ...
 
     def display_tutor_init(self, player: Player, stage: TutorStage, explanation: ActionExplanation) -> None:
         ...
 
-    def display_tutor_action_feedback(self, title: str, explanation_html: str) -> None:
+    def display_tutor_action_feedback(self, feedback: TutorFeedbackExplanation):
         ...
 
     def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False) -> Vertex:

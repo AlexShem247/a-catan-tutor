@@ -1,18 +1,20 @@
 from html import escape
 from itertools import groupby
-from typing import Dict, Tuple, List, Callable, Optional
+import math
+from typing import Dict, Tuple, List, Callable, Optional, Any
 
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QCloseEvent
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtGui import QCloseEvent, QIcon
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel, QToolButton, QListWidgetItem, QSpacerItem,
-    QSizePolicy, QPushButton
+    QSizePolicy, QPushButton, QAbstractScrollArea
 )
 
 from GameController import GameController
 from ai.actions import Action, ActionType
 from ai.tutor.explanations import ActionExplanation, ExplanationTemplate
+from ai.tutor.feedback import TutorFeedbackExplanation
 from ai.tutor.tutor import TutorStage, TUTOR_STAGE_CONTENT
 from game.Edge import Edge
 from game.Player import PlayerNumber, Player
@@ -20,7 +22,7 @@ from game.PlayerAssets import Buildable, DevelopmentCardType, DevelopmentCard
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
 from view.SquareCanvas import SquareCanvas
-from config.view_constants import CROWN_SYM
+from config.view_constants import CROWN_SYM, TUTOR_FEEDBACK_DISPLAY_SECONDS, TUTOR_FEEDBACK_FADE_STEPS, HOME_ICON
 from view.View import GameMode
 from view.display_utils import format_counter_offer, get_player_lead_status
 
@@ -68,6 +70,9 @@ class MainWindow(QMainWindow):
         self.tutor_menu = uic.loadUi("view/ui/tutor_menu.ui")
         self.tutor_menu.setMinimumWidth(0)
         self.tutor_menu.setMaximumWidth(self.SIDE_PANEL_WIDTH * 2)
+        self.tutor_menu.explanation_edit.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
+        self.tutor_menu.explanation_edit.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.tutor_menu.explanation_edit.setLineWrapMode(self.tutor_menu.explanation_edit.LineWrapMode.WidgetWidth)
 
         self.resource_selector_widget = uic.loadUi("view/ui/resource_selector.ui")
         self.trade_designer_widget = uic.loadUi("view/ui/trade_designer.ui")
@@ -81,10 +86,45 @@ class MainWindow(QMainWindow):
         self.rule_window = uic.loadUi("view/ui/rules_window.ui")
         self.safe_connect(self.start_menu.help_btn, self.show_rules)
         self.safe_connect(self.main_menu.help_btn, self.show_rules)
+        self.main_menu.home_btn.setText("")
+        self.main_menu.home_btn.setIcon(QIcon(HOME_ICON))
+        self.main_menu.home_btn.setIconSize(self.main_menu.home_btn.size())
+
+        self.history_nav_widget = QWidget(self.tutor_menu)
+        self.history_nav_layout = QHBoxLayout(self.history_nav_widget)
+        self.history_nav_layout.setContentsMargins(0, 0, 0, 0)
+        self.history_prev_btn = QPushButton("<")
+        self.history_detail_btn = QPushButton("Show Detailed")
+        self.history_next_btn = QPushButton(">")
+        self.history_prev_btn.setFixedSize(40, 40)
+        self.history_next_btn.setFixedSize(40, 40)
+        self.history_detail_btn.setFixedHeight(40)
+        self.history_nav_layout.addWidget(self.history_prev_btn)
+        self.history_nav_layout.addWidget(self.history_detail_btn)
+        self.history_nav_layout.addWidget(self.history_next_btn)
+        self.history_exit_btn = QPushButton("Close History")
+        self.history_exit_btn.setFixedHeight(40)
+        self.tutor_menu.verticalLayout_3.addWidget(self.history_nav_widget)
+        self.tutor_menu.verticalLayout_3.addWidget(self.history_exit_btn)
+        self.history_nav_widget.hide()
+        self.history_exit_btn.hide()
 
         self.verticalSpacer = self.find_last_vertical_spacer()
         self.active_trade_preview_widget: QWidget | None = None
+        self.tutor_feedback_fade_timer: QTimer | None = None
+        self.tutor_feedback_advance_timer: QTimer | None = None
+        self.live_board_source: Any = None
+        self.tutor_feedback_history: List[TutorFeedbackExplanation] = []
+        self.history_feedback_index: int | None = None
+        self.history_feedback_detailed = False
+        self.history_enabled_on_turn = False
+        self.history_available_in_mode = False
+        self.history_mode_active = False
+        self.restore_tutor_menu_callback: Optional[Callable[[], None]] = None
+        self.restore_board_state_callback: Optional[Callable[[], None]] = None
         self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(Action(ActionType.END_TURN)))
+        self.safe_connect(self.main_menu.home_btn, self.return_to_start_screen)
+        self.safe_connect(self.tutor_menu.previous_feedback_btn, self.show_previous_feedback_history)
 
     def safe_connect(self, button: QToolButton | QPushButton, slot: Callable):
         try:
@@ -92,6 +132,114 @@ class MainWindow(QMainWindow):
         except TypeError:
             pass
         button.clicked.connect(slot)
+
+    def _hide_history_controls(self):
+        self.history_nav_widget.hide()
+        self.history_exit_btn.hide()
+        self._update_previous_feedback_button()
+
+    def _update_previous_feedback_button(self):
+        visible = (
+            self.history_available_in_mode
+            and self.history_enabled_on_turn
+            and bool(self.tutor_feedback_history)
+            and not self.history_mode_active
+        )
+        self.tutor_menu.previous_feedback_btn.setVisible(visible)
+        self.tutor_menu.previous_feedback_btn.setEnabled(visible)
+
+    def _set_history_enabled(self, enabled: bool):
+        self.history_enabled_on_turn = enabled
+        self._update_previous_feedback_button()
+
+    def _set_restore_tutor_menu_callback(self, callback: Optional[Callable[[], None]], allow_history: bool):
+        self.restore_tutor_menu_callback = callback
+        self._set_history_enabled(allow_history)
+
+    def set_restore_board_state_callback(self, callback: Optional[Callable[[], None]]):
+        self.restore_board_state_callback = callback
+
+    def _append_tutor_feedback_history(self, feedback: TutorFeedbackExplanation):
+        self.tutor_feedback_history.append(feedback)
+        if len(self.tutor_feedback_history) > 100:
+            self.tutor_feedback_history = self.tutor_feedback_history[-100:]
+        self._update_previous_feedback_button()
+
+    def _render_feedback_history_item(self):
+        if self.history_feedback_index is None:
+            return
+
+        feedback = self.tutor_feedback_history[self.history_feedback_index]
+        self.canvas.display_board(feedback.board_snapshot)
+        self.canvas.render_feedback_builds(feedback.visual_build_plan)
+        self.display_resources(feedback.board_snapshot)
+        item_num = self.history_feedback_index + 1
+        total = len(self.tutor_feedback_history)
+        self.tutor_menu.action_label.setText(f"{feedback.title} ({item_num}/{total})")
+        self.tutor_menu.explanation_edit.setHtml(feedback.render_html(self.history_feedback_detailed))
+        self.history_prev_btn.setEnabled(self.history_feedback_index > 0)
+        self.history_next_btn.setEnabled(self.history_feedback_index < total - 1)
+        self.history_detail_btn.setText("Show Concise" if self.history_feedback_detailed else "Show Detailed")
+
+    def show_previous_feedback_history(self):
+        if not self.history_enabled_on_turn or not self.tutor_feedback_history:
+            return
+
+        self._stop_auto_tutor_feedback()
+        self.toggle_main_action_btns(False)
+        self.history_mode_active = True
+        self._update_previous_feedback_button()
+        self.history_feedback_index = len(self.tutor_feedback_history) - 1
+        self.history_feedback_detailed = False
+        self.tutor_menu.explain_btn.hide()
+        self.tutor_menu.continue_btn.hide()
+        self.history_nav_widget.show()
+        self.history_exit_btn.show()
+
+        self.safe_connect(self.history_prev_btn, self._show_older_feedback)
+        self.safe_connect(self.history_next_btn, self._show_newer_feedback)
+        self.safe_connect(self.history_detail_btn, self._toggle_feedback_detail)
+        self.safe_connect(self.history_exit_btn, self._exit_feedback_history)
+        self._render_feedback_history_item()
+
+    def _show_older_feedback(self):
+        if self.history_feedback_index is None or self.history_feedback_index <= 0:
+            return
+        self.history_feedback_index -= 1
+        self._render_feedback_history_item()
+
+    def _show_newer_feedback(self):
+        if self.history_feedback_index is None or self.history_feedback_index >= len(self.tutor_feedback_history) - 1:
+            return
+        self.history_feedback_index += 1
+        self._render_feedback_history_item()
+
+    def _toggle_feedback_detail(self):
+        self.history_feedback_detailed = not self.history_feedback_detailed
+        self._render_feedback_history_item()
+
+    def _exit_feedback_history(self):
+        self.history_mode_active = False
+        self._hide_history_controls()
+        self.canvas.clear_feedback_builds()
+        if self.restore_board_state_callback is not None:
+            self.restore_board_state_callback()
+        if self.restore_tutor_menu_callback is not None:
+            self.restore_tutor_menu_callback()
+        elif self.live_board_source is not None:
+            self.canvas.display_board(self.live_board_source)
+            self.display_resources(self.live_board_source)
+        self.history_feedback_index = None
+        self.history_feedback_detailed = False
+
+    def return_to_start_screen(self):
+        self._stop_auto_tutor_feedback()
+        home_action = Action(ActionType.RETURN_HOME)
+        self.turnMade.emit(home_action)
+        self.canvas.selectionMade.emit(home_action)
+        self.tradeDecisionMade.emit(home_action)
+        self.tradeSelected.emit(home_action)
+        self.resourcesPicked.emit(home_action)
 
     def show_rules(self):
         # Show the rule window
@@ -163,6 +311,9 @@ class MainWindow(QMainWindow):
         quit()
 
     def display_resources(self, controller: GameController):
+        if isinstance(controller, GameController):
+            self.live_board_source = controller
+
         # Fill in bank labels
         bank_labels: Dict[Resource, QLabel] = {
             res: getattr(self.main_menu, f"bank_{res.name.lower()}_label")
@@ -241,6 +392,9 @@ class MainWindow(QMainWindow):
 
     def display_round_info(self, controller: GameController, player: Player, dice_info: Tuple[int, int, int],
                            played_dev_card: bool = False):
+        self.history_mode_active = False
+        self._hide_history_controls()
+        self.canvas.clear_feedback_builds()
         self.canvas.interactive_shapes.clear()
         self.canvas.disable_interactivity = False
         self.canvas.display_board(controller)
@@ -269,6 +423,86 @@ class MainWindow(QMainWindow):
             controller, player, played_dev_card,
             lambda played: self.display_round_info(controller, player, dice_info, played)))
         self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(Action(ActionType.END_TURN)))
+        self._set_restore_tutor_menu_callback(
+            lambda: self.display_round_info(controller, player, dice_info, played_dev_card),
+            controller.game_mode == GameMode.TUTOR and player.is_human,
+        )
+        self.set_restore_board_state_callback(None)
+
+    def configure_tutor_panel(self, game_mode: GameMode):
+        self.history_available_in_mode = game_mode == GameMode.TUTOR
+        self._update_previous_feedback_button()
+        self._hide_history_controls()
+
+    def _stop_tutor_feedback_timers(self):
+        if self.tutor_feedback_fade_timer is not None:
+            self.tutor_feedback_fade_timer.stop()
+            self.tutor_feedback_fade_timer.deleteLater()
+            self.tutor_feedback_fade_timer = None
+        if self.tutor_feedback_advance_timer is not None:
+            self.tutor_feedback_advance_timer.stop()
+            self.tutor_feedback_advance_timer.deleteLater()
+            self.tutor_feedback_advance_timer = None
+
+    def _reset_tutor_feedback_styles(self):
+        self.tutor_menu.action_label.setStyleSheet("font-weight: bold; color: rgba(0, 0, 0, 255);")
+        self.tutor_menu.explanation_edit.setStyleSheet(
+            "QTextEdit {"
+            "background: transparent;"
+            "border: none;"
+            "color: rgba(0, 0, 0, 255);"
+            "}"
+        )
+
+    def _start_tutor_feedback_fade(self, duration_seconds: float):
+        self._stop_tutor_feedback_timers()
+        self._reset_tutor_feedback_styles()
+
+        duration_ms = max(1, int(duration_seconds * 1000))
+        interval_ms = max(1, duration_ms // TUTOR_FEEDBACK_FADE_STEPS)
+        step_state = {"count": 0}
+
+        fade_timer = QTimer(self)
+
+        def update_fade():
+            step_state["count"] += 1
+            progress = step_state["count"] / TUTOR_FEEDBACK_FADE_STEPS
+            remaining_ratio = max(0.0, 1.0 - math.pow(progress, 3))
+            alpha = max(35, int(255 * remaining_ratio))
+            faded_color = f"rgba(0, 0, 0, {alpha})"
+            self.tutor_menu.action_label.setStyleSheet(f"font-weight: bold; color: {faded_color};")
+            self.tutor_menu.explanation_edit.setStyleSheet(
+                "QTextEdit {"
+                "background: transparent;"
+                "border: none;"
+                f"color: {faded_color};"
+                "}"
+            )
+
+            if step_state["count"] >= TUTOR_FEEDBACK_FADE_STEPS:
+                fade_timer.stop()
+
+        fade_timer.timeout.connect(update_fade)
+        fade_timer.start(interval_ms)
+        self.tutor_feedback_fade_timer = fade_timer
+
+        advance_timer = QTimer(self)
+        advance_timer.setSingleShot(True)
+        advance_timer.timeout.connect(self._continue_after_tutor_feedback)
+        advance_timer.start(duration_ms)
+        self.tutor_feedback_advance_timer = advance_timer
+
+    def _stop_auto_tutor_feedback(self):
+        self._stop_tutor_feedback_timers()
+        self._reset_tutor_feedback_styles()
+
+    def _continue_after_tutor_feedback(self):
+        self._stop_auto_tutor_feedback()
+        self.tutor_menu.action_label.setText("Wait For Your Turn")
+        self.tutor_menu.explanation_edit.setText("Opponent is making move")
+        self.tutor_menu.explain_btn.hide()
+        self.tutor_menu.continue_btn.hide()
+        self.turnMade.emit(True)
 
     def open_tutor_menu(self, open_menu: bool):
         if open_menu:
@@ -305,7 +539,12 @@ class MainWindow(QMainWindow):
         )
         return concise_title, concise_html
 
-    def display_tutor_init(self, _: Player, stage: TutorStage, explanation: ActionExplanation):
+    def display_tutor_init(self, player: Player, stage: TutorStage, explanation: ActionExplanation):
+        self.history_mode_active = False
+        self._stop_tutor_feedback_timers()
+        self._reset_tutor_feedback_styles()
+        self._hide_history_controls()
+        self.canvas.clear_feedback_builds()
         title, focus = TUTOR_STAGE_CONTENT[stage]["title"], TUTOR_STAGE_CONTENT[stage]["focus"]
         self.tutor_menu.action_label.setText(title)
         self.clear_trade_preview()
@@ -327,6 +566,7 @@ class MainWindow(QMainWindow):
             self.tutor_menu.continue_btn.hide()
             self.safe_connect(self.tutor_menu.explain_btn, show_concise)
             self.safe_connect(self.tutor_menu.continue_btn, show_default)
+            self._set_restore_tutor_menu_callback(show_default, player.is_human)
 
         def show_concise():
             self.canvas.render_planned_builds(visual_plan)
@@ -340,6 +580,7 @@ class MainWindow(QMainWindow):
             self.tutor_menu.continue_btn.setText("Hide Hint")
             self.safe_connect(self.tutor_menu.explain_btn, show_detailed)
             self.safe_connect(self.tutor_menu.continue_btn, show_default)
+            self._set_restore_tutor_menu_callback(show_concise, player.is_human)
 
         def show_detailed():
             self.canvas.render_planned_builds(visual_plan)
@@ -350,11 +591,19 @@ class MainWindow(QMainWindow):
             self.tutor_menu.continue_btn.setEnabled(True)
             self.tutor_menu.continue_btn.setText("Hide Hint")
             self.safe_connect(self.tutor_menu.continue_btn, show_default)
+            self._set_restore_tutor_menu_callback(show_detailed, player.is_human)
 
         show_default()
 
     def display_explanation(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
                             explanation: ActionExplanation):
+        self.history_mode_active = False
+        self._stop_tutor_feedback_timers()
+        self._reset_tutor_feedback_styles()
+        self._hide_history_controls()
+        self.canvas.clear_feedback_builds()
+        self._set_restore_tutor_menu_callback(None, False)
+        self.set_restore_board_state_callback(None)
         action, explanation_html = self._concise_explanation_html(explanation)
         self.display_round_info_ai_start(player, dice_info, "")
         self.toggle_main_action_btns(False)
@@ -391,23 +640,38 @@ class MainWindow(QMainWindow):
         self.canvas.render_planned_builds(explanation.get_visual_build_plan())
         self.display_trade_preview(explanation)
 
-    def display_tutor_action_feedback(self, title: str, explanation_html: str) -> None:
+    def display_tutor_action_feedback(self, feedback: TutorFeedbackExplanation) -> None:
+        self.history_mode_active = False
         self.canvas.clear_planned_builds()
+        self.canvas.clear_feedback_builds()
         self.clear_trade_preview()
         self.set_main_action_btns_enabled(False)
-        self.tutor_menu.action_label.setText(title)
-        self.tutor_menu.explanation_edit.setHtml(explanation_html)
-        self.tutor_menu.continue_btn.show()
-        self.tutor_menu.continue_btn.setEnabled(True)
-        self.tutor_menu.continue_btn.setText("Continue")
-        self.safe_connect(self.tutor_menu.continue_btn, lambda: self.turnMade.emit(True))
+        self._hide_history_controls()
+        self._set_restore_tutor_menu_callback(None, False)
+        self.set_restore_board_state_callback(None)
+        self._append_tutor_feedback_history(feedback)
+        self.tutor_menu.action_label.setText(feedback.title)
+        self.tutor_menu.explanation_edit.setHtml(feedback.concise_html)
         self.tutor_menu.explain_btn.show()
         self.tutor_menu.explain_btn.setEnabled(True)
         self.tutor_menu.explain_btn.setText("Explain Further")
-        self.safe_connect(
-            self.tutor_menu.explain_btn,
-            lambda: self.tutor_menu.explanation_edit.setText("This feature has not been implemented yet.")
+        self.tutor_menu.continue_btn.hide()
+        self.tutor_menu.continue_btn.setEnabled(False)
+        self.tutor_menu.continue_btn.setText("Continue")
+
+        def switch_to_manual_continue():
+            self._stop_auto_tutor_feedback()
+            self.tutor_menu.explanation_edit.setHtml(feedback.detailed_html)
+            self.tutor_menu.explain_btn.hide()
+            self.tutor_menu.continue_btn.show()
+            self.tutor_menu.continue_btn.setEnabled(True)
+            self.safe_connect(self.tutor_menu.continue_btn, self._continue_after_tutor_feedback)
+
+        self.safe_connect(self.tutor_menu.explain_btn, switch_to_manual_continue)
+        display_seconds = TUTOR_FEEDBACK_DISPLAY_SECONDS.get(
+            feedback.move_quality_label, TUTOR_FEEDBACK_DISPLAY_SECONDS["Okay"]
         )
+        self._start_tutor_feedback_fade(display_seconds)
 
     def clear_trade_preview(self):
         if self.active_trade_preview_widget is None:
@@ -788,6 +1052,13 @@ class MainWindow(QMainWindow):
         self.safe_connect(select_trade.submit_btn, cancel)
 
     def display_round_info_ai_start(self, player: Player, dice_info: Optional[Tuple[int, int, int]], msg: str):
+        self.history_mode_active = False
+        self._stop_tutor_feedback_timers()
+        self._reset_tutor_feedback_styles()
+        self._hide_history_controls()
+        self.canvas.clear_feedback_builds()
+        self._set_restore_tutor_menu_callback(None, False)
+        self.set_restore_board_state_callback(None)
         self.clear_trade_preview()
         self.canvas.clear_planned_builds()
         if dice_info:
@@ -802,7 +1073,7 @@ class MainWindow(QMainWindow):
         self.toggle_main_action_btns(False)
 
         self.tutor_menu.action_label.setText("Wait For Your Turn")
-        self.tutor_menu.explanation_edit.setText("")
+        self.tutor_menu.explanation_edit.setText("Opponent is making move")
         self.tutor_menu.explain_btn.setEnabled(False)
         self.tutor_menu.continue_btn.setEnabled(False)
 
@@ -1148,27 +1419,30 @@ class MainWindow(QMainWindow):
         self.safe_connect(self.results_menu.main_menu_btn, return_to_main_menu)
         self.safe_connect(self.results_menu.quit_btn, lambda: self.closeEvent(QCloseEvent()))
 
+    def _set_primary_side_panel(self, panel: QWidget):
+        for widget in (self.main_menu, self.start_menu, self.results_menu):
+            if self.splitter_layout.indexOf(widget) != -1:
+                widget.setParent(None)
+
+        panel.setMinimumWidth(0)
+        panel.setMaximumWidth(self.SIDE_PANEL_WIDTH * 2)
+        self.splitter_layout.addWidget(panel)
+        panel.show()
+        self.splitter_layout.setSizes([1000, self.SIDE_PANEL_WIDTH])
+
     def display_start_screen(self):
+        self._stop_auto_tutor_feedback()
+        self.open_tutor_menu(False)
+        self.clear_trade_preview()
+        self.restore_spacer()
         self.canvas.clear_planned_builds()
         self.canvas.interactive_shapes.clear()
         self.canvas.display_start_screen()
-
-        # Add the new results menu
-        sizes = self.splitter_layout.sizes()
-        self.main_menu.setParent(None)
-        self.splitter_layout.addWidget(self.start_menu)
-        self.splitter_layout.setSizes([sizes[0], sizes[1]])
+        self._set_primary_side_panel(self.start_menu)
 
         def play(game_mode: GameMode):
-            # Remove results panel
-            layout_sizes = self.splitter_layout.sizes()
-            self.start_menu.setParent(None)
-
-            # Restore main menu
-            self.splitter_layout.addWidget(self.main_menu)
-            self.splitter_layout.setSizes(layout_sizes)
-            self.main_menu.show()
-
+            self.open_tutor_menu(False)
+            self._set_primary_side_panel(self.main_menu)
             self.startGame.emit(game_mode)
 
         def is_lab_mode() -> bool:

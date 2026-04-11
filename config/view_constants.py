@@ -24,6 +24,12 @@ SHOW_AI_BUILT_LOCATIONS = False
 HIGHLIGHT_ANIMATION = True
 AI_DECISION_ANIMATION_DELAY = 0.1  # Seconds
 AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE = 0.05  # Seconds
+TUTOR_FEEDBACK_DISPLAY_SECONDS: Dict[str, float] = {
+    "Excellent": 3.0,
+    "Good": 4.0,
+    "Okay": 6.0,
+}
+TUTOR_FEEDBACK_FADE_STEPS = 12
 
 OUTLINE_COLOR = QColor(Qt.GlobalColor.black)
 HIGHLIGHT_COLOR = QColor(Qt.GlobalColor.yellow)
@@ -49,6 +55,7 @@ RESOURCE_ICONS: Dict[Resource, str] = {
     Resource.ORE: "assets/ore.png",
 }
 
+HOME_ICON = "assets/home.png"
 DESERT_ICON = "assets/cactus.png"
 ROBBER_ICON = "assets/robber.png"
 SEA_BACKGROUND = "assets/sea_background.png"

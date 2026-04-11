@@ -16,7 +16,9 @@ from config.view_constants import WINDOW_HEIGHT, BOARD_BG_COLOR, HEX_TILE_RADIUS
     PORT_EDGE_COLOR, PORT_ICONS, TITLE_COLOR, SEA_BACKGROUND, SETTLEMENT_OUTLINE, SETTLEMENT_OUTLINE_SOLID, \
     CITY_OUTLINE, PLAN_OUTLINE_COLOR
 from view.shapes import HexTileShape, VertexShape, LineShape, InteractiveShape, InteractiveCircle, PixmapShape, \
-    TextShape, InteractivePixmap, InteractiveRoadOverlay, InteractiveRoadVertexOverlay
+    TextShape, InteractivePixmap, InteractiveRoadOverlay, InteractiveRoadVertexOverlay, PulsingPixmapShape, \
+    PulsingLineShape
+from game.PlayerAssets import Building
 
 
 class SquareCanvas(QWidget):
@@ -45,6 +47,8 @@ class SquareCanvas(QWidget):
         self.interactive_shapes: List[InteractiveShape] = []
         self.planned_builds: List[Tuple] = []
         self.planned_overlay_shapes: List[InteractiveShape] = []
+        self.feedback_builds: List[Tuple] = []
+        self.feedback_overlay_shapes: List = []
         self.hovered_shape: InteractiveShape | None = None
         self.disable_interactivity = True
 
@@ -241,6 +245,12 @@ class SquareCanvas(QWidget):
         self.planned_overlay_shapes = []
         self.update()
 
+    def clear_feedback_builds(self):
+        self.feedback_builds = []
+        self.shapes = [shape for shape in self.shapes if shape not in self.feedback_overlay_shapes]
+        self.feedback_overlay_shapes = []
+        self.update()
+
     def screen_to_world(self, pos):
         scale = self.base_scale * self.zoom
         wx = (pos.x() - self.offset.x()) / scale
@@ -291,6 +301,7 @@ class SquareCanvas(QWidget):
             self.add_shape(VertexShape(x, y, VERTEX_SIZE, vertex, self.icons))
 
         self._draw_planned_builds(self.planned_builds)
+        self._draw_feedback_builds(self.feedback_builds)
 
     def draw_selectable_vertices(self, vertices):
         self.interactive_shapes.clear()
@@ -357,6 +368,8 @@ class SquareCanvas(QWidget):
         self.shapes.clear()
         self.planned_builds = []
         self.planned_overlay_shapes = []
+        self.feedback_builds = []
+        self.feedback_overlay_shapes = []
         w, h = self.world_size, self.world_size
 
         self.background_image = self.icons[SEA_BACKGROUND]
@@ -376,6 +389,12 @@ class SquareCanvas(QWidget):
         self.shapes = [shape for shape in self.shapes if shape not in self.planned_overlay_shapes]
         self.planned_overlay_shapes = []
         self._draw_planned_builds(self.planned_builds)
+
+    def render_feedback_builds(self, builds: List[Tuple]):
+        self.feedback_builds = builds.copy()
+        self.shapes = [shape for shape in self.shapes if shape not in self.feedback_overlay_shapes]
+        self.feedback_overlay_shapes = []
+        self._draw_feedback_builds(self.feedback_builds)
 
     def _draw_planned_builds(self, builds: List[Tuple]):
         cx, cy = self.get_world_centre()
@@ -438,3 +457,29 @@ class SquareCanvas(QWidget):
                 )
                 self.planned_overlay_shapes.append(robber_overlay)
                 self.add_shape(robber_overlay)
+
+    def _draw_feedback_builds(self, builds: List[Tuple]):
+        cx, cy = self.get_world_centre()
+
+        for buildable, position, player_number in builds:
+            if buildable == Buildable.ROAD and isinstance(position, Edge):
+                v1, v2 = position.vertices
+                x1, y1 = vertex_xy(v1, cx, cy, HEX_TILE_RADIUS)
+                x2, y2 = vertex_xy(v2, cx, cy, HEX_TILE_RADIUS)
+                road_shape = PulsingLineShape(
+                    x1, y1, x2, y2, ROAD_THICKNESS, PLAYER_COLORS[player_number]
+                )
+                self.feedback_overlay_shapes.append(road_shape)
+                self.add_shape(road_shape)
+            elif buildable == Buildable.SETTLEMENT and position is not None:
+                x, y = vertex_xy(position, cx, cy, HEX_TILE_RADIUS)
+                pixmap = self.icons[SETTLEMENT_ICONS[(player_number, Building.SETTLEMENT)]]
+                settlement_shape = PulsingPixmapShape(x, y, VERTEX_SIZE * 4, VERTEX_SIZE * 4, pixmap)
+                self.feedback_overlay_shapes.append(settlement_shape)
+                self.add_shape(settlement_shape)
+            elif buildable == Buildable.CITY and position is not None:
+                x, y = vertex_xy(position, cx, cy, HEX_TILE_RADIUS)
+                pixmap = self.icons[SETTLEMENT_ICONS[(player_number, Building.CITY)]]
+                city_shape = PulsingPixmapShape(x, y, VERTEX_SIZE * 4, VERTEX_SIZE * 4, pixmap)
+                self.feedback_overlay_shapes.append(city_shape)
+                self.add_shape(city_shape)
