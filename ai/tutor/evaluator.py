@@ -1,5 +1,5 @@
 import re
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from ai.RuleBasedAI import RuleBasedAI
 from ai.actions import Action, ActionType, Phase
@@ -37,7 +37,9 @@ class TutorEvaluator:
     _TIP_BY_DECISION = {
         TutorDecisionType.OPENING_SETTLEMENT: "Prioritise production and resource coverage before smaller extras.",
         TutorDecisionType.OPENING_ROAD: "Aim roads at the strongest follow-up settlement line you can keep open.",
-        TutorDecisionType.ROBBER: "Block the tile that matters most to the strongest opponent without hurting yourself.",
+        TutorDecisionType.ROBBER: (
+            "Block the tile that matters most to the strongest opponent without hurting yourself."
+        ),
         TutorDecisionType.DISCARD: "Keep the cards that preserve your next build and throw away surplus first.",
         TutorDecisionType.TRADE_RESPONSE: "Accept trades only when they advance your plan more than your opponent's.",
         TutorDecisionType.TRADE_PARTNER: "Choose the deal that helps your plan while feeding the safest opponent.",
@@ -100,7 +102,7 @@ class TutorEvaluator:
             for vertex in available_vertices
         }
         max_score = max(vertex_scores.values(), default=0.0)
-        actual_explanation = self.tutor_ai._build_initial_settlement_explanation(  # noqa: SLF001
+        actual_explanation = self._build_initial_settlement_explanation(
             player,
             chosen_vertex,
             vertex_scores.get(chosen_vertex, float("-inf")),
@@ -160,7 +162,13 @@ class TutorEvaluator:
             counter: Optional[ResourceCount],
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
-        _, _, best_explanation = self.tutor_ai.respond_to_trade_with_explanation(player, game, opponent, selling, buying)
+        _, _, best_explanation = self.tutor_ai.respond_to_trade_with_explanation(
+            player,
+            game,
+            opponent,
+            selling,
+            buying,
+        )
         actual_explanation = self.tutor_ai.explain_trade_response_choice(
             player,
             game,
@@ -289,7 +297,7 @@ class TutorEvaluator:
             decision_type: TutorDecisionType,
             actual_explanation: Optional[ActionExplanation],
             best_explanation: Optional[ActionExplanation],
-            game: Game,
+            game: Any,
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
         if actual_explanation is None or best_explanation is None:
@@ -345,6 +353,26 @@ class TutorEvaluator:
             tip=self._TIP_BY_DECISION[decision_type],
         )
 
+    def _build_initial_settlement_explanation(
+            self,
+            player: Player,
+            vertex: Vertex,
+            best_score: float,
+            max_score: float,
+    ) -> ActionExplanation:
+        build_explanation = getattr(self.tutor_ai, "_build_initial_settlement_explanation")
+        return build_explanation(player, vertex, best_score, max_score)
+
+    def _build_initial_road_explanation(
+            self,
+            edge: Edge,
+            target_vertex: Optional[Vertex],
+            explanation_kind: RoadExplanationKind,
+            move_quality: float,
+    ) -> ActionExplanation:
+        build_explanation = getattr(self.tutor_ai, "_build_initial_road_explanation")
+        return build_explanation(edge, target_vertex, explanation_kind, move_quality)
+
     def _build_initial_road_choice_explanation(
             self,
             player: Player,
@@ -353,7 +381,7 @@ class TutorEvaluator:
             chosen_edge: Edge,
     ) -> ActionExplanation:
         if len(player.settlements) + len(player.cities) >= 2:
-            return self.tutor_ai._build_initial_road_explanation(  # noqa: SLF001
+            return self._build_initial_road_explanation(
                 chosen_edge,
                 target_vertex=None,
                 explanation_kind=RoadExplanationKind.FLEXIBLE,
@@ -375,7 +403,7 @@ class TutorEvaluator:
             ]
             if target_vertices:
                 target_vertex = max(target_vertices, key=vertex_scores.get)
-                return self.tutor_ai._build_initial_road_explanation(  # noqa: SLF001
+                return self._build_initial_road_explanation(
                     chosen_edge,
                     target_vertex=target_vertex,
                     explanation_kind=RoadExplanationKind.EXPANSION,
@@ -384,7 +412,7 @@ class TutorEvaluator:
                         max_legal_vertex_utility,
                     ),
                 )
-            return self.tutor_ai._build_initial_road_explanation(  # noqa: SLF001
+            return self._build_initial_road_explanation(
                 chosen_edge,
                 target_vertex=None,
                 explanation_kind=RoadExplanationKind.FLEXIBLE,
@@ -396,7 +424,7 @@ class TutorEvaluator:
             if moves_toward_vertex(edge.get_other_vertex(current_settlement), player.settlements[0])
         ]
         if chosen_edge in connection_edges:
-            return self.tutor_ai._build_initial_road_explanation(  # noqa: SLF001
+            return self._build_initial_road_explanation(
                 chosen_edge,
                 target_vertex=player.settlements[0],
                 explanation_kind=RoadExplanationKind.CONNECTION,
@@ -409,7 +437,7 @@ class TutorEvaluator:
         ]
         if target_vertices:
             target_vertex = max(target_vertices, key=vertex_scores.get)
-            return self.tutor_ai._build_initial_road_explanation(  # noqa: SLF001
+            return self._build_initial_road_explanation(
                 chosen_edge,
                 target_vertex=target_vertex,
                 explanation_kind=RoadExplanationKind.EXPANSION,
@@ -419,7 +447,7 @@ class TutorEvaluator:
                 ),
             )
 
-        return self.tutor_ai._build_initial_road_explanation(  # noqa: SLF001
+        return self._build_initial_road_explanation(
             chosen_edge,
             target_vertex=None,
             explanation_kind=RoadExplanationKind.FLEXIBLE,

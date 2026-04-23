@@ -97,13 +97,15 @@ class TutorAssessment:
             f"<span style=\"color: {label_colour};\"><b>{escape(self.label)}.</b></span> "
             f"{escape(self.judgment_sentence)}"
         ]
-        if self.better_move and self._normalise_display_text(self.better_move) != self._normalise_display_text(self.your_move):
+        if (self.better_move and self._normalise_display_text(self.better_move) !=
+                self._normalise_display_text(self.your_move)):
             parts.append(f"<b>Better move:</b> {escape(self.better_move)}")
         return "<br>".join(parts)
 
     def detailed_html(self) -> str:
         parts = [f"<b>Your move:</b> {escape(self.your_move)}"]
-        if self.better_move and self._normalise_display_text(self.better_move) != self._normalise_display_text(self.your_move):
+        if (self.better_move and self._normalise_display_text(self.better_move) !=
+                self._normalise_display_text(self.your_move)):
             parts.append(f"<b>Better move:</b> {escape(self.better_move)}")
 
         reasons = self._dedupe_display_texts([

@@ -232,7 +232,7 @@ def display_board(game: Game) -> None:
             display_array[row][col + 1] = DisplayEdge(game.get_edge(h.q, h.r, EdgeDirection.EAST))
 
             # Places for vertices in display array (dR, dC)
-            vertex_pos: (int, int) = [(-2, 0), (-1, 1), (1, 1), (2, 0), (1, -1), (-1, -1)]
+            vertex_pos: List[Tuple[int, int]] = [(-2, 0), (-1, 1), (1, 1), (2, 0), (1, -1), (-1, -1)]
             for vDir, (dR, dC) in enumerate(vertex_pos):
                 r_idx = row + dR
                 c_idx = col + dC

@@ -1,5 +1,5 @@
 import math
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from ai.simulation.SimGame import SimGame
 from ai.simulation.SimPlayerState import SimPlayerState, dice_probability
@@ -182,11 +182,14 @@ class EtwEstimator:
         iterations = 0
 
         # Default rollout depth shrinks as we get closer to winning.
-        default_depth = min(Game.VICTORY_POINTS_TO_WIN + ETW_MAX_DEPTH_OFFSET - points, ETW_MAX_DEPTH_OFFSET)
+        default_depth = max(
+            1,
+            math.ceil(min(Game.VICTORY_POINTS_TO_WIN + ETW_MAX_DEPTH_OFFSET - points, ETW_MAX_DEPTH_OFFSET)),
+        )
 
         # Optional override for fast, rank-only ETW estimates.
         if max_depth_override is not None:
-            max_depth = max(1.0, int(max_depth_override))
+            max_depth = max(1, int(max_depth_override))
             max_depth = min(max_depth, default_depth)
         else:
             max_depth = default_depth
@@ -304,9 +307,10 @@ class EtwEstimator:
         deferred_candidate: Optional[CandidateExplanation] = None,
     ) -> CandidateExplanation:
         player_after_wait = player.copy()
+        expected_resources = cast(Dict[Resource, float], player_after_wait.resources)
         for resource in Resource:
-            player_after_wait.resources[resource] = (
-                player_after_wait.resources.get(resource, 0) + player.get_production_rate(resource)
+            expected_resources[resource] = (
+                expected_resources.get(resource, 0.0) + player.get_production_rate(resource)
             )
 
         sim_game_after_wait = _sim_game_with_replaced_player(sim_game, player_after_wait)
@@ -397,6 +401,15 @@ class EtwEstimator:
             player, sim_game, cost, include_player_trades=include_player_trades,
         )
 
+    @staticmethod
+    def _leading_opponent_etw(
+        opponents_etw_before: Dict[PlayerNumber, float],
+    ) -> Optional[Tuple[PlayerNumber, float]]:
+        if not opponents_etw_before:
+            return None
+        leading_opp_num = min(opponents_etw_before, key=lambda num: opponents_etw_before[num])
+        return leading_opp_num, opponents_etw_before[leading_opp_num]
+
     def _evaluate_action_plan(
         self,
         player: SimPlayerState,
@@ -442,24 +455,22 @@ class EtwEstimator:
             for step in actions
         )
 
-        leading_opp_num, opp_etw_before = None, None
-        if opponents_etw_before:
-            leading_opp_num = min(opponents_etw_before, key=opponents_etw_before.get)
-            opp_etw_before = opponents_etw_before.get(leading_opp_num)
-
         u_opp = 0.0
         blocks_opponent = False
-        if affects_board and leading_opp_num is not None and opp_etw_before and opp_etw_before > 0:
-            opp_state = sim_game_copy.overlay.get_sim_player(leading_opp_num).copy()
-            sim_game_opp = _sim_game_with_replaced_player(sim_game_copy, opp_state)
+        leader_etw = self._leading_opponent_etw(opponents_etw_before)
+        if affects_board and leader_etw is not None:
+            leading_opp_num, opp_etw_before = leader_etw
+            if opp_etw_before > 0:
+                opp_state = sim_game_copy.overlay.get_sim_player(leading_opp_num).copy()
+                sim_game_opp = _sim_game_with_replaced_player(sim_game_copy, opp_state)
 
-            opp_etw_after = self.estimated_time_to_win(
-                opp_state, sim_game_opp, False, max_depth_override=EVAL_UTIL_MAX_DEPTH,
-            )
+                opp_etw_after = self.estimated_time_to_win(
+                    opp_state, sim_game_opp, False, max_depth_override=EVAL_UTIL_MAX_DEPTH,
+                )
 
-            delay_caused = (opp_etw_after - opp_etw_before) / opp_etw_before * 100.0
-            u_opp = StrategyWeights.OPPONENT_INTERFERENCE_LEADING * delay_caused
-            blocks_opponent = delay_caused > 0.0
+                delay_caused = (opp_etw_after - opp_etw_before) / opp_etw_before * 100.0
+                u_opp = StrategyWeights.OPPONENT_INTERFERENCE_LEADING * delay_caused
+                blocks_opponent = delay_caused > 0.0
 
         u_special = 0.0
         improves_longest_road = False
@@ -644,10 +655,7 @@ class EtwEstimator:
         max_eval = min(MAX_EVALUATIONS, len(candidates))
 
         # Use the opponent with the lowest ETW as the "leader" for interference scoring.
-        leading_opp_num, opp_etw_before = None, None
-        if opponents_etw_before:
-            leading_opp_num = min(opponents_etw_before, key=opponents_etw_before.get)
-            opp_etw_before = opponents_etw_before.get(leading_opp_num)
+        leader_etw = self._leading_opponent_etw(opponents_etw_before)
 
         for actions, etb, vp_inc in candidates[:max_eval]:
             # Skip very slow plans or empty candidates.
@@ -686,17 +694,19 @@ class EtwEstimator:
             )
 
             u_opp = 0.0
-            if affects_board and leading_opp_num is not None and opp_etw_before and opp_etw_before > 0:
+            if affects_board and leader_etw is not None:
                 # Evaluate the leader's ETW in the counterfactual world where we executed this plan.
+                leading_opp_num, opp_etw_before = leader_etw
                 opp_state = sim_game_copy.overlay.get_sim_player(leading_opp_num).copy()
                 sim_game_opp = _sim_game_with_replaced_player(sim_game_copy, opp_state)
 
-                opp_etw_after = self.estimated_time_to_win(
-                    opp_state, sim_game_opp, False, max_depth_override=EVAL_UTIL_MAX_DEPTH,
-                )
+                if opp_etw_before > 0:
+                    opp_etw_after = self.estimated_time_to_win(
+                        opp_state, sim_game_opp, False, max_depth_override=EVAL_UTIL_MAX_DEPTH,
+                    )
 
-                delay_caused = (opp_etw_after - opp_etw_before) / opp_etw_before * 100.0
-                u_opp = StrategyWeights.OPPONENT_INTERFERENCE_LEADING * delay_caused
+                    delay_caused = (opp_etw_after - opp_etw_before) / opp_etw_before * 100.0
+                    u_opp = StrategyWeights.OPPONENT_INTERFERENCE_LEADING * delay_caused
 
             # Special utility: explicit incentives for LR / LA progress when a plan advances them.
             u_special = 0.0
@@ -981,11 +991,6 @@ class EtwEstimator:
         candidates.sort(key=lambda x: x[1])
         max_eval = min(MAX_EVALUATIONS, len(candidates))
 
-        leading_opp_num, opp_etw_before = None, None
-        if opponents_etw_before:
-            leading_opp_num = min(opponents_etw_before, key=opponents_etw_before.get)
-            opp_etw_before = opponents_etw_before.get(leading_opp_num)
-
         for actions, etb, vp_inc in candidates[:max_eval]:
             candidate = self._evaluate_action_plan(
                 player, sim_game, dev_played, actions, etb, vp_inc, etw_before, opponents_etw_before,
@@ -1043,8 +1048,15 @@ class EtwEstimator:
                 reasons_for=[],
             )
 
-        alternatives = [candidate for candidate in explained_candidates if candidate.action != chosen_candidate.action][:3]
-        worst_utility = explained_candidates[-1].utility_total if explained_candidates else chosen_candidate.utility_total
+        alternatives = [
+            candidate for candidate in explained_candidates
+            if candidate.action != chosen_candidate.action
+        ][:3]
+        worst_utility = (
+            explained_candidates[-1].utility_total
+            if explained_candidates
+            else chosen_candidate.utility_total
+        )
 
         return ActionExplanation(
             chosen_action=chosen_candidate.action,

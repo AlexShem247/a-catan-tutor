@@ -1,4 +1,5 @@
 import unittest
+from random import Random
 
 from game.Board import Board
 from game.Game import Game
@@ -9,7 +10,8 @@ from game.Resources import HexType
 class TestBoard(unittest.TestCase):
 
     def setUp(self):
-        self.board = Board()
+        self.rng = Random(0)
+        self.board = Board(self.rng)
         self.bank_resources = Game.BANK_INITIAL_RESOURCES.copy()
 
     def test_hex_count_and_desert(self):
@@ -80,7 +82,7 @@ class TestBoard(unittest.TestCase):
 
     def test_build_settlement_and_city(self):
         # Player can build a settlement and upgrade to a city
-        player = Player(False, PlayerNumber.P1, self.bank_resources)
+        player = Player(False, PlayerNumber.P1, self.bank_resources, self.rng)
         vertex = self.board.vertices[0]
         self.board.build_settlement(vertex, player)
         self.assertEqual(vertex.owner, player)
@@ -92,7 +94,7 @@ class TestBoard(unittest.TestCase):
 
     def test_build_road(self):
         # Player can build a road
-        player = Player(False, PlayerNumber.P1, self.bank_resources)
+        player = Player(False, PlayerNumber.P1, self.bank_resources, self.rng)
         edge = self.board.edges[0]
         self.board.build_road(edge, player)
         self.assertEqual(edge.owner, player)
@@ -100,7 +102,7 @@ class TestBoard(unittest.TestCase):
 
     def test_longest_road_simple_chain(self):
         # Longest road calculation works for simple chains
-        player = Player(False, PlayerNumber.P1, self.bank_resources)
+        player = Player(False, PlayerNumber.P1, self.bank_resources, self.rng)
         edges = self.board.edges[:3]
         for edge in edges:
             self.board.build_road(edge, player)
@@ -110,8 +112,8 @@ class TestBoard(unittest.TestCase):
 
     def test_longest_road_blocked_by_opponent(self):
         # Longest road is shortened if blocked by opponent's building
-        player1 = Player(False, PlayerNumber.P1, self.bank_resources)
-        player2 = Player(False, PlayerNumber.P2, self.bank_resources)
+        player1 = Player(False, PlayerNumber.P1, self.bank_resources, self.rng)
+        player2 = Player(False, PlayerNumber.P2, self.bank_resources, self.rng)
         edge_chain = self.board.edges[:3]
         for edge in edge_chain:
             self.board.build_road(edge, player1)

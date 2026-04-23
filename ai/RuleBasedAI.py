@@ -404,7 +404,6 @@ class RuleBasedAI(AI):
         """Select robber placement and return a structured explanation."""
         best_score = float("-inf")
         best_hex: Optional[HexTile] = None
-        second_best_score = float("-inf")
 
         # Used to avoid blocking ourselves unless it's clearly worth it.
         our_resource_tiles = {h for v in (player.settlements + player.cities) for h in v.hexes}
@@ -443,25 +442,23 @@ class RuleBasedAI(AI):
             score = 0.0
             for p in players_on_h:
                 score += score_hex_for_opponent(
-                    opponent_number=p.player_number, sim_game=sim_game_for_robber, hex_tile=h,
-                    importance=opponent_importance.get(p.player_number, {})) * (
-                                 p.calc_victory_points()[0] * diversion_boost)
+                    opponent_number=p.player_number,
+                    sim_game=sim_game_for_robber,
+                    hex_tile=h,
+                    importance=opponent_importance.get(p.player_number, {}),
+                ) * (p.calc_victory_points()[0] * diversion_boost)
 
             # Prefer not to rob our own production unless the blocking value is high.
             if h in our_resource_tiles:
                 score *= StrategyWeights.ROBBER_OWN_HEX_PENALTY
 
             if score > best_score:
-                second_best_score = best_score
                 best_score = score
                 best_hex = h
-            elif score > second_best_score:
-                second_best_score = score
 
         # Fallback if no hex has opponents on it.
         if best_hex is None:
             best_hex = self.rng.choice(valid_hexes)
-            second_best_score = best_score
 
         self_harm = 0.0
         if best_hex in our_resource_tiles:
@@ -475,7 +472,13 @@ class RuleBasedAI(AI):
         players_on_best_hex = [p for p in game.get_players_on_hex(best_hex) if p != player]
         if not players_on_best_hex:
             explanation = self._build_robber_explanation(
-                best_hex, None, best_score, second_best_score, best_hex in our_resource_tiles, self_harm, 0.0)
+                best_hex,
+                None,
+                best_score,
+                best_hex in our_resource_tiles,
+                self_harm,
+                0.0,
+            )
             return best_hex, None, explanation
 
         best_player = max(players_on_best_hex, key=lambda pl: sum(pl.resources.values()) * pl.calc_victory_points()[0])
@@ -486,7 +489,6 @@ class RuleBasedAI(AI):
             best_hex,
             best_player,
             best_score,
-            second_best_score,
             best_hex in our_resource_tiles,
             self_harm,
             leader_vp_ratio,
@@ -494,7 +496,7 @@ class RuleBasedAI(AI):
         return best_hex, best_player, explanation
 
     def explain_robber_choice(
-            self, player: Player, game: Game, valid_hexes: List[HexTile], chosen_hex: HexTile,
+            self, player: Player, game: Game, _valid_hexes: List[HexTile], chosen_hex: HexTile,
             chosen_player: Optional[Player]) -> ActionExplanation:
         our_resource_tiles = {h for v in (player.settlements + player.cities) for h in v.hexes}
         sim_game_for_robber = make_sim_game_for_player(game, player)
@@ -521,8 +523,11 @@ class RuleBasedAI(AI):
         players_on_hex = [p for p in game.get_players_on_hex(chosen_hex) if p != player]
         for p in players_on_hex:
             chosen_score += score_hex_for_opponent(
-                opponent_number=p.player_number, sim_game=sim_game_for_robber, hex_tile=chosen_hex,
-                importance=opponent_importance.get(p.player_number, {})) * (p.calc_victory_points()[0] * diversion_boost)
+                opponent_number=p.player_number,
+                sim_game=sim_game_for_robber,
+                hex_tile=chosen_hex,
+                importance=opponent_importance.get(p.player_number, {}),
+            ) * (p.calc_victory_points()[0] * diversion_boost)
         if chosen_hex in our_resource_tiles:
             chosen_score *= StrategyWeights.ROBBER_OWN_HEX_PENALTY
 
@@ -540,7 +545,12 @@ class RuleBasedAI(AI):
         if target_player is not None and best_opp_vp > 0:
             leader_vp_ratio = target_player.calc_victory_points()[0] / best_opp_vp
         return self._build_robber_explanation(
-            chosen_hex, target_player, chosen_score, 0.0, chosen_hex in our_resource_tiles, self_harm, leader_vp_ratio,
+            chosen_hex,
+            target_player,
+            chosen_score,
+            chosen_hex in our_resource_tiles,
+            self_harm,
+            leader_vp_ratio,
         )
 
     def select_discard_resources(self, player: Player, game: Game, num_resources: int) -> ResourceCount:
@@ -614,8 +624,7 @@ class RuleBasedAI(AI):
 
     def _build_robber_explanation(
             self, hex_tile: HexTile, target_player: Optional[Player], best_score: float,
-            second_best_score: float, blocks_own_hex: bool, self_harm: float,
-            leader_vp_ratio: float) -> ActionExplanation:
+            blocks_own_hex: bool, self_harm: float, leader_vp_ratio: float) -> ActionExplanation:
         reasons_for: List[Reason] = []
         if best_score > float("-inf"):
             reasons_for.append(Reason(
@@ -834,7 +843,10 @@ class RuleBasedAI(AI):
         need_counts: Dict[Resource, int] = {r: 0 for r in Resource}
         held_counts: Dict[Resource, int] = {r: 0 for r in Resource}
         leader_counts: Dict[Resource, int] = {r: 0 for r in Resource}
-        leader_vp = max((opponent.calc_victory_points()[0] for opponent in game.players if opponent != player), default=0)
+        leader_vp = max(
+            (opponent.calc_victory_points()[0] for opponent in game.players if opponent != player),
+            default=0,
+        )
 
         for opponent in game.players:
             if opponent == player:
@@ -880,7 +892,10 @@ class RuleBasedAI(AI):
     def explain_monopoly_choice(self, player: Player, game: Game, chosen: Resource) -> ActionExplanation:
         held_counts: Dict[Resource, int] = {r: 0 for r in Resource}
         leader_counts: Dict[Resource, int] = {r: 0 for r in Resource}
-        leader_vp = max((opponent.calc_victory_points()[0] for opponent in game.players if opponent != player), default=0)
+        leader_vp = max(
+            (opponent.calc_victory_points()[0] for opponent in game.players if opponent != player),
+            default=0,
+        )
         for opponent in game.players:
             if opponent == player:
                 continue
@@ -897,7 +912,12 @@ class RuleBasedAI(AI):
         )
         self_gain_efficiency = float(calc_step_resources(best_self_action).get(chosen, 0))
         leader_share = leader_counts[chosen] / max(held_counts[chosen], 1) if held_counts[chosen] > 0 else 0.0
-        return self._build_monopoly_resource_explanation(chosen, held_counts[chosen], self_gain_efficiency, leader_share)
+        return self._build_monopoly_resource_explanation(
+            chosen,
+            held_counts[chosen],
+            self_gain_efficiency,
+            leader_share,
+        )
 
     def _build_year_of_plenty_explanation(
             self, selected: ResourceCount, primary_action: Optional[Action], target_action: Optional[Action],

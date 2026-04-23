@@ -104,7 +104,7 @@ class GameController:
         self.view.display_tutor_action_feedback(feedback)
 
     @staticmethod
-    def _raise_if_return_home(value) -> None:
+    def _raise_if_return_home(value: object) -> None:
         if isinstance(value, Action) and value.type == ActionType.RETURN_HOME:
             raise ReturnToStart
 
@@ -148,9 +148,9 @@ class GameController:
 
         for player, gain_resource in players_order:
             # Settlement
+            vertices = self._game.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
             if player.is_human:
                 # Let human select position
-                vertices = self._game.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
                 if self.game_mode == GameMode.TUTOR:
                     _, explanation = self.tutor_ai.select_initial_settlement_location_with_explanation(
                         player,
@@ -163,21 +163,19 @@ class GameController:
                 self._raise_if_return_home(vertex)
                 self.view.display_board()
             else:
-                available_vertices = self._game.get_available_vertices(player, Buildable.SETTLEMENT,
-                                                                       road_restriction=False)
                 if self.game_mode == GameMode.GUIDED and isinstance(player.policy, RuleBasedAI):
                     vertex, explanation = player.policy.select_initial_settlement_location_with_explanation(
                         player,
                         self._game,
-                        available_vertices,
+                        vertices,
                     )
                     if explanation is not None:
                         self._raise_if_return_home(self.view.display_board_turn_explanations(player, None, explanation))
                 else:
                     self.view.display_board()
-                    self.view.draw_selectable_vertices(available_vertices, disable_interactivity=True)
+                    self.view.draw_selectable_vertices(vertices, disable_interactivity=True)
                     self.view.display_board_ai(player, "Select a position to build your settlement")
-                    vertex = player.policy.select_initial_settlement_location(player, self._game, available_vertices)
+                    vertex = player.policy.select_initial_settlement_location(player, self._game, vertices)
             opening_settlement_feedback = None
             if self.game_mode == GameMode.TUTOR and player.is_human and vertex is not None:
                 opening_settlement_feedback = self.tutor_evaluator.evaluate_opening_settlement_choice(
@@ -192,11 +190,11 @@ class GameController:
             self._show_tutor_action_feedback(player, opening_settlement_feedback)
 
             # Road
+            available_edges = self._game.get_available_edges(player)
+            if vertex is not None:
+                available_edges = [edge for edge in available_edges if vertex in edge.vertices]
             if player.is_human:
                 if self.game_mode == GameMode.TUTOR:
-                    available_edges = self._game.get_available_edges(player)
-                    if vertex is not None:
-                        available_edges = [edge for edge in available_edges if vertex in edge.vertices]
                     _, explanation = self.tutor_ai.select_initial_road_location_with_explanation(
                         player,
                         self._game,
@@ -262,7 +260,6 @@ class GameController:
         for player in self._game.players:
             if player != selling_player:
                 if player.is_human:
-                    trade_response_feedback = None
                     if self.game_mode == GameMode.TUTOR:
                         _, _, explanation = self.tutor_ai.respond_to_trade_with_explanation(
                             player, self._game, selling_player, selling, buying)
@@ -324,8 +321,8 @@ class GameController:
                 discard_count = p.calculate_discard_count()
                 if discard_count > 0:
                     resources_to_discard = {}
+                    discard_feedback = None
                     if p.is_human:
-                        discard_feedback = None
                         if self.game_mode == GameMode.TUTOR:
                             _, explanation = self.tutor_ai.select_discard_resources_with_explanation(
                                 p, self._game, discard_count)
@@ -346,7 +343,9 @@ class GameController:
                             resources_to_discard, explanation = p.policy.select_discard_resources_with_explanation(
                                 p, self._game, discard_count)
                             if explanation is not None:
-                                self._raise_if_return_home(self.view.display_board_turn_explanations(p, None, explanation))
+                                self._raise_if_return_home(
+                                    self.view.display_board_turn_explanations(p, None, explanation)
+                                )
                         else:
                             resources_to_discard = p.policy.select_discard_resources(p, self._game, discard_count)
                     p.remove_resources(resources_to_discard)
@@ -479,8 +478,8 @@ class GameController:
             for idx in range(2):
                 available_edges = self._game.get_available_edges(player)
                 if available_edges:
+                    road_building_feedback = None
                     if player.is_human:
-                        road_building_feedback = None
                         if self.game_mode == GameMode.TUTOR:
                             _, explanation = self.tutor_ai.select_initial_road_location_with_explanation(
                                 player, self._game, available_edges)
@@ -496,6 +495,8 @@ class GameController:
                             )
                     else:
                         edge = self.get_road_choice_ai(player, None)
+                    if edge is None:
+                        continue
                     self._game.try_build_road(player, edge, use_resources=False)
                     built_edges.append(edge)
                     if player.is_human:
@@ -504,8 +505,8 @@ class GameController:
 
         elif card_type == DevelopmentCardType.YEAR_OF_PLENTY:
             # YEAR OF PLENTY: Player chooses two resources from the bank to add to their hand
+            year_of_plenty_feedback = None
             if player.is_human:
-                year_of_plenty_feedback = None
                 if self.game_mode == GameMode.TUTOR:
                     _, explanation = self.tutor_ai.select_year_of_plenty_resources_with_explanation(
                         player, self._game)
@@ -537,8 +538,8 @@ class GameController:
 
         elif card_type == DevelopmentCardType.MONOPOLY:
             # MONOPOLY: Player chooses a single resource type - other players give all of that resource to the player
+            monopoly_feedback = None
             if player.is_human:
-                monopoly_feedback = None
                 if self.game_mode == GameMode.TUTOR:
                     _, explanation = self.tutor_ai.select_monopoly_resource_with_explanation(
                         player, self._game)
@@ -600,7 +601,7 @@ class GameController:
             # Player can play card before rolling dice
             played_card = self.view.pre_roll(player)
             self._raise_if_return_home(played_card)
-            if played_card is not False:
+            if isinstance(played_card, DevelopmentCardType):
                 pre_roll_feedback = None
                 if self.game_mode == GameMode.TUTOR:
                     pre_roll_feedback = self.tutor_evaluator.evaluate_main_turn_action(
@@ -688,8 +689,13 @@ class GameController:
         return (self.game_mode == GameMode.GUIDED and player.player_number == PlayerNumber.P1
                 and isinstance(player.policy, RuleBasedAI))
 
-    def _get_ai_action(self, player: Player, phase: Phase, dev_played: bool,
-                       dice_info: Optional[Tuple[int, int, int]] = None):
+    def _get_ai_action(
+            self,
+            player: Player,
+            phase: Phase,
+            dev_played: bool,
+            dice_info: Optional[Tuple[int, int, int]] = None,
+    ) -> Action:
         """Return the next AI action, optionally with explanation printing in guided mode."""
         if self._is_guided_turn(player) and isinstance(player.policy, RuleBasedAI):
             action, explanation = player.policy.next_action_with_explanation(

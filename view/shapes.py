@@ -470,7 +470,7 @@ class InteractivePixmap(InteractiveShape):
             return self.hover_alpha
         t = time.time() - self._start_time
         pulse = (math.sin(2 * math.pi * self.alpha_speed * t) + 1) / 2
-        return int(max(20, min(255, self.normal_alpha + pulse * self.alpha_amplitude)))
+        return int(max(20.0, min(255.0, self.normal_alpha + pulse * self.alpha_amplitude)))
 
     def draw(self, painter, scale, offset):
         f = self.current_scale_factor()

@@ -4,7 +4,7 @@ from ai.actions import Action, ActionType
 from ai.tutor.explanations import ActionExplanation
 from ai.tutor.feedback import TutorFeedbackExplanation
 from ai.tutor.tutor import TutorStage
-from view.View import View
+from view.View import GameMode, View
 from game.Edge import Edge
 from game.HexTile import HexTile
 from game.Player import Player
@@ -27,7 +27,8 @@ class HeadlessView(View):
 
     def display_board_turn_ai(self, player: Player,
                               dice_info: Tuple[int, int, int],
-                              msg: str) -> None:
+                              msg: str,
+                              increase_delay=False) -> None:
         pass
 
     def display_board_turn_explanations(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
@@ -75,8 +76,8 @@ class HeadlessView(View):
     def display_results(self) -> None:
         pass
 
-    def display_start_screen(self) -> bool:
-        return False
+    def display_start_screen(self) -> GameMode:
+        return GameMode.SIMULATION
 
     def open_tutor_menu(self, open_menu: bool):
         pass

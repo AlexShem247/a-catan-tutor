@@ -1,4 +1,5 @@
 import unittest
+from random import Random
 
 from game.Game import Game
 from game.Player import Player, PlayerNumber
@@ -12,9 +13,10 @@ class PlayerTests(unittest.TestCase):
 
     def setUp(self):
         # Create a default human player
+        self.rng = Random(0)
         self.player = Player(is_human=True, player_number=PlayerNumber.P1,
-                             bank_resources=Game.BANK_INITIAL_RESOURCES.copy())
-        self.deck = DevelopmentDeck()
+                             bank_resources=Game.BANK_INITIAL_RESOURCES.copy(), rng=self.rng)
+        self.deck = DevelopmentDeck(self.rng)
 
     def test_initial_state(self):
         # Resources should all be zero
@@ -180,7 +182,12 @@ class PlayerTests(unittest.TestCase):
         """Player cannot take more resources than the bank has."""
         # Bank starts with 2 of each resource
         bank_resources = {res: 2 for res in Resource}
-        player = Player(is_human=True, player_number=PlayerNumber.P1, bank_resources=bank_resources.copy())
+        player = Player(
+            is_human=True,
+            player_number=PlayerNumber.P1,
+            bank_resources=bank_resources.copy(),
+            rng=self.rng,
+        )
 
         # Try to add 5 resources when bank only has 2
         player.add_resource(Resource.WOOD, 5)
@@ -193,7 +200,12 @@ class PlayerTests(unittest.TestCase):
         """Player cannot remove more resources than they have."""
         # Bank starts with 2 of each resource
         bank_resources = {res: 2 for res in Resource}
-        player = Player(is_human=True, player_number=PlayerNumber.P1, bank_resources=bank_resources.copy())
+        player = Player(
+            is_human=True,
+            player_number=PlayerNumber.P1,
+            bank_resources=bank_resources.copy(),
+            rng=self.rng,
+        )
 
         # Give player 1 wood first
         player.resources[Resource.WOOD] = 1

@@ -21,6 +21,7 @@ from game.Player import PlayerNumber, Player
 from game.PlayerAssets import Buildable, DevelopmentCardType, DevelopmentCard
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
+from view.board_display_source import BoardDisplaySource
 from view.SquareCanvas import SquareCanvas
 from config.view_constants import (
     CROWN_SYM,
@@ -119,7 +120,7 @@ class MainWindow(QMainWindow):
         self.active_trade_preview_widget: QWidget | None = None
         self.tutor_feedback_fade_timer: QTimer | None = None
         self.tutor_feedback_advance_timer: QTimer | None = None
-        self.live_board_source: Any = None
+        self.live_board_source: BoardDisplaySource | None = None
         self.tutor_feedback_history: List[TutorFeedbackExplanation] = []
         self.history_feedback_index: int | None = None
         self.history_feedback_detailed = False
@@ -347,7 +348,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, _):
         quit()
 
-    def display_resources(self, controller: GameController):
+    def display_resources(self, controller: BoardDisplaySource):
         if isinstance(controller, GameController):
             self.live_board_source = controller
 

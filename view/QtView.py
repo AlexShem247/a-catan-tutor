@@ -40,7 +40,8 @@ class QtView(View):
         self.window.display_generic_info(player, msg)
         ai_time_delay(self.ai_decision_animation_delay * 1)
 
-    def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int], played_dev_card: bool = False) -> Action:
+    def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int], played_dev_card: bool = False) \
+            -> Action:
         """Hook to display the board in the Qt window."""
         return select_blocking(self, self.window.turnMade, self.window.display_round_info, self.controller,
                                player, dice_info, played_dev_card)
