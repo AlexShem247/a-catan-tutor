@@ -167,6 +167,15 @@ class ActionExplanation:
             return self._reason_to_detail_phrase(reason)
         return self._normalise_reason_label(self._reason_label_text(reason))
 
+    def strongest_plan_focus_phrase(self) -> str:
+        action = self.chosen_action
+        if action.type == ActionType.END_TURN and self.chosen_candidate.next_plan:
+            next_phrase = self._plan_action_phrase(self.chosen_candidate.next_plan[0])
+            if next_phrase:
+                return f"saving resources for {next_phrase}"
+            return "saving resources for the next planned action"
+        return self._plan_action_phrase(action)
+
     def sorted_reasons_for(self) -> List[Reason]:
         return self._sorted_reasons(self.chosen_candidate.reasons_for)
 
@@ -607,6 +616,31 @@ class ActionExplanation:
         if action.type == ActionType.TRADE_WITH_PLAYER:
             return "the next thing we want to do: make a player trade"
         return "the next thing we want to do"
+
+    def _plan_action_phrase(self, action: Any) -> str:
+        if not isinstance(action, Action):
+            return ""
+        if action.type == ActionType.BUILD and isinstance(action.payload, tuple) and len(action.payload) >= 1:
+            buildable = action.payload[0]
+            if hasattr(buildable, "name"):
+                build_name = buildable.name.lower()
+                if build_name == "city":
+                    return "upgrading to a city"
+                article = "an" if build_name[:1] in "aeiou" else "a"
+                return f"building {article} {build_name}"
+        if action.type == ActionType.BUY_DEV_CARD:
+            return "buying a development card"
+        if action.type == ActionType.PLAY_DEV_CARD:
+            return "playing a development card"
+        if action.type == ActionType.TRADE_WITH_BANK:
+            return "making a bank trade"
+        if action.type == ActionType.TRADE_WITH_PLAYER:
+            return "making a player trade"
+        if action.type == ActionType.END_TURN:
+            return "ending the turn"
+        if action.type == ActionType.ROLL:
+            return "rolling the dice"
+        return ""
 
     def _resource_list_text(self, resources: List[Any]) -> str:
         names = [f"<b>{getattr(resource, 'name', str(resource)).upper()}</b>" for resource in resources]
@@ -1139,6 +1173,9 @@ class ActionExplanation:
             return "it avoids drawing too much early attention"
 
         if reason.type == ReasonType.HEURISTIC_CHOICE:
+            plan_phrase = self.strongest_plan_focus_phrase()
+            if plan_phrase:
+                return f"it supports {plan_phrase}"
             return "it fits the strongest available plan"
 
         return self._normalise_reason_label(self._reason_label_text(reason))

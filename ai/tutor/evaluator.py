@@ -5,7 +5,7 @@ from ai.RuleBasedAI import RuleBasedAI
 from ai.actions import Action, ActionType, Phase
 from ai.simulation.SimGame import make_sim_game_for_player
 from ai.simulation.board_sim_utils import find_edge_toward_vertex, get_legal_settlement_vertices, moves_toward_vertex
-from ai.tutor.explanations import ActionExplanation, RoadExplanationKind
+from ai.tutor.explanations import ActionExplanation, ReasonType, RoadExplanationKind
 from ai.tutor.feedback import TutorAssessment, TutorDecisionType, TutorFeedbackExplanation
 from ai.tutor.move_quality import (
     initial_road_connection_move_quality,
@@ -331,6 +331,12 @@ class TutorEvaluator:
         ) if not same_choice else []
 
         positive = strengths[0] if strengths else "It fits a reasonable plan."
+        weaknesses = self._distinct_reasons_from_seed(weaknesses, [positive], limit=1)
+        better_move_reasons = self._distinct_reasons_from_seed(
+            better_move_reasons,
+            [positive, *weaknesses],
+            limit=1,
+        )
         if same_choice:
             judgment = f"{self._strip_period(positive)} and it matched the tutor's preferred move."
             better_move = None
@@ -352,6 +358,16 @@ class TutorEvaluator:
             better_move_reasons=better_move_reasons,
             tip=self._TIP_BY_DECISION[decision_type],
         )
+
+    def _distinct_reasons_from_seed(self, candidates: List[str], existing: List[str], limit: int) -> List[str]:
+        selected: List[str] = []
+        for candidate in candidates:
+            if self._contains_equivalent_reason([*existing, *selected], candidate):
+                continue
+            selected.append(candidate)
+            if len(selected) >= limit:
+                break
+        return selected
 
     def _build_initial_settlement_explanation(
             self,
@@ -492,8 +508,8 @@ class TutorEvaluator:
                 break
             if reason.label in actual_labels:
                 continue
-            weakness = self._missed_reason_sentence(best_explanation.describe_reason(reason, detail=True))
-            if weakness and weakness not in weaknesses:
+            weakness = self._missed_reason_sentence(best_explanation, reason)
+            if weakness and not self._contains_equivalent_reason(weaknesses, weakness):
                 weaknesses.append(weakness)
         return weaknesses
 
@@ -509,7 +525,7 @@ class TutorEvaluator:
             if reason.label in actual_labels:
                 continue
             text = self._sentence(best_explanation.describe_reason(reason, detail=True))
-            if text and text not in reasons:
+            if text and not self._contains_equivalent_reason(reasons, text):
                 reasons.append(text)
             if len(reasons) >= limit:
                 break
@@ -534,14 +550,44 @@ class TutorEvaluator:
             if buildable in allowed_buildables
         ]
 
-    @staticmethod
-    def _missed_reason_sentence(reason_text: str) -> str:
+    def _missed_reason_sentence(self, explanation: ActionExplanation, reason) -> str:
+        if getattr(reason, "type", None) == ReasonType.HEURISTIC_CHOICE:
+            plan_phrase = explanation.strongest_plan_focus_phrase()
+            if plan_phrase:
+                return f"You miss out on {plan_phrase}, which is currently the strongest plan."
+        reason_text = explanation.describe_reason(reason, detail=True)
         text = TutorEvaluator._strip_period(reason_text)
         if not text:
             return ""
         if text.lower().startswith("it "):
             return f"You miss out because {text.lower()}."
         return f"You miss out on a line that {TutorEvaluator._lowercase_first(text)}."
+
+    @classmethod
+    def _contains_equivalent_reason(cls, existing_reasons: List[str], candidate: str) -> bool:
+        candidate_key = cls._reason_core_text(candidate)
+        if not candidate_key:
+            return False
+        return any(cls._reason_core_text(reason) == candidate_key for reason in existing_reasons)
+
+    @classmethod
+    def _reason_core_text(cls, text: str) -> str:
+        if not text:
+            return ""
+        text = re.sub(r"<[^>]+>", "", text)
+        text = " ".join(text.split()).strip().lower()
+        for prefix in (
+                "you miss out because ",
+                "you miss out on a line that ",
+                "you miss out on ",
+        ):
+            if text.startswith(prefix):
+                text = text[len(prefix):]
+                break
+        suffix = ", which is currently the strongest plan"
+        if text.endswith(suffix):
+            text = text[:-len(suffix)]
+        return text.rstrip(".!?")
 
     @staticmethod
     def _sentence(text: str) -> str:

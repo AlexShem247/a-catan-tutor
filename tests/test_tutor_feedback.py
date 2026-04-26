@@ -140,6 +140,89 @@ class TestTutorFeedback(unittest.TestCase):
         self.assertIsNotNone(feedback)
         self.assertEqual(feedback.recommended_visual_plan, [(Buildable.SETTLEMENT, "best-vertex")])
 
+    def test_heuristic_feedback_uses_specific_best_plan_action(self):
+        actual = self._build_explanation(
+            Action(ActionType.BUILD, (Buildable.ROAD, None)),
+            [Reason(ReasonType.ENABLES_EXPANSION, ReasonLabel.PLAN_ROAD_VALUE, 1.0)],
+            [],
+            move_quality=0.4,
+        )
+        best_candidate = CandidateExplanation(
+            action=Action(ActionType.END_TURN),
+            full_plan=[Action(ActionType.END_TURN)],
+            next_plan=[Action(ActionType.BUILD, (Buildable.SETTLEMENT, None))],
+            reasons_for=[Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.QUICK_GENERIC, 1.0)],
+            reasons_against=[],
+        )
+        best = ActionExplanation(
+            chosen_action=Action(ActionType.END_TURN),
+            chosen_candidate=best_candidate,
+            move_quality=0.9,
+        )
+
+        assessment = self.evaluator._build_assessment(TutorDecisionType.MAIN_TURN, actual, best)
+
+        self.assertIn(
+            "You miss out on saving resources for building a settlement, which is currently the strongest plan.",
+            assessment.top_weaknesses,
+        )
+        self.assertIn("It supports saving resources for building a settlement.", assessment.better_move_reasons)
+
+    def test_detailed_feedback_dedupes_wrapped_reason_variants(self):
+        assessment = TutorAssessment(
+            decision_type=TutorDecisionType.MAIN_TURN,
+            internal_score=0.2,
+            best_internal_score=0.8,
+            label="Poor",
+            judgment_sentence="A stronger line was available.",
+            your_move="Build a road.",
+            better_move="End the turn.",
+            top_strengths=[],
+            top_weaknesses=["You miss out because it opens up future expansion."],
+            better_move_reasons=["It opens up future expansion."],
+            tip="Keep the next plan step in view.",
+        )
+
+        detailed_html = assessment.detailed_html()
+
+        self.assertEqual(detailed_html.count("opens up future expansion"), 1)
+
+    def test_assessment_keeps_distinct_positive_and_weakness(self):
+        actual = self._build_explanation(
+            Action(ActionType.BUILD, (Buildable.ROAD, None)),
+            [Reason(ReasonType.ENABLES_EXPANSION, ReasonLabel.PLAN_ROAD_VALUE, 1.0)],
+            [],
+            move_quality=0.4,
+        )
+        best_candidate = CandidateExplanation(
+            action=Action(ActionType.END_TURN),
+            full_plan=[Action(ActionType.END_TURN)],
+            next_plan=[Action(ActionType.BUILD, (Buildable.CITY, None))],
+            reasons_for=[
+                Reason(ReasonType.ENABLES_EXPANSION, ReasonLabel.PLAN_ROAD_VALUE, 1.0),
+                Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.QUICK_GENERIC, 1.0),
+            ],
+            reasons_against=[],
+        )
+        best = ActionExplanation(
+            chosen_action=Action(ActionType.END_TURN),
+            chosen_candidate=best_candidate,
+            move_quality=0.9,
+        )
+
+        assessment = self.evaluator._build_assessment(TutorDecisionType.MAIN_TURN, actual, best)
+        detailed_html = assessment.detailed_html()
+
+        self.assertEqual(assessment.top_strengths, ["It opens up future expansion."])
+        self.assertEqual(
+            assessment.top_weaknesses,
+            ["You miss out on saving resources for upgrading to a city, which is currently the strongest plan."],
+        )
+        self.assertIn("It opens up future expansion", assessment.judgment_sentence)
+        self.assertIn("saving resources for upgrading to a city", assessment.judgment_sentence)
+        self.assertEqual(detailed_html.count("opens up future expansion"), 1)
+        self.assertEqual(detailed_html.count("saving resources for upgrading to a city"), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

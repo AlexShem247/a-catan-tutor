@@ -2,6 +2,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from html import escape
+import re
 from typing import Any, List, Optional, Tuple
 
 from game.PlayerAssets import Buildable
@@ -78,13 +79,29 @@ class TutorAssessment:
         return " ".join(text.split()).strip().lower()
 
     @classmethod
+    def _reason_core_text(cls, text: str) -> str:
+        text = cls._normalise_display_text(re.sub(r"<[^>]+>", "", text or ""))
+        for prefix in (
+                "you miss out because ",
+                "you miss out on a line that ",
+                "you miss out on ",
+        ):
+            if text.startswith(prefix):
+                text = text[len(prefix):]
+                break
+        suffix = ", which is currently the strongest plan"
+        if text.endswith(suffix):
+            text = text[:-len(suffix)]
+        return text.rstrip(".!?")
+
+    @classmethod
     def _dedupe_display_texts(cls, texts: List[str]) -> List[str]:
         deduped: List[str] = []
         seen = set()
         for text in texts:
             if not text:
                 continue
-            key = cls._normalise_display_text(text)
+            key = cls._reason_core_text(text)
             if key in seen:
                 continue
             seen.add(key)
@@ -111,8 +128,12 @@ class TutorAssessment:
         reasons = self._dedupe_display_texts([
             *self.top_strengths[:1],
             *self.top_weaknesses[:1],
-            *self.better_move_reasons[:1],
         ])
+        if len(reasons) < 2:
+            reasons = self._dedupe_display_texts([
+                *reasons,
+                *self.better_move_reasons[:1],
+            ])
         if not reasons:
             reasons.append("This matched the tutor's preferred line.")
         reason_items = "".join(f"<li>&nbsp;{escape(reason)}</li>" for reason in reasons[:3])
