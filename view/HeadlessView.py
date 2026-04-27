@@ -14,6 +14,12 @@ from game.Vertex import Vertex
 
 
 class HeadlessView(View):
+    def set_debug_tutor_shortcut_handler(self, handler):
+        pass
+
+    def set_debug_tutor_shortcut_finaliser(self, finaliser):
+        pass
+
     def display_board(self, player: Optional[Player] = None, msg: Optional[str] = None) -> None:
         pass
 

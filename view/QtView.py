@@ -1,5 +1,5 @@
 from typing import List, Dict, Optional, Tuple, Any
-
+from typing import Optional, List, Tuple, Dict, Any, Callable
 from PyQt6.QtCore import QEventLoop, QTimer, pyqtBoundSignal
 
 from GameController import GameController
@@ -26,6 +26,9 @@ class QtView(View):
         self.ai_decision_animation_delay = AI_DECISION_ANIMATION_DELAY
         self.window.setGeometry(80, 50, WINDOW_WIDTH, WINDOW_HEIGHT)
         self.window.show()
+
+    def set_debug_tutor_shortcut_handler(self, handler: Optional[Callable[[], Any]]) -> None:
+        self.window.set_debug_tutor_shortcut_handler(handler)
 
     def display_board(self, player: Optional[Player] = None, msg: Optional[str] = None):
         """Hook to display the board in the Qt window."""
@@ -144,7 +147,11 @@ class QtView(View):
     def display_tutor_action_feedback(self, feedback: TutorFeedbackExplanation):
         self.canvas.display_board(self.controller)
         self.window.display_resources(self.controller)
-        return select_blocking(self, self.window.turnMade, self.window.display_tutor_action_feedback, feedback)
+        self.window.set_debug_tutor_shortcut_handler(lambda: True)
+        try:
+            return select_blocking(self, self.window.turnMade, self.window.display_tutor_action_feedback, feedback)
+        finally:
+            self.window.set_debug_tutor_shortcut_handler(None)
 
     def open_tutor_menu(self, open_menu: bool):
         self.window.configure_tutor_panel(self.controller.game_mode)
@@ -187,6 +194,7 @@ def select_blocking(view: QtView, signal: pyqtBoundSignal, draw_fn, *args, **kwa
 
     # Connect the new handler
     signal.connect(on_selected)
+    view.window.debugShortcutResult.connect(on_selected)
 
     draw_fn(*args, **kwargs)
 
@@ -195,6 +203,10 @@ def select_blocking(view: QtView, signal: pyqtBoundSignal, draw_fn, *args, **kwa
     # Clean up
     try:
         signal.disconnect(on_selected)
+    except TypeError:
+        pass
+    try:
+        view.window.debugShortcutResult.disconnect(on_selected)
     except TypeError:
         pass
 

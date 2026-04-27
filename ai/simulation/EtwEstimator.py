@@ -107,29 +107,79 @@ class EtwEstimator:
             # Base time from direct production only.
             direct_rolls = deficits[resource_i] * rolls_per_unit[resource_i]
 
-            # Bank/port trades: convert excess resources at fixed ratios.
-            bank_savings = 0.0
+            # Current surplus can be converted immediately, but each source resource only gets one best conversion path.
+            immediate_trade_savings = 0.0
             for resource_j, excess in excesses.items():
                 if resource_j == resource_i or excess <= 0:
                     continue
-                sell_ratio = bank_trade_ratio_func(resource_j)
-                units_gained = excess / max(1, sell_ratio)
-                bank_savings += units_gained * rolls_per_unit[resource_i]
+                best_ratio = bank_trade_ratio_func(resource_j)
+                if include_player_trades:
+                    best_ratio = min(
+                        best_ratio,
+                        self._player_trade_ratio(resource_j, resource_i, player, opponents, rolls_per_unit),
+                    )
+                units_gained = excess / max(1, best_ratio)
+                immediate_trade_savings += units_gained * rolls_per_unit[resource_i]
 
-            # Player trades: optimistic but capped conversion via opponents.
-            player_savings = 0.0
-            if include_player_trades:
-                for resource_j, excess in excesses.items():
-                    if resource_j == resource_i or excess <= 0:
-                        continue
-                    ratio = self._player_trade_ratio(resource_j, resource_i, player, opponents, rolls_per_unit)
-                    units_gained = excess / max(1, ratio)
-                    player_savings += units_gained * rolls_per_unit[resource_i]
+            adjusted_rolls = max(0.0, direct_rolls - immediate_trade_savings)
+            future_trade_rolls = self._future_trade_rolls_for_resource(
+                resource_i=resource_i,
+                player=player,
+                opponents=opponents,
+                deficits=deficits,
+                excesses=excesses,
+                rolls_per_unit=rolls_per_unit,
+                bank_trade_ratio_func=bank_trade_ratio_func,
+                include_player_trades=include_player_trades,
+            )
 
-            # Remaining expected rolls after all conversions.
-            trade_adjusted[resource_i] = max(0.0, direct_rolls - bank_savings - player_savings)
+            # If direct production is impossible, allow other producible resources to stand in via future trades.
+            trade_adjusted[resource_i] = min(adjusted_rolls, future_trade_rolls)
 
         return trade_adjusted
+
+    def _future_trade_rolls_for_resource(
+        self,
+        resource_i: Resource,
+        player: SimPlayerState,
+        opponents: List[SimPlayerState],
+        deficits: Dict[Resource, int],
+        excesses: Dict[Resource, int],
+        rolls_per_unit: Dict[Resource, float],
+        bank_trade_ratio_func,
+        include_player_trades: bool,
+    ) -> float:
+        """Estimate rolls to acquire a missing resource via future production that can later be traded."""
+        units_needed = deficits.get(resource_i, 0)
+        if units_needed <= 0:
+            return 0.0
+
+        best_rolls = float("inf")
+
+        for resource_j in Resource:
+            if resource_j == resource_i:
+                continue
+
+            # Do not spend future production of resources the target build still needs.
+            if deficits.get(resource_j, 0) > 0:
+                continue
+
+            source_rolls = rolls_per_unit.get(resource_j, float("inf"))
+            if not math.isfinite(source_rolls) or source_rolls <= 0.0:
+                continue
+
+            best_ratio = bank_trade_ratio_func(resource_j)
+            if include_player_trades:
+                best_ratio = min(
+                    best_ratio,
+                    self._player_trade_ratio(resource_j, resource_i, player, opponents, rolls_per_unit),
+                )
+
+            tradable_now = excesses.get(resource_j, 0)
+            future_rolls = max(0.0, units_needed * best_ratio - tradable_now) * source_rolls
+            best_rolls = min(best_rolls, future_rolls)
+
+        return best_rolls
 
     def _player_trade_ratio(
         self, resource_give: Resource, resource_need: Resource, player: SimPlayerState,
@@ -340,6 +390,14 @@ class EtwEstimator:
                 deferred_candidate.waiting_resources or self._plan_waiting_resources(player, next_plan)
             )
             reasons_against = list(deferred_candidate.reasons_against)
+
+            immediate_step = next_plan[0] if next_plan else None
+            if (
+                immediate_step is not None
+                and immediate_step.type != ActionType.END_TURN
+                and player.can_afford(calc_step_resources(immediate_step))
+            ):
+                utility_total = min(utility_total, deferred_candidate.utility_total - 1e-6)
 
         action = Action(ActionType.END_TURN)
         return CandidateExplanation(
@@ -629,12 +687,14 @@ class EtwEstimator:
                 player, sim_game, road_cost, include_player_trades=include_player_trades,
             )
             if road_etb < ROAD_ETB_THRESHOLD:
+                added_road_candidate = False
                 for v in player.settlements + player.cities:
                     for edge in v.edges:
                         if not sim_game.overlay.is_edge_taken(edge):
                             candidate_actions.append(([Action(ActionType.BUILD, (Buildable.ROAD, edge))], road_etb, 0))
+                            added_road_candidate = True
                             break
-                    if candidate_actions and candidate_actions[-1][0]:
+                    if added_road_candidate:
                         break
 
         # Sort by ETB so later stages can prune quickly.

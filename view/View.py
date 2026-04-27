@@ -1,5 +1,5 @@
 from enum import Enum, auto
-from typing import List, Tuple, Dict, Optional, Protocol
+from typing import List, Tuple, Dict, Optional, Protocol, Callable, Any
 
 from ai.actions import Action
 from ai.tutor.explanations import ActionExplanation
@@ -21,6 +21,9 @@ class GameMode(Enum):
 
 
 class View(Protocol):
+
+    def set_debug_tutor_shortcut_handler(self, handler: Optional[Callable[[], Any]]) -> None:
+        ...
 
     def display_board(self, player: Optional[Player] = None, msg: Optional[str] = None) -> None:
         ...

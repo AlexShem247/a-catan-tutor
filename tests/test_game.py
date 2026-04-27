@@ -1,8 +1,11 @@
+import math
 import unittest
 from random import Random
 from types import SimpleNamespace
 
-from ai.actions import ActionType
+from ai.RuleBasedAI import RuleBasedAI
+from ai.actions import Action, ActionType, Phase
+from ai.BasicAI import BasicAI
 from ai.simulation.EtwEstimator import EtwEstimator
 from ai.simulation.SimGame import make_sim_game_for_player
 from ai.tutor.move_quality import (
@@ -14,6 +17,7 @@ from ai.tutor.move_quality import (
     move_quality_label,
     strategic_turn_move_quality,
 )
+from config.player_policies import STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC
 from GameController import GameController
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game
@@ -22,6 +26,7 @@ from game.Player import PlayerNumber
 from game.PlayerAssets import Buildable, DevelopmentCard, DevelopmentCardType
 from game.Resources import Resource, HexType
 from game.Vertex import Vertex, Building, VertexDirection, Port
+from view.View import GameMode
 
 
 class TestGame(unittest.TestCase):
@@ -46,6 +51,47 @@ class TestGame(unittest.TestCase):
         self.vertex = Vertex(pos=(0, 0, VertexDirection.TOP))
         v2 = Vertex(pos=(0, 0, VertexDirection.TOP_RIGHT))
         self.edge = Edge(self.vertex, v2, pos=(0, 0, EdgeDirection.NORTH_EAST))
+
+    def _build_example_midgame(self):
+        game = Game(STANDARD_SINGLEPLAYER, Random(0))
+        p1, p2, p3, p4 = game.players
+
+        for player, coords in [
+            (p1, (0, 2, VertexDirection.TOP_RIGHT)),
+            (p2, (0, 2, VertexDirection.TOP_LEFT)),
+            (p3, (1, 1, VertexDirection.TOP_LEFT)),
+            (p4, (-1, 3, VertexDirection.TOP_RIGHT)),
+            (p1, (0, 1, VertexDirection.TOP_LEFT)),
+            (p2, (1, 2, VertexDirection.BOTTOM)),
+            (p3, (-1, 2, VertexDirection.BOTTOM_LEFT)),
+            (p1, (0, 0, VertexDirection.TOP)),
+            (p2, (2, 0, VertexDirection.TOP)),
+            (p1, (1, 2, VertexDirection.TOP_RIGHT)),
+        ]:
+            game.try_build_settlement(player, game.get_vertex(*coords), road_restriction=False)
+
+        for player, coords in [
+            (p1, (0, 2, VertexDirection.TOP_RIGHT)),
+            (p3, (1, 1, VertexDirection.TOP_LEFT)),
+        ]:
+            game.try_build_city(player, game.get_vertex(*coords))
+
+        for player, coords in [
+            (p1, (0, 0, EdgeDirection.NORTH_WEST)),
+            (p1, (0, 0, EdgeDirection.NORTH_EAST)),
+            (p2, (2, 0, EdgeDirection.NORTH_EAST)),
+            (p1, (0, 2, EdgeDirection.EAST)),
+            (p2, (0, 2, EdgeDirection.WEST)),
+            (p3, (1, 1, EdgeDirection.NORTH_WEST)),
+            (p4, (-1, 3, EdgeDirection.NORTH_EAST)),
+            (p1, (0, 1, EdgeDirection.WEST)),
+            (p2, (1, 2, EdgeDirection.SOUTH_EAST)),
+            (p3, (-1, 2, EdgeDirection.SOUTH_WEST)),
+            (p1, (1, 2, EdgeDirection.EAST)),
+        ]:
+            game.try_build_road(player, game.get_edge(*coords))
+
+        return game, p1
 
     def test_can_afford_exact(self):
         # Player has exactly required resources
@@ -209,6 +255,21 @@ class TestGame(unittest.TestCase):
         self.assertTrue(player.has_largest_army)
         self.assertTrue(controller.get_game_state().game_over)
 
+    def test_tutor_mode_uses_simulation_opponent_policies(self):
+        controller = GameController(STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC, game_seed=0)
+        controller.game_mode = GameMode.TUTOR
+        controller.reset_game()
+
+        self.assertTrue(controller.get_all_players()[0].is_human)
+        self.assertIsInstance(controller.get_all_players()[1].policy, BasicAI)
+        self.assertIsInstance(controller.get_all_players()[2].policy, BasicAI)
+        self.assertIsInstance(controller.get_all_players()[3].policy, BasicAI)
+
+    def test_tutor_ai_uses_dedicated_rng(self):
+        controller = GameController(STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC, game_seed=0)
+
+        self.assertIsNot(controller.tutor_ai.rng, controller.game_rng)
+
     def test_move_quality_ratio_is_clamped_to_zero_to_one(self):
         self.assertEqual(move_quality_from_ratio(8.0, 10.0), 0.8)
         self.assertEqual(move_quality_from_ratio(15.0, 10.0), 1.0)
@@ -258,6 +319,34 @@ class TestGame(unittest.TestCase):
         self.assertGreater(end_turn_candidate.etw_delta, 0.0)
         self.assertGreater(end_turn_candidate.utility_total, 0.0)
         self.assertEqual(end_turn_candidate.action.type, ActionType.END_TURN)
+
+    def test_estimated_time_to_build_uses_future_tradable_production(self):
+        game, player = self._build_example_midgame()
+        player.resources = {res: 0 for res in Resource}
+        player.resources[Resource.ORE] = 3
+        player.resources[Resource.WHEAT] = 2
+
+        estimator = EtwEstimator()
+        sim_game = make_sim_game_for_player(game, player)
+        sim_player = sim_game.overlay.get_sim_player(player.player_number)
+        city_vertex = next(v for v in sim_player.settlements if v.pos == (2, 1, VertexDirection.BOTTOM))
+
+        estimator._simulate_step(sim_game, sim_player, Action(ActionType.BUILD, (Buildable.CITY, city_vertex)))
+        etb = estimator.estimated_time_to_build(sim_player, sim_game, Game.BUILDING_COST[Buildable.CITY])
+
+        self.assertTrue(math.isfinite(etb))
+
+    def test_rule_based_ai_builds_affordable_city_instead_of_ending_turn(self):
+        game, player = self._build_example_midgame()
+        player.resources = {res: 0 for res in Resource}
+        player.resources[Resource.ORE] = 3
+        player.resources[Resource.WHEAT] = 2
+
+        ai = RuleBasedAI(Random(0))
+        action, _ = ai.next_action_with_explanation(player, game, Phase.MAIN, False)
+
+        self.assertEqual(action.type, ActionType.BUILD)
+        self.assertEqual(action.payload[0], Buildable.CITY)
 
 
 if __name__ == "__main__":

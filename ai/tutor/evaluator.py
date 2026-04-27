@@ -51,6 +51,25 @@ class TutorEvaluator:
     def __init__(self, tutor_ai: RuleBasedAI):
         self.tutor_ai = tutor_ai
 
+    def _best_explanation_without_mutating_trade_state(
+            self,
+            player: Player,
+            game: Game,
+            phase: Phase,
+            dev_played: bool,
+    ) -> ActionExplanation:
+        last_trade_proposed = self.tutor_ai.etw_estimator._last_trade_proposed
+        last_trade_resources = (
+            None if self.tutor_ai.etw_estimator._last_trade_resources is None
+            else self.tutor_ai.etw_estimator._last_trade_resources.copy()
+        )
+        try:
+            _, best_explanation = self.tutor_ai.next_action_with_explanation(player, game, phase, dev_played)
+        finally:
+            self.tutor_ai.etw_estimator._last_trade_proposed = last_trade_proposed
+            self.tutor_ai.etw_estimator._last_trade_resources = last_trade_resources
+        return best_explanation
+
     def evaluate_main_turn_action(
             self,
             player: Player,
@@ -64,7 +83,12 @@ class TutorEvaluator:
             actual_explanation = self.tutor_ai.explain_pre_roll_dev_choice(player, game, action.payload)
         else:
             actual_explanation = self.tutor_ai.explain_action(player, game, phase, dev_played, action)
-        _, best_explanation = self.tutor_ai.next_action_with_explanation(player, game, phase, dev_played)
+        best_explanation = self._best_explanation_without_mutating_trade_state(
+            player,
+            game,
+            phase,
+            dev_played,
+        )
         feedback = self._feedback_from_explanations(
             TutorDecisionType.MAIN_TURN,
             actual_explanation,

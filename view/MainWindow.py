@@ -5,10 +5,10 @@ from typing import Dict, Tuple, List, Callable, Optional, Any
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QCloseEvent, QIcon
+from PyQt6.QtGui import QCloseEvent, QIcon, QKeyEvent
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel, QToolButton, QSpacerItem,
-    QSizePolicy, QPushButton, QAbstractScrollArea, QListWidgetItem
+    QSizePolicy, QPushButton, QAbstractScrollArea, QListWidgetItem, QLayout
 )
 
 from GameController import GameController
@@ -39,6 +39,7 @@ class MainWindow(QMainWindow):
     LABEL_LINE_LENGTH = 38
     startGame = pyqtSignal(object)
     turnMade = pyqtSignal(object)
+    debugShortcutResult = pyqtSignal(object)
     tradeDecisionMade = pyqtSignal(object)
     tradeSelected = pyqtSignal(object)
     resourcesPicked = pyqtSignal(object)
@@ -51,12 +52,12 @@ class MainWindow(QMainWindow):
         central = QWidget(self)
         self.setCentralWidget(central)
 
-        layout = QHBoxLayout(central)
-        layout.setContentsMargins(0, 0, 0, 0)
+        self.root_layout = QHBoxLayout(central)
+        self.root_layout.setContentsMargins(0, 0, 0, 0)
 
         # Splitter
         self.splitter_layout = QSplitter(Qt.Orientation.Horizontal, self)
-        layout.addWidget(self.splitter_layout)
+        self.root_layout.addWidget(self.splitter_layout)
 
         # Canvas
         self.canvas = SquareCanvas()
@@ -88,6 +89,7 @@ class MainWindow(QMainWindow):
         self.development_manager_widget = uic.loadUi("view/ui/development_manager.ui")
         self.development_manager_widget = uic.loadUi("view/ui/development_manager.ui")
         self.results_menu = uic.loadUi("view/ui/results_menu.ui")
+        self.endgame_review_menu = uic.loadUi("view/ui/endgame_review.ui")
         self.start_menu = uic.loadUi("view/ui/start_menu.ui")
 
         self.rule_window = uic.loadUi("view/ui/rules_window.ui")
@@ -127,6 +129,11 @@ class MainWindow(QMainWindow):
         self.history_enabled_on_turn = False
         self.history_available_in_mode = False
         self.history_mode_active = False
+        self.endgame_rank_cards: List[QPushButton] = []
+        self.selected_endgame_rank_card: QPushButton | None = None
+        self.fullscreen_panel: Optional[QWidget] = None
+        self.debug_tutor_shortcut_handler: Optional[Callable[[], object]] = None
+        self.debug_tutor_shortcut_finalizer: Optional[Callable[[], None]] = None
         self.main_action_btn_enabled_states: List[bool] = []
         self.restore_tutor_menu_callback: Optional[Callable[[], None]] = None
         self.dismiss_tutor_hint_callback: Optional[Callable[[], None]] = None
@@ -345,6 +352,239 @@ class MainWindow(QMainWindow):
                 state_index += 1
         self.main_action_btn_enabled_states = []
 
+    def _clear_debug_tutor_shortcut_context(self):
+        self.debug_tutor_shortcut_handler = None
+        self.debug_tutor_shortcut_finalizer = None
+
+    def set_debug_tutor_shortcut_handler(self, handler: Optional[Callable[[], object]]):
+        self.debug_tutor_shortcut_handler = handler
+
+    def set_debug_tutor_shortcut_finalizer(self, finalizer: Optional[Callable[[], None]]):
+        self.debug_tutor_shortcut_finalizer = finalizer
+
+    def _try_apply_tutor_recommended_move(self) -> bool:
+        if self.debug_tutor_shortcut_handler is None:
+            return False
+
+        result = self.debug_tutor_shortcut_handler()
+        if self.debug_tutor_shortcut_finalizer is not None:
+            self.debug_tutor_shortcut_finalizer()
+        self.debugShortcutResult.emit(result)
+        return True
+
+    def _show_fullscreen_panel(self, panel: QWidget):
+        current_size = self.size()
+        if self.root_layout.indexOf(self.splitter_layout) != -1:
+            self.root_layout.removeWidget(self.splitter_layout)
+        self.splitter_layout.hide()
+
+        if self.fullscreen_panel is not None and self.root_layout.indexOf(self.fullscreen_panel) != -1:
+            self.root_layout.removeWidget(self.fullscreen_panel)
+            self.fullscreen_panel.setParent(None)
+
+        self.fullscreen_panel = panel
+        panel.setMinimumSize(0, 0)
+        panel.setMinimumWidth(0)
+        self.root_layout.addWidget(panel)
+        panel.show()
+        self.resize(current_size)
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key.Key_F8 and self._try_apply_tutor_recommended_move():
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def _restore_splitter_layout(self):
+        if self.fullscreen_panel is not None and self.root_layout.indexOf(self.fullscreen_panel) != -1:
+            self.root_layout.removeWidget(self.fullscreen_panel)
+            self.fullscreen_panel.setParent(None)
+        self.fullscreen_panel = None
+
+        if self.root_layout.indexOf(self.splitter_layout) == -1:
+            self.root_layout.addWidget(self.splitter_layout)
+        self.splitter_layout.show()
+
+    @staticmethod
+    def _clear_layout(layout: QLayout):
+        while layout.count():
+            item = layout.takeAt(0)
+            child_layout = item.layout()
+            widget = item.widget()
+
+            if child_layout is not None:
+                MainWindow._clear_layout(child_layout)
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+
+    @staticmethod
+    def _get_player_victory_breakdown(player: Player) -> Dict[str, int]:
+        return {
+            "settlements": len(player.settlements),
+            "cities": len(player.cities) * 2,
+            "longest_road": 2 if player.has_longest_road else 0,
+            "largest_army": 2 if player.has_largest_army else 0,
+            "victory_cards": len(
+                [card for card in player.development_cards if card.card_type == DevelopmentCardType.VICTORY_POINT]
+            ),
+        }
+
+    @classmethod
+    def _format_player_breakdown_text(cls, player: Player) -> str:
+        breakdown = cls._get_player_victory_breakdown(player)
+        total_vp = player.calc_victory_points()[1]
+        return (
+            f"{player.name} – {total_vp} VP\n\n"
+            f"Cities: {breakdown['cities']} pts\n"
+            f"Settlements: {breakdown['settlements']} pts\n"
+            f"Longest Road: {breakdown['longest_road']} pts\n"
+            f"Largest Army: {breakdown['largest_army']} pts\n"
+            f"Victory Card Points: {breakdown['victory_cards']} pts"
+        )
+
+    @classmethod
+    def _format_player_breakdown_html(cls, player: Player) -> str:
+        breakdown = cls._get_player_victory_breakdown(player)
+        breakdown_text = (
+            f"Cities: {breakdown['cities']} pts<br />"
+            f"Settlements: {breakdown['settlements']} pts<br />"
+            f"Longest Road: {breakdown['longest_road']} pts<br />"
+            f"Largest Army: {breakdown['largest_army']} pts<br />"
+            f"Victory Card Points: {breakdown['victory_cards']} pts"
+        )
+        return (
+            "<html><head/><body>"
+            f"<p style=\"margin: 0;\"><span style=\"font-weight: 600;\">"
+            f"Selected: {escape(player.name)} breakdown ▼"
+            "</span><br />"
+            f"{breakdown_text}"
+            "</p></body></html>"
+        )
+
+    @classmethod
+    def _format_player_ranking_summary(cls, player: Player) -> str:
+        summary_parts: List[str] = []
+        city_count = len(player.cities)
+        if city_count:
+            summary_parts.append(f"C:{city_count}")
+
+        settlement_count = len(player.settlements)
+        if settlement_count:
+            summary_parts.append(f"S:{settlement_count}")
+
+        if player.has_longest_road:
+            summary_parts.append("LR✓")
+        if player.has_largest_army:
+            summary_parts.append("LA✓")
+
+        vp_card_count = cls._get_player_victory_breakdown(player)["victory_cards"]
+        if vp_card_count:
+            summary_parts.append(f"VC:{vp_card_count}")
+
+        return " ".join(summary_parts)
+
+    @staticmethod
+    def _endgame_rank_card_stylesheet(selected: bool) -> str:
+        if selected:
+            return (
+                "QPushButton#rankCard {"
+                "background: #eff6ff;"
+                "border: 2px solid #2563eb;"
+                "border-radius: 8px;"
+                "padding: 10px 12px;"
+                "text-align: left;"
+                "font-weight: 600;"
+                "}"
+            )
+
+        return (
+            "QPushButton#rankCard {"
+            "background: #f9fafb;"
+            "border: 1px solid #e5e7eb;"
+            "border-radius: 8px;"
+            "padding: 10px 12px;"
+            "text-align: left;"
+            "font-weight: 600;"
+            "}"
+        )
+
+    def _select_endgame_rank_card(self, card_btn: QPushButton, player: Player):
+        if self.selected_endgame_rank_card is not None:
+            self.selected_endgame_rank_card.setStyleSheet(self._endgame_rank_card_stylesheet(False))
+
+        self.selected_endgame_rank_card = card_btn
+        card_btn.setStyleSheet(self._endgame_rank_card_stylesheet(True))
+        self.endgame_review_menu.selectedBreakdownBox.setHtml(self._format_player_breakdown_html(player))
+
+    def _configure_tutor_endgame_layout(self):
+        self.endgame_review_menu.setMinimumSize(0, 0)
+        self.endgame_review_menu.titleWinnerLabel.setMinimumWidth(0)
+        self.endgame_review_menu.reviewTabs.setMinimumWidth(0)
+        self.endgame_review_menu.selectedBreakdownBox.viewport().setCursor(Qt.CursorShape.ArrowCursor)
+        self.endgame_review_menu.titleWinnerLabel.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred
+        )
+        self.endgame_review_menu.selectedBreakdownBox.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred
+        )
+        self.endgame_review_menu.main_menu_btn.setSizePolicy(
+            QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred
+        )
+        self.endgame_review_menu.quit_btn.setSizePolicy(
+            QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred
+        )
+
+    def _populate_tutor_endgame_review(self, controller: GameController):
+        self._configure_tutor_endgame_layout()
+        sorted_players = sorted(controller.get_all_players(), key=lambda p: p.calc_victory_points()[1], reverse=True)
+        winner = sorted_players[0]
+        winner_total_vp = winner.calc_victory_points()[1]
+
+        self.endgame_review_menu.titleWinnerLabel.setText(
+            f"🏆 Winner: {winner.name}\n{winner_total_vp} victory points"
+        )
+
+        ranking_layout = self.endgame_review_menu.rankingCardsLayout
+        self._clear_layout(ranking_layout)
+        self.endgame_rank_cards = []
+        self.selected_endgame_rank_card = None
+
+        for rank, player in enumerate(sorted_players, start=1):
+            total_vp = player.calc_victory_points()[1]
+            ranking_summary = self._format_player_ranking_summary(player)
+            card_text = f"{rank}. {player.name} – {total_vp} VP"
+            if ranking_summary:
+                card_text += f"\n{ranking_summary}"
+
+            card_btn = QPushButton(card_text)
+            card_btn.setObjectName("rankCard")
+            card_btn.setCheckable(False)
+            card_btn.setStyleSheet(self._endgame_rank_card_stylesheet(False))
+            card_btn.setMinimumWidth(0)
+            card_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            card_btn.clicked.connect(
+                lambda _checked=False, selected_player=player, selected_btn=card_btn:
+                self._select_endgame_rank_card(selected_btn, selected_player)
+            )
+            ranking_layout.addWidget(card_btn)
+            self.endgame_rank_cards.append(card_btn)
+
+        if self.endgame_rank_cards:
+            self._select_endgame_rank_card(self.endgame_rank_cards[0], winner)
+
+    def _display_tutor_endgame_review(self, controller: GameController):
+        def return_to_main_menu():
+            self._restore_splitter_layout()
+            controller.start_game()
+
+        self.open_tutor_menu(False)
+        self._populate_tutor_endgame_review(controller)
+        self.endgame_review_menu.reviewTabs.setCurrentIndex(0)
+        self.safe_connect(self.endgame_review_menu.main_menu_btn, return_to_main_menu)
+        self.safe_connect(self.endgame_review_menu.quit_btn, self.close)
+        self._show_fullscreen_panel(self.endgame_review_menu)
+
     def closeEvent(self, _):
         quit()
 
@@ -420,6 +660,7 @@ class MainWindow(QMainWindow):
                 labels["longest_road"].setText(str(player.longest_road_length))
 
     def display_generic_info(self, player: Player, msg: str):
+        self._clear_debug_tutor_shortcut_context()
         self.canvas.clear_planned_builds()
         self.main_menu.turn_label.setText(f"{player.name}'s turn")
         self.main_menu.main_label.show()
@@ -507,13 +748,13 @@ class MainWindow(QMainWindow):
             progress = step_state["count"] / TUTOR_FEEDBACK_FADE_STEPS
             remaining_ratio = max(0.0, 1.0 - math.pow(progress, 3))
             alpha = max(35, int(255 * remaining_ratio))
-            faded_color = f"rgba(0, 0, 0, {alpha})"
-            self.tutor_menu.action_label.setStyleSheet(f"font-weight: bold; color: {faded_color};")
+            faded_colour = f"rgba(0, 0, 0, {alpha})"
+            self.tutor_menu.action_label.setStyleSheet(f"font-weight: bold; color: {faded_colour};")
             self.tutor_menu.explanation_edit.setStyleSheet(
                 "QTextEdit {"
                 "background: transparent;"
                 "border: none;"
-                f"color: {faded_color};"
+                f"color: {faded_colour};"
                 "}"
             )
 
@@ -560,7 +801,7 @@ class MainWindow(QMainWindow):
             self.splitter_layout.setSizes([1000, self.SIDE_PANEL_WIDTH])
 
     @staticmethod
-    def _move_quality_color(label: str) -> str:
+    def _move_quality_colour(label: str) -> str:
         return move_quality_colour(label)
 
     @staticmethod
@@ -573,11 +814,11 @@ class MainWindow(QMainWindow):
     def _concise_explanation_html(self, explanation: ActionExplanation) -> Tuple[str, str]:
         concise_title, concise_explanation = explanation.generate_text_concise()
         move_quality_label = explanation.tutor_move_quality_label
-        move_quality_color = self._move_quality_color(move_quality_label)
+        move_quality_colour_value = self._move_quality_colour(move_quality_label)
         concise_html = (
             f"{concise_explanation}"
             f"<br><br><b>Move Quality:</b> "
-            f"<span style=\"color: {move_quality_color};\"><b>{escape(move_quality_label)}</b></span>"
+            f"<span style=\"color: {move_quality_colour_value};\"><b>{escape(move_quality_label)}</b></span>"
         )
         return concise_title, concise_html
 
@@ -991,6 +1232,7 @@ class MainWindow(QMainWindow):
             self.restore_spacer()
             self.main_menu.action_btn_layout.removeWidget(trade_designer)
             trade_designer.setParent(None)
+            self.set_debug_tutor_shortcut_finalizer(None)
             back_action()
 
         def trade_with_bank():
@@ -999,6 +1241,7 @@ class MainWindow(QMainWindow):
             trade_designer.setParent(None)
             self.main_menu.main_label.show()
             self.main_menu.action_label.show()
+            self.set_debug_tutor_shortcut_finalizer(None)
             self.turnMade.emit(Action(ActionType.TRADE_WITH_BANK, (selling.copy(), buying.copy())))
 
         def trade_with_players():
@@ -1007,8 +1250,18 @@ class MainWindow(QMainWindow):
             trade_designer.setParent(None)
             self.main_menu.main_label.show()
             self.main_menu.action_label.show()
+            self.set_debug_tutor_shortcut_finalizer(None)
             self.turnMade.emit(Action(ActionType.TRADE_WITH_PLAYER, (selling.copy(), buying.copy())))
 
+        def cleanup_trade_designer() -> None:
+            self.restore_spacer()
+            self.main_menu.action_btn_layout.removeWidget(trade_designer)
+            trade_designer.setParent(None)
+            self.main_menu.main_label.show()
+            self.main_menu.action_label.show()
+            self.set_debug_tutor_shortcut_finalizer(None)
+
+        self.set_debug_tutor_shortcut_finalizer(cleanup_trade_designer)
         self.safe_connect(trade_designer.terminate_btn, terminate_trade)
         self.safe_connect(trade_designer.bank_trade_btn, trade_with_bank)
         self.safe_connect(trade_designer.player_trade_btn, trade_with_players)
@@ -1017,6 +1270,15 @@ class MainWindow(QMainWindow):
                                buying: ResourceCount, willing_players: List[Tuple[Player, ResourceCount | None]]):
         self.display_resources(controller)
         self.clear_trade_preview()
+        self.main_menu.action_label.show()
+
+        # Case 1: no players are willing to trade
+        if not willing_players:
+            self.main_menu.action_label.setText("No players are willing to trade with you right now.")
+            self.set_debug_tutor_shortcut_finalizer(None)
+            QTimer.singleShot(0, lambda: self.tradeSelected.emit(None))
+            return
+
         select_trade = self.select_trade_widget
         select_trade.setParent(self.main_menu)
 
@@ -1024,21 +1286,6 @@ class MainWindow(QMainWindow):
         self.main_menu.action_btn_layout.addWidget(select_trade)
         select_trade.trade_list.clear()
         select_trade.trade_list.setEnabled(True)
-        self.main_menu.action_label.show()
-
-        # Case 1: no players are willing to trade
-        if not willing_players:
-            self.main_menu.action_label.setText("No players are willing to trade with you right now.")
-            select_trade.submit_btn.setText("Go back")
-            select_trade.trade_list.hide()
-
-            def back():
-                self.main_menu.action_btn_layout.removeWidget(select_trade)
-                select_trade.setParent(None)
-                self.tradeSelected.emit(None)
-
-            self.safe_connect(select_trade.submit_btn, back)
-            return
 
         # Case 2: show available trade offers
         self.main_menu.action_label.setText(f"Available Trades for {format_counter_offer(buying, buying)}:")
@@ -1083,6 +1330,7 @@ class MainWindow(QMainWindow):
 
             self.main_menu.action_btn_layout.removeWidget(select_trade)
             select_trade.setParent(None)
+            self.set_debug_tutor_shortcut_finalizer(None)
             self.tradeSelected.emit(deal)
 
         try:
@@ -1095,11 +1343,19 @@ class MainWindow(QMainWindow):
         def cancel():
             self.main_menu.action_btn_layout.removeWidget(select_trade)
             select_trade.setParent(None)
+            self.set_debug_tutor_shortcut_finalizer(None)
             self.tradeSelected.emit(None)
 
+        def cleanup_select_trade() -> None:
+            self.main_menu.action_btn_layout.removeWidget(select_trade)
+            select_trade.setParent(None)
+            self.set_debug_tutor_shortcut_finalizer(None)
+
+        self.set_debug_tutor_shortcut_finalizer(cleanup_select_trade)
         self.safe_connect(select_trade.submit_btn, cancel)
 
     def display_round_info_ai_start(self, player: Player, dice_info: Optional[Tuple[int, int, int]], msg: str):
+        self._clear_debug_tutor_shortcut_context()
         self.history_mode_active = False
         self._stop_tutor_feedback_timers()
         self._reset_tutor_feedback_styles()
@@ -1173,16 +1429,22 @@ class MainWindow(QMainWindow):
         )
 
         def submit():
-            self.resourcesPicked.emit(chosen)
             self.main_menu.action_btn_layout.removeWidget(selection_widget)
             selection_widget.setParent(None)
+            self.set_debug_tutor_shortcut_finalizer(None)
+            self.resourcesPicked.emit(chosen)
 
+        def cleanup_selection_widget() -> None:
+            self.main_menu.action_btn_layout.removeWidget(selection_widget)
+            selection_widget.setParent(None)
+            self.set_debug_tutor_shortcut_finalizer(None)
+
+        self.set_debug_tutor_shortcut_finalizer(cleanup_selection_widget)
         self.safe_connect(selection_widget.submit_btn, submit)
         update_labels()
 
     def display_trade_manager(self, player: Player, selling: ResourceCount,
                               buying: ResourceCount, selling_player: Player):
-
         self.clear_trade_preview()
         trade_manager = self.trade_manager_widget
         trade_manager.setParent(self.main_menu)
@@ -1237,17 +1499,26 @@ class MainWindow(QMainWindow):
             trade_manager.accept_btn.setEnabled(False)
             trade_manager.decline_btn.setEnabled(False)
             modified = any(counter_offer[res] != selling.get(res, 0) for res in Resource)
-            self.tradeDecisionMade.emit((True, counter_offer if modified else None))
             self.main_menu.action_btn_layout.removeWidget(trade_manager)
             trade_manager.setParent(None)
             self.restore_spacer()
+            self.set_debug_tutor_shortcut_finalizer(None)
+            self.tradeDecisionMade.emit((True, counter_offer if modified else None))
 
         def decline():
-            self.tradeDecisionMade.emit((False, None))
             self.main_menu.action_btn_layout.removeWidget(trade_manager)
             trade_manager.setParent(None)
             self.restore_spacer()
+            self.set_debug_tutor_shortcut_finalizer(None)
+            self.tradeDecisionMade.emit((False, None))
 
+        def cleanup_trade_manager() -> None:
+            self.main_menu.action_btn_layout.removeWidget(trade_manager)
+            trade_manager.setParent(None)
+            self.restore_spacer()
+            self.set_debug_tutor_shortcut_finalizer(None)
+
+        self.set_debug_tutor_shortcut_finalizer(cleanup_trade_manager)
         self.safe_connect(trade_manager.accept_btn, accept)
         self.safe_connect(trade_manager.decline_btn, decline)
         update_buttons()
@@ -1272,6 +1543,7 @@ class MainWindow(QMainWindow):
             development_manager.setParent(None)
             self.restore_spacer()
             self.main_menu.main_label.show()
+            self.set_debug_tutor_shortcut_finalizer(None)
 
         def back():
             clean_up()
@@ -1347,6 +1619,7 @@ class MainWindow(QMainWindow):
             development_manager.back_btn.setText("Go Back")
             development_manager.buy_btn.show()
 
+        self.set_debug_tutor_shortcut_finalizer(clean_up)
         self.safe_connect(development_manager.back_btn, back)
         development_manager.buy_btn.setEnabled(can_afford_card)
         self.safe_connect(development_manager.buy_btn, buy_card)
@@ -1376,6 +1649,13 @@ class MainWindow(QMainWindow):
             self.main_menu.action_label.setText("")
 
     def display_results(self, controller: GameController):
+        self._clear_debug_tutor_shortcut_context()
+        if controller.game_mode == GameMode.TUTOR:
+            self._display_tutor_endgame_review(controller)
+            return
+
+        self._restore_splitter_layout()
+
         # Close tutor menu
         self.open_tutor_menu(False)
 
@@ -1468,6 +1748,8 @@ class MainWindow(QMainWindow):
         self.safe_connect(self.results_menu.quit_btn, lambda: self.closeEvent(QCloseEvent()))
 
     def _set_primary_side_panel(self, panel: QWidget):
+        self._restore_splitter_layout()
+
         for widget in (self.main_menu, self.start_menu, self.results_menu):
             if self.splitter_layout.indexOf(widget) != -1:
                 widget.setParent(None)
@@ -1479,6 +1761,7 @@ class MainWindow(QMainWindow):
         self.splitter_layout.setSizes([1000, self.SIDE_PANEL_WIDTH])
 
     def display_start_screen(self):
+        self._clear_debug_tutor_shortcut_context()
         self._stop_auto_tutor_feedback()
         self.history_enabled_on_turn = False
         self.tutor_feedback_history = []
