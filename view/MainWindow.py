@@ -1,17 +1,18 @@
-from html import escape
+from html import escape, unescape
 from itertools import groupby
 import math
 from typing import Dict, Tuple, List, Callable, Optional, Any
 
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QPointF, QEvent, QObject
 from PyQt6.QtGui import QCloseEvent, QIcon, QKeyEvent
+import pyqtgraph as pg
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel, QToolButton, QSpacerItem,
-    QSizePolicy, QPushButton, QAbstractScrollArea, QListWidgetItem, QLayout
+    QSizePolicy, QPushButton, QAbstractScrollArea, QListWidgetItem, QLayout, QFrame, QVBoxLayout
 )
 
-from GameController import GameController
+from GameController import GameController, PlayerScoreSnapshot
 from ai.actions import Action, ActionType
 from ai.tutor.explanations import ActionExplanation, ExplanationTemplate
 from ai.tutor.feedback import TutorFeedbackExplanation, move_quality_colour
@@ -29,9 +30,78 @@ from config.view_constants import (
     TUTOR_FEEDBACK_MAX_DISPLAY_SECONDS,
     TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS,
     HOME_ICON,
+    PLAYER_COLORS,
 )
 from view.View import GameMode
 from view.display_utils import format_counter_offer, get_player_lead_status
+
+
+class IntegerAxisItem(pg.AxisItem):
+    def tickSpacing(self, minVal: float, maxVal: float, size: float) -> List[Tuple[float, float]]:
+        value_range = abs(maxVal - minVal)
+        if value_range <= 0 or size <= 0:
+            return [(1.0, 0.0)]
+
+        target_tick_count = max(2, int(size / 80))
+        raw_spacing = max(1.0, value_range / target_tick_count)
+        magnitude = 10 ** math.floor(math.log10(raw_spacing))
+
+        for multiplier in (1, 2, 5, 10):
+            spacing = magnitude * multiplier
+            if spacing >= raw_spacing:
+                spacing = max(1.0, round(spacing))
+                return [(float(spacing), 0.0)]
+
+        spacing = max(1.0, round(magnitude * 10))
+        return [(float(spacing), 0.0)]
+
+    def tickStrings(self, values: List[float], scale: float, spacing: float) -> List[str]:
+        return [str(int(round(value))) for value in values]
+
+
+class HoverTooltip(QFrame):
+    def __init__(self, parent: QWidget):
+        super().__init__(parent, Qt.WindowType.FramelessWindowHint | Qt.WindowType.ToolTip)
+        self.setObjectName("hoverTooltip")
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setStyleSheet(
+            "QFrame#hoverTooltip {"
+            "background: #111827;"
+            "color: #f9fafb;"
+            "border: 1px solid #374151;"
+            "border-radius: 8px;"
+            "}"
+            "QLabel {"
+            "color: #f9fafb;"
+            "padding: 8px 10px;"
+            "}"
+        )
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.label = QLabel(self)
+        self.label.setTextFormat(Qt.TextFormat.PlainText)
+        self.label.setWordWrap(False)
+        layout.addWidget(self.label)
+        self.hide()
+
+    def show_text(self, text: str, global_pos) -> None:
+        self.label.setText(text)
+        self.adjustSize()
+        local_pos = self.parentWidget().mapFromGlobal(global_pos)
+        x_pos = local_pos.x() + 16
+        y_pos = local_pos.y() + 16
+
+        parent_rect = self.parentWidget().rect()
+        if x_pos + self.width() > parent_rect.right():
+            x_pos = max(0, local_pos.x() - self.width() - 16)
+        if y_pos + self.height() > parent_rect.bottom():
+            y_pos = max(0, local_pos.y() - self.height() - 16)
+
+        self.move(x_pos, y_pos)
+        self.show()
+        self.raise_()
 
 
 class MainWindow(QMainWindow):
@@ -47,6 +117,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Settlers of Catan")
+        self.setWindowIcon(QIcon("assets/logo.png"))
 
         # Central widget
         central = QWidget(self)
@@ -91,6 +162,43 @@ class MainWindow(QMainWindow):
         self.results_menu = uic.loadUi("view/ui/results_menu.ui")
         self.endgame_review_menu = uic.loadUi("view/ui/endgame_review.ui")
         self.start_menu = uic.loadUi("view/ui/start_menu.ui")
+        self.endgame_replay_canvas = SquareCanvas()
+        self.endgame_replay_canvas.setMinimumSize(0, 0)
+        self.endgame_replay_canvas.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        self.endgame_replay_canvas.disable_interactivity = True
+        self.endgame_review_menu.replayMainLayout.replaceWidget(
+            self.endgame_review_menu.boardPlaceholder, self.endgame_replay_canvas
+        )
+        self.endgame_review_menu.boardPlaceholder.setParent(None)
+        self.endgame_review_menu.boardPlaceholder.deleteLater()
+        self.endgame_review_menu.replayTab.installEventFilter(self)
+        self.endgame_review_menu.selectedMomentScrollArea.installEventFilter(self)
+        self.victory_points_plot = pg.PlotWidget(
+            axisItems={
+                "bottom": IntegerAxisItem(orientation="bottom"),
+                "left": IntegerAxisItem(orientation="left"),
+            }
+        )
+        self.victory_points_plot.setObjectName("victoryPointsPlot")
+        self.victory_points_plot.setBackground("#f9fafb")
+        self.victory_points_plot.setMinimumSize(0, 0)
+        self.victory_points_plot.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.endgame_review_menu.performanceLayout.replaceWidget(
+            self.endgame_review_menu.graphPlaceholder, self.victory_points_plot
+        )
+        self.endgame_review_menu.graphPlaceholder.setParent(None)
+        self.endgame_review_menu.graphPlaceholder.deleteLater()
+        self.endgame_plot_points: List[Tuple[int, float, float]] = []
+        self.endgame_plot_tooltips: Dict[int, str] = {}
+        self.active_endgame_tooltip_round: int | None = None
+        self.last_endgame_tooltip_text: str | None = None
+        self.hover_tooltip = HoverTooltip(self)
+        self.endgame_replay_feedback: List[TutorFeedbackExplanation] = []
+        self.endgame_replay_index: int | None = None
+        self.endgame_total_turns = 0
+        scene = self.victory_points_plot.scene()
+        if scene is not None and hasattr(scene, "sigMouseMoved"):
+            scene.sigMouseMoved.connect(self._handle_endgame_plot_hover)
 
         self.rule_window = uic.loadUi("view/ui/rules_window.ui")
         self.safe_connect(self.start_menu.help_btn, self.show_rules)
@@ -124,6 +232,7 @@ class MainWindow(QMainWindow):
         self.tutor_feedback_advance_timer: QTimer | None = None
         self.live_board_source: BoardDisplaySource | None = None
         self.tutor_feedback_history: List[TutorFeedbackExplanation] = []
+        self.tutor_feedback_replay_history: List[TutorFeedbackExplanation] = []
         self.history_feedback_index: int | None = None
         self.history_feedback_detailed = False
         self.history_enabled_on_turn = False
@@ -156,10 +265,10 @@ class MainWindow(QMainWindow):
 
     def _update_previous_feedback_button(self):
         visible = (
-            self.history_available_in_mode
-            and self.history_enabled_on_turn
-            and bool(self.tutor_feedback_history)
-            and not self.history_mode_active
+                self.history_available_in_mode
+                and self.history_enabled_on_turn
+                and bool(self.tutor_feedback_history)
+                and not self.history_mode_active
         )
         self.tutor_menu.previous_feedback_btn.setVisible(visible)
         self.tutor_menu.previous_feedback_btn.setEnabled(visible)
@@ -179,6 +288,7 @@ class MainWindow(QMainWindow):
         self.restore_board_state_callback = callback
 
     def _append_tutor_feedback_history(self, feedback: TutorFeedbackExplanation):
+        self.tutor_feedback_replay_history.append(feedback)
         self.tutor_feedback_history.append(feedback)
         if len(self.tutor_feedback_history) > 100:
             self.tutor_feedback_history = self.tutor_feedback_history[-100:]
@@ -389,6 +499,52 @@ class MainWindow(QMainWindow):
         panel.show()
         self.resize(current_size)
 
+    def _handle_endgame_plot_hover(self, scene_pos: QPointF):
+        if not self.endgame_plot_points or self.fullscreen_panel is not self.endgame_review_menu:
+            self.active_endgame_tooltip_round = None
+            self.last_endgame_tooltip_text = None
+            self.hover_tooltip.hide()
+            return
+
+        plot_item = self.victory_points_plot.getPlotItem()
+        view_box = plot_item.vb
+        if not self.victory_points_plot.sceneBoundingRect().contains(scene_pos):
+            self.active_endgame_tooltip_round = None
+            self.last_endgame_tooltip_text = None
+            self.hover_tooltip.hide()
+            return
+
+        nearest_round: int | None = None
+        nearest_distance: float | None = None
+        for round_num, x_value, y_value in self.endgame_plot_points:
+            point_scene = view_box.mapViewToScene(QPointF(x_value, y_value))
+            distance = (point_scene.x() - scene_pos.x()) ** 2 + (point_scene.y() - scene_pos.y()) ** 2
+            if nearest_distance is None or distance < nearest_distance:
+                nearest_round = round_num
+                nearest_distance = distance
+
+        if nearest_round is None or nearest_distance is None or nearest_distance > 100:
+            self.active_endgame_tooltip_round = None
+            self.last_endgame_tooltip_text = None
+            self.hover_tooltip.hide()
+            return
+
+        tooltip = self.endgame_plot_tooltips.get(nearest_round)
+        if not tooltip:
+            self.active_endgame_tooltip_round = None
+            self.last_endgame_tooltip_text = None
+            self.hover_tooltip.hide()
+            return
+
+        global_pos = self.victory_points_plot.mapToGlobal(self.victory_points_plot.mapFromScene(scene_pos))
+        if self.active_endgame_tooltip_round == nearest_round and self.last_endgame_tooltip_text == tooltip:
+            self.hover_tooltip.show_text(tooltip, global_pos)
+            return
+
+        self.active_endgame_tooltip_round = nearest_round
+        self.last_endgame_tooltip_text = tooltip
+        self.hover_tooltip.show_text(tooltip, global_pos)
+
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key.Key_F8 and self._try_apply_tutor_recommended_move():
             event.accept()
@@ -521,18 +677,508 @@ class MainWindow(QMainWindow):
         self.endgame_review_menu.setMinimumSize(0, 0)
         self.endgame_review_menu.titleWinnerLabel.setMinimumWidth(0)
         self.endgame_review_menu.reviewTabs.setMinimumWidth(0)
+        self.endgame_review_menu.selectedBreakdownBox.setMinimumSize(200, 0)
+        self.endgame_review_menu.selectedBreakdownBox.setMinimumWidth(200)
+        self.endgame_review_menu.selectedBreakdownBox.setMaximumWidth(200)
+        self.endgame_review_menu.selectedBreakdownBox.setMinimumHeight(0)
+        self.endgame_review_menu.selectedBreakdownBox.setSizeAdjustPolicy(
+            QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored
+        )
+        self.endgame_review_menu.selectedBreakdownBox.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.endgame_review_menu.selectedBreakdownBox.setLineWrapMode(
+            self.endgame_review_menu.selectedBreakdownBox.LineWrapMode.WidgetWidth
+        )
+        self.victory_points_plot.setMinimumSize(0, 0)
+        self.endgame_replay_canvas.setMinimumSize(0, 0)
+        self.endgame_review_menu.selectedMomentScrollArea.setMinimumSize(0, 0)
+        self.endgame_review_menu.selectedMomentScrollArea.setMinimumWidth(340)
         self.endgame_review_menu.selectedBreakdownBox.viewport().setCursor(Qt.CursorShape.ArrowCursor)
         self.endgame_review_menu.titleWinnerLabel.setSizePolicy(
-            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
         )
         self.endgame_review_menu.selectedBreakdownBox.setSizePolicy(
-            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred
+            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred
         )
+        self.endgame_review_menu.selectedMomentScrollArea.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        self.endgame_review_menu.replayMainLayout.setStretch(0, 0)
+        self.endgame_review_menu.replayMainLayout.setStretch(1, 1)
         self.endgame_review_menu.main_menu_btn.setSizePolicy(
             QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred
         )
         self.endgame_review_menu.quit_btn.setSizePolicy(
             QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred
+        )
+
+    @staticmethod
+    def _strip_html(text: str) -> str:
+        import re
+
+        cleaned = unescape(text or "")
+        cleaned = cleaned.replace("<br/>", "\n").replace("<br />", "\n").replace("<br>", "\n")
+        cleaned = cleaned.replace("</p>", "\n").replace("</li>", "\n")
+        cleaned = cleaned.replace("<li>", "- ")
+        cleaned = cleaned.replace("<ul>", "").replace("</ul>", "")
+        cleaned = re.sub(r"<[^>]+>", "", cleaned)
+        lines = [line.strip() for line in cleaned.splitlines()]
+        return "\n".join(line for line in lines if line)
+
+    @staticmethod
+    def _endgame_badge_styles(label: str) -> str:
+        styles = {
+            "Poor": "background: #fee2e2; color: #991b1b; border-radius: 9px; padding: 3px 8px; font-weight: 700;",
+            "Okay": "background: #fef3c7; color: #92400e; border-radius: 9px; padding: 3px 8px; font-weight: 700;",
+            "Good": "background: #dcfce7; color: #166534; border-radius: 9px; padding: 3px 8px; font-weight: 700;",
+            "Excellent": "background: #dcfce7; color: #166534; border-radius: 9px; padding: 3px 8px; font-weight: 700;",
+        }
+        return styles.get(
+            label,
+            "background: #e5e7eb; color: #374151; border-radius: 9px; padding: 3px 8px; font-weight: 700;",
+        )
+
+    @classmethod
+    def _replay_feedback_player_name(cls, feedback: TutorFeedbackExplanation) -> str:
+        human_player = next((player for player in feedback.board_snapshot.get_all_players() if player.is_human), None)
+        if human_player is not None:
+            return human_player.name
+        players = feedback.board_snapshot.get_all_players()
+        return players[0].name if players else "Player"
+
+    @classmethod
+    def _format_replay_feedback_details(
+            cls,
+            feedback: TutorFeedbackExplanation,
+            total_turns: int,
+    ) -> Dict[str, str]:
+        turn_num = getattr(feedback.board_snapshot.game_state, "round_num", 0)
+        player_name = cls._replay_feedback_player_name(feedback)
+        action_text = feedback.assessment.your_move or feedback.title
+        score_text = (
+            f"Score: {feedback.assessment.internal_score:.2f} · "
+            f"Gap: +{feedback.assessment.score_gap:.2f}"
+        )
+        tutor_feedback = feedback.assessment.judgment_sentence.strip()
+
+        if feedback.assessment.better_move and (
+                feedback.assessment.better_move.strip().lower() != action_text.strip().lower()
+        ):
+            advice_text = f"Better move: {feedback.assessment.better_move}"
+            if feedback.assessment.tip:
+                advice_text += f"\nTakeaway: {feedback.assessment.tip}"
+        elif feedback.assessment.tip:
+            advice_text = feedback.assessment.tip
+        else:
+            advice_text = cls._strip_html(feedback.history_summary)
+
+        return {
+            "turn_and_player": f"Turn {turn_num} - {player_name}",
+            "action": f"Action: {action_text}",
+            "badge": feedback.label,
+            "score": score_text,
+            "tutor_feedback": f"Tutor feedback: {tutor_feedback}",
+            "advice": advice_text,
+            "turn_label": f"Turn {turn_num} / {max(total_turns, turn_num)}",
+        }
+
+    def _render_endgame_replay_feedback(self, index: int) -> None:
+        if not self.endgame_replay_feedback:
+            return
+
+        index = max(0, min(index, len(self.endgame_replay_feedback) - 1))
+        self.endgame_replay_index = index
+        feedback = self.endgame_replay_feedback[index]
+        details = self._format_replay_feedback_details(feedback, self.endgame_total_turns)
+
+        self.endgame_replay_canvas.display_board(feedback.board_snapshot)
+        self.endgame_replay_canvas.clear_planned_builds()
+        self.endgame_replay_canvas.clear_feedback_builds()
+        if feedback.recommended_visual_plan:
+            self.endgame_replay_canvas.render_planned_builds(feedback.recommended_visual_plan)
+        if feedback.visual_build_plan:
+            self.endgame_replay_canvas.render_feedback_builds(feedback.visual_build_plan)
+
+        self.endgame_review_menu.turnAndPlayer.setText(details["turn_and_player"])
+        self.endgame_review_menu.actionLabel.setText(details["action"])
+        self.endgame_review_menu.selectedMomentBadge.setText(details["badge"])
+        self.endgame_review_menu.selectedMomentBadge.setStyleSheet(self._endgame_badge_styles(details["badge"]))
+        self.endgame_review_menu.scoreLabel.setText(details["score"])
+        self.endgame_review_menu.tutorFeedback.setText(details["tutor_feedback"])
+        self.endgame_review_menu.adviceLabel.setText(details["advice"])
+        self.endgame_review_menu.turnLabel.setText(details["turn_label"])
+
+        slider = self.endgame_review_menu.timelineSlider
+        was_blocked = slider.blockSignals(True)
+        slider.setValue(index)
+        slider.blockSignals(was_blocked)
+        self.endgame_review_menu.prevTurn.setEnabled(index > 0)
+        self.endgame_review_menu.nextTurn.setEnabled(index < len(self.endgame_replay_feedback) - 1)
+        self._sync_endgame_replay_layout()
+
+    def _show_previous_endgame_replay_feedback(self) -> None:
+        if self.endgame_replay_index is None:
+            return
+        self._render_endgame_replay_feedback(self.endgame_replay_index - 1)
+
+    def _show_next_endgame_replay_feedback(self) -> None:
+        if self.endgame_replay_index is None:
+            return
+        self._render_endgame_replay_feedback(self.endgame_replay_index + 1)
+
+    def _sync_endgame_replay_layout(self) -> None:
+        replay_tab = self.endgame_review_menu.replayTab
+        if not replay_tab.isVisible():
+            return
+
+        layout = self.endgame_review_menu.replayMainLayout
+        margins = layout.contentsMargins()
+        spacing = layout.spacing()
+        available_width = max(0, replay_tab.width() - margins.left() - margins.right() - spacing)
+        available_height = max(
+            280,
+            min(
+                self.endgame_review_menu.selectedMomentScrollArea.height(),
+                replay_tab.height(),
+            ),
+        )
+        advice_min_width = 340
+        canvas_width = max(260, min(available_height, max(260, available_width - advice_min_width)))
+        self.endgame_replay_canvas.setFixedWidth(canvas_width)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if watched in {
+            self.endgame_review_menu.replayTab,
+            self.endgame_review_menu.selectedMomentScrollArea,
+        } and event.type() in {QEvent.Type.Resize, QEvent.Type.Show}:
+            QTimer.singleShot(0, self._sync_endgame_replay_layout)
+        return super().eventFilter(watched, event)
+
+    def _populate_tutor_endgame_performance(self, controller: GameController):
+        plot_item = self.victory_points_plot.getPlotItem()
+        plot_item.clear()
+        self.endgame_plot_points = []
+        self.endgame_plot_tooltips = {}
+        if plot_item.legend is None:
+            plot_item.addLegend(offset=(10, 10))
+        else:
+            plot_item.legend.clear()
+
+        history = controller.get_victory_point_history()
+        review_history = controller.get_endgame_review_history()
+        if not history:
+            return
+
+        round_values = [round_num for round_num, _ in history]
+        max_round = max(round_values)
+        max_victory_points = 0
+
+        plot_item.setTitle("Victory Points Over Time")
+        plot_item.setLabel("bottom", "Round Number")
+        plot_item.setLabel("left", "Victory Points")
+        plot_item.showGrid(x=True, y=True, alpha=0.2)
+        target_line = pg.InfiniteLine(
+            pos=10,
+            angle=0,
+            pen=pg.mkPen(color=(156, 163, 175), width=2, style=Qt.PenStyle.DashLine),
+        )
+        target_line.setZValue(-10)
+        plot_item.addItem(target_line)
+
+        self.endgame_plot_tooltips = self._build_endgame_plot_tooltips(
+            review_history,
+            controller.get_all_players(),
+        )
+
+        for player in controller.get_all_players():
+            player_rounds: List[int] = []
+            player_points: List[int] = []
+            for round_num, snapshot in history:
+                player_rounds.append(round_num)
+                y_value = snapshot.get(player.player_number, 0) + 0.075 - 0.05 * player.player_number.value
+                player_points.append(y_value)
+                self.endgame_plot_points.append((round_num, float(round_num), float(y_value)))
+
+            max_victory_points = max(max_victory_points, max(player_points, default=0))
+            colour = PLAYER_COLORS[player.player_number]
+            pen = pg.mkPen((colour.red(), colour.green(), colour.blue()), width=3)
+            curve = plot_item.plot(
+                player_rounds,
+                player_points,
+                pen=pen,
+                name=player.name,
+                symbol="o",
+                symbolSize=5,
+                symbolBrush=(colour.red(), colour.green(), colour.blue()),
+                symbolPen=pen,
+            )
+            curve.setZValue(100 - player.player_number.value)
+
+        self.victory_points_plot.setXRange(1, max_round)
+        self.victory_points_plot.setYRange(2, max(10, max_victory_points))
+
+    @classmethod
+    def _build_endgame_plot_tooltips(
+            cls,
+            history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
+            players: List[Player],
+    ) -> Dict[int, str]:
+        player_names = {player.player_number: player.name for player in players}
+        tooltips: Dict[int, str] = {}
+        previous_snapshot: Dict[PlayerNumber, PlayerScoreSnapshot] | None = None
+
+        for round_num, snapshot in history:
+            ranked_players = sorted(snapshot.items(), key=lambda item: item[0].value)
+            top_score = max(player_snapshot.total_vp for player_snapshot in snapshot.values())
+            leaders = [
+                player_names[player_number]
+                for player_number, player_snapshot in ranked_players
+                if player_snapshot.total_vp == top_score
+            ]
+            leader_text = cls._format_endgame_players(leaders)
+            if len(leaders) > 1:
+                leader_text += " (tied)"
+
+            events = cls._describe_round_vp_events(previous_snapshot, snapshot, player_names)
+            lines = [f"Turn {round_num}", ""]
+            for player_number, player_snapshot in ranked_players:
+                lines.append(f"{player_names[player_number]}: {player_snapshot.total_vp} VP")
+            lines.extend(["", f"Leader: {leader_text}"])
+            if events:
+                lines.append("Event:")
+                lines.extend(events)
+            else:
+                lines.append("Event: None")
+
+            tooltips[round_num] = "\n".join(lines)
+            previous_snapshot = snapshot
+
+        return tooltips
+
+    @classmethod
+    def _describe_round_vp_events(
+            cls,
+            previous_snapshot: Dict[PlayerNumber, PlayerScoreSnapshot] | None,
+            current_snapshot: Dict[PlayerNumber, PlayerScoreSnapshot],
+            player_names: Dict[PlayerNumber, str],
+    ) -> List[str]:
+        if previous_snapshot is None:
+            return []
+
+        events: List[str] = []
+        for player_number in sorted(current_snapshot.keys(), key=lambda number: number.value):
+            previous = previous_snapshot[player_number]
+            current = current_snapshot[player_number]
+            player_name = player_names[player_number]
+
+            city_gain = current.cities - previous.cities
+            if city_gain > 0:
+                if city_gain == 1:
+                    events.append(f"- {player_name} built a city")
+                else:
+                    events.append(f"- {player_name} built {city_gain} cities")
+
+            settlement_gain = current.settlements - previous.settlements
+            if settlement_gain > 0:
+                if settlement_gain == 1:
+                    events.append(f"- {player_name} built a settlement")
+                else:
+                    events.append(f"- {player_name} built {settlement_gain} settlements")
+
+            hidden_vp_gain = current.hidden_vp_cards - previous.hidden_vp_cards
+            if hidden_vp_gain > 0:
+                if hidden_vp_gain == 1:
+                    events.append(f"- {player_name} bought a Victory Point card")
+                else:
+                    events.append(f"- {player_name} bought {hidden_vp_gain} Victory Point cards")
+
+            if not previous.has_longest_road and current.has_longest_road:
+                events.append(f"- {player_name} gained Longest Road")
+            elif previous.has_longest_road and not current.has_longest_road:
+                events.append(f"- {player_name} lost Longest Road")
+
+            if not previous.has_largest_army and current.has_largest_army:
+                events.append(f"- {player_name} gained Largest Army")
+            elif previous.has_largest_army and not current.has_largest_army:
+                events.append(f"- {player_name} lost Largest Army")
+
+        return events
+
+    @staticmethod
+    def _format_endgame_players(names: List[str]) -> str:
+        if not names:
+            return "No one"
+        if len(names) == 1:
+            return names[0]
+        if len(names) == 2:
+            return f"{names[0]} and {names[1]}"
+        return f"{', '.join(names[:-1])}, and {names[-1]}"
+
+    @classmethod
+    def _summarise_endgame_review_labels(
+            cls,
+            history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
+            players: List[Player],
+    ) -> Tuple[str, str, str]:
+        if not history:
+            fallback = "No round history recorded."
+            return fallback, fallback, fallback
+
+        player_names = {player.player_number: player.name for player in players}
+        lead_change_label = cls._build_lead_change_label(history, player_names)
+        biggest_swing_label = cls._build_biggest_swing_label(history, player_names)
+        closest_moment_label = cls._build_closest_moment_label(history, player_names)
+        return lead_change_label, biggest_swing_label, closest_moment_label
+
+    @classmethod
+    def _build_lead_change_label(
+            cls,
+            history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
+            player_names: Dict[PlayerNumber, str],
+    ) -> str:
+        leaders_by_round: List[Tuple[int, List[PlayerNumber], int]] = []
+        for round_num, snapshot in history:
+            top_score = max(player.total_vp for player in snapshot.values())
+            leaders = sorted(
+                [player_number for player_number, player in snapshot.items() if player.total_vp == top_score],
+                key=lambda player_number: player_number.value,
+            )
+            leaders_by_round.append((round_num, leaders, top_score))
+
+        final_round, final_leaders, _ = leaders_by_round[-1]
+        first_round, first_leaders, _ = leaders_by_round[0]
+        if len(final_leaders) == 1:
+            final_leader = final_leaders[0]
+            sole_lead_round = next(
+                round_num
+                for round_num, leaders, _ in reversed(leaders_by_round)
+                if leaders != [final_leader]
+            ) if any(leaders != [final_leader] for _, leaders, _ in leaders_by_round[:-1]) else None
+            if sole_lead_round is None:
+                return f"{player_names[final_leader]} led from Round {first_round} to the finish."
+
+            held_from_round = sole_lead_round + 1
+            return f"{player_names[final_leader]} took the lead in Round {held_from_round} and held it through Round {
+                      final_round}."
+
+        final_names = [player_names[player_number] for player_number in final_leaders]
+        return f"The game finished level at the top in Round {final_round} with {cls._format_endgame_players(
+            final_names)} sharing the lead."
+
+    @classmethod
+    def _build_biggest_swing_label(
+            cls,
+            history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
+            player_names: Dict[PlayerNumber, str],
+    ) -> str:
+        best_round: int | None = None
+        best_player: PlayerNumber | None = None
+        best_delta = 0
+        best_reasons: List[str] = []
+
+        for index in range(1, len(history)):
+            round_num, current_snapshot = history[index]
+            _, previous_snapshot = history[index - 1]
+            for player_number, current in current_snapshot.items():
+                previous = previous_snapshot[player_number]
+                delta = current.total_vp - previous.total_vp
+                if delta <= 0:
+                    continue
+                reasons = cls._score_swing_reasons(previous, current)
+                if delta > best_delta:
+                    best_round = round_num
+                    best_player = player_number
+                    best_delta = delta
+                    best_reasons = reasons
+
+        if best_round is None or best_player is None:
+            return "No player gained victory points between recorded rounds."
+
+        if best_reasons:
+            return (
+                f"Round {best_round}: {player_names[best_player]} "
+                f"{cls._join_reasons(best_reasons)} and jumped by {best_delta} VP."
+            )
+        return f"Round {best_round}: {player_names[best_player]} made the biggest move, gaining {best_delta} VP."
+
+    @staticmethod
+    def _join_reasons(reasons: List[str]) -> str:
+        if len(reasons) == 1:
+            return reasons[0]
+        if len(reasons) == 2:
+            return f"{reasons[0]} and {reasons[1]}"
+        return f"{', '.join(reasons[:-1])}, and {reasons[-1]}"
+
+    @staticmethod
+    def _score_swing_reasons(previous: PlayerScoreSnapshot, current: PlayerScoreSnapshot) -> List[str]:
+        reasons: List[str] = []
+        if not previous.has_longest_road and current.has_longest_road:
+            reasons.append("gained Longest Road")
+        if not previous.has_largest_army and current.has_largest_army:
+            reasons.append("gained Largest Army")
+        if current.cities > previous.cities:
+            reasons.append("upgraded to a city")
+        elif current.settlements > previous.settlements:
+            reasons.append("built a settlement")
+        hidden_vp_delta = current.hidden_vp_cards - previous.hidden_vp_cards
+        if hidden_vp_delta > 0:
+            reasons.append(f"picked up {hidden_vp_delta} hidden VP")
+        return reasons
+
+    @classmethod
+    def _build_closest_moment_label(
+            cls,
+            history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
+            player_names: Dict[PlayerNumber, str],
+    ) -> str:
+        best_round = history[0][0]
+        best_gap = math.inf
+        best_top_score = -1
+        best_leaders: List[PlayerNumber] = []
+        best_runner_up: PlayerNumber | None = None
+        best_runner_up_score = -1
+
+        for round_num, snapshot in history:
+            ranked = sorted(
+                snapshot.items(),
+                key=lambda item: (item[1].total_vp, -item[0].value),
+                reverse=True,
+            )
+            top_score = ranked[0][1].total_vp
+            leaders = [player_number for player_number, player in ranked if player.total_vp == top_score]
+            if len(leaders) > 1:
+                second_score = top_score
+                gap = 0
+            else:
+                second_score = ranked[1][1].total_vp if len(ranked) > 1 else top_score
+                gap = top_score - second_score
+            runner_up = ranked[len(leaders)][0] if len(leaders) < len(ranked) else None
+            if (
+                    gap < best_gap
+                    or (gap == best_gap and top_score > best_top_score)
+                    or (gap == best_gap and top_score == best_top_score and round_num > best_round)
+            ):
+                best_round = round_num
+                best_gap = gap
+                best_top_score = top_score
+                best_leaders = leaders
+                best_runner_up = runner_up
+                best_runner_up_score = second_score
+
+        if best_gap == 0:
+            leader_names = [player_names[player_number] for player_number in best_leaders]
+            return (
+                f"Round {best_round}: {cls._format_endgame_players(leader_names)} "
+                f"were tied at {best_top_score} VP."
+            )
+
+        if best_runner_up is None:
+            return f"Round {best_round}: {player_names[best_leaders[0]]} stood alone at {best_top_score} VP."
+
+        return (
+            f"Round {best_round}: {player_names[best_leaders[0]]} led "
+            f"{player_names[best_runner_up]} {best_top_score}-{best_runner_up_score}."
         )
 
     def _populate_tutor_endgame_review(self, controller: GameController):
@@ -572,6 +1218,42 @@ class MainWindow(QMainWindow):
 
         if self.endgame_rank_cards:
             self._select_endgame_rank_card(self.endgame_rank_cards[0], winner)
+        self._populate_tutor_endgame_performance(controller)
+        self.endgame_replay_feedback = list(self.tutor_feedback_replay_history)
+        history = controller.get_victory_point_history()
+        self.endgame_total_turns = max((round_num for round_num, _ in history), default=0)
+        replay_slider = self.endgame_review_menu.timelineSlider
+        replay_slider.setMinimum(0)
+        replay_slider.setMaximum(max(0, len(self.endgame_replay_feedback) - 1))
+        replay_slider.setEnabled(bool(self.endgame_replay_feedback))
+        self.safe_connect(self.endgame_review_menu.prevTurn, self._show_previous_endgame_replay_feedback)
+        self.safe_connect(self.endgame_review_menu.nextTurn, self._show_next_endgame_replay_feedback)
+        try:
+            replay_slider.valueChanged.disconnect()
+        except TypeError:
+            pass
+        replay_slider.valueChanged.connect(self._render_endgame_replay_feedback)
+        if self.endgame_replay_feedback:
+            self._render_endgame_replay_feedback(len(self.endgame_replay_feedback) - 1)
+        else:
+            self.endgame_replay_canvas.clear_shapes()
+            self.endgame_review_menu.turnAndPlayer.setText("No replay moments recorded")
+            self.endgame_review_menu.actionLabel.setText("Action: None")
+            self.endgame_review_menu.selectedMomentBadge.setText("N/A")
+            self.endgame_review_menu.selectedMomentBadge.setStyleSheet(self._endgame_badge_styles(""))
+            self.endgame_review_menu.scoreLabel.setText("Score: N/A")
+            self.endgame_review_menu.tutorFeedback.setText("Tutor feedback: No tutor feedback history was recorded.")
+            self.endgame_review_menu.adviceLabel.setText("No advice available.")
+            self.endgame_review_menu.turnLabel.setText("Turn 0 / 0")
+            self.endgame_review_menu.prevTurn.setEnabled(False)
+            self.endgame_review_menu.nextTurn.setEnabled(False)
+        lead_change_label, biggest_swing_label, closest_moment_label = self._summarise_endgame_review_labels(
+            controller.get_endgame_review_history(),
+            controller.get_all_players(),
+        )
+        self.endgame_review_menu.leadChangeLabel.setText(lead_change_label)
+        self.endgame_review_menu.biggestSwingLabel.setText(biggest_swing_label)
+        self.endgame_review_menu.closestMomentLabel.setText(closest_moment_label)
 
     def _display_tutor_endgame_review(self, controller: GameController):
         def return_to_main_menu():
@@ -584,6 +1266,7 @@ class MainWindow(QMainWindow):
         self.safe_connect(self.endgame_review_menu.main_menu_btn, return_to_main_menu)
         self.safe_connect(self.endgame_review_menu.quit_btn, self.close)
         self._show_fullscreen_panel(self.endgame_review_menu)
+        QTimer.singleShot(0, self._sync_endgame_replay_layout)
 
     def closeEvent(self, _):
         quit()
@@ -808,7 +1491,7 @@ class MainWindow(QMainWindow):
     def _tutor_feedback_display_seconds(feedback: TutorFeedbackExplanation) -> float:
         gap = max(0.0, min(1.0, feedback.assessment.score_gap))
         return TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS + (
-            (TUTOR_FEEDBACK_MAX_DISPLAY_SECONDS - TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS) * gap
+                (TUTOR_FEEDBACK_MAX_DISPLAY_SECONDS - TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS) * gap
         )
 
     def _concise_explanation_html(self, explanation: ActionExplanation) -> Tuple[str, str]:
@@ -1765,6 +2448,7 @@ class MainWindow(QMainWindow):
         self._stop_auto_tutor_feedback()
         self.history_enabled_on_turn = False
         self.tutor_feedback_history = []
+        self.tutor_feedback_replay_history = []
         self._set_dismiss_tutor_hint_callback(None)
         self.open_tutor_menu(False)
         self.clear_trade_preview()

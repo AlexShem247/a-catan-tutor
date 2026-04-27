@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from random import Random
 from typing import List, Tuple, Optional, Dict, Callable, Any
 
@@ -25,6 +26,19 @@ class ReturnToStart(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class PlayerScoreSnapshot:
+    total_vp: int
+    visible_vp: int
+    settlements: int
+    cities: int
+    hidden_vp_cards: int
+    longest_road_length: int
+    army_size: int
+    has_longest_road: bool
+    has_largest_army: bool
+
+
 class GameController:
     """Controls the flow of a Catan game using a pure Game model."""
     _game: Game
@@ -36,6 +50,8 @@ class GameController:
         self.simulation_players = simulation_players
         self.game_seed = game_seed
         self.game_rng = Random(game_seed)
+        self.victory_point_history: List[Tuple[int, Dict[PlayerNumber, int]]] = []
+        self.endgame_review_history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]] = []
         self._tutor_dev_played = False
         self.tutor_ai = RuleBasedAI(self._new_tutor_rng())
         self.tutor_evaluator = TutorEvaluator(self.tutor_ai)
@@ -65,6 +81,8 @@ class GameController:
         is_tutor_mode = self.game_mode in {GameMode.GUIDED, GameMode.TUTOR}
 
         self.game_rng = Random(self.game_seed)
+        self.victory_point_history = []
+        self.endgame_review_history = []
         self._tutor_dev_played = False
         self.tutor_ai = RuleBasedAI(self._new_tutor_rng())
         self.tutor_evaluator = TutorEvaluator(self.tutor_ai)
@@ -171,12 +189,47 @@ class GameController:
                         if self._game.game_over:
                             break
 
+                    self._record_victory_point_snapshot()
+
+                    if self._game.game_over:
+                        break
+
                     self._game.round_num += 1
             except ReturnToStart:
                 continue
 
             self.view.display_results()
             return
+
+    def _record_victory_point_snapshot(self) -> None:
+        review_snapshot = {
+            player.player_number: self._build_player_score_snapshot(player)
+            for player in self._game.players
+        }
+        snapshot = {
+            player_number: player_snapshot.total_vp
+            for player_number, player_snapshot in review_snapshot.items()
+        }
+        round_num = self._game.round_num
+        if self.victory_point_history and self.victory_point_history[-1] == (round_num, snapshot):
+            return
+        self.victory_point_history.append((round_num, snapshot))
+        self.endgame_review_history.append((round_num, review_snapshot))
+
+    @staticmethod
+    def _build_player_score_snapshot(player: Player) -> PlayerScoreSnapshot:
+        visible_vp, total_vp = player.calc_victory_points()
+        return PlayerScoreSnapshot(
+            total_vp=total_vp,
+            visible_vp=visible_vp,
+            settlements=len(player.settlements),
+            cities=len(player.cities),
+            hidden_vp_cards=total_vp - visible_vp,
+            longest_road_length=player.longest_road_length,
+            army_size=player.army_size,
+            has_longest_road=player.has_longest_road,
+            has_largest_army=player.has_largest_army,
+        )
 
     def run_initial_placement(self):
         """
@@ -1131,5 +1184,11 @@ class GameController:
 
     def get_all_players(self):
         return self._game.players
+
+    def get_victory_point_history(self) -> List[Tuple[int, Dict[PlayerNumber, int]]]:
+        return list(self.victory_point_history)
+
+    def get_endgame_review_history(self) -> List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]]:
+        return list(self.endgame_review_history)
 
     # </editor-fold>

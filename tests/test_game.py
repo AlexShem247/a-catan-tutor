@@ -18,7 +18,7 @@ from ai.tutor.move_quality import (
     strategic_turn_move_quality,
 )
 from config.player_policies import STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC
-from GameController import GameController
+from GameController import GameController, PlayerScoreSnapshot
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game
 from game.HexTile import HexTile
@@ -27,6 +27,7 @@ from game.PlayerAssets import Buildable, DevelopmentCard, DevelopmentCardType
 from game.Resources import Resource, HexType
 from game.Vertex import Vertex, Building, VertexDirection, Port
 from view.View import GameMode
+from view.MainWindow import MainWindow
 
 
 class TestGame(unittest.TestCase):
@@ -269,6 +270,199 @@ class TestGame(unittest.TestCase):
         controller = GameController(STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC, game_seed=0)
 
         self.assertIsNot(controller.tutor_ai.rng, controller.game_rng)
+
+    def test_victory_point_history_records_true_points(self):
+        controller = GameController(STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC, game_seed=0)
+        player = controller.get_all_players()[0]
+        player.settlements.append(Vertex(pos=(0, 0, VertexDirection.TOP)))
+        player.development_cards.append(DevelopmentCard(DevelopmentCardType.VICTORY_POINT))
+
+        controller._record_victory_point_snapshot()
+        history = controller.get_victory_point_history()
+
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0][0], 1)
+        self.assertEqual(history[0][1][player.player_number], 2)
+
+    def test_endgame_review_history_records_point_breakdown(self):
+        controller = GameController(STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC, game_seed=0)
+        player = controller.get_all_players()[0]
+        player.settlements.append(Vertex(pos=(0, 0, VertexDirection.TOP)))
+        player.longest_road_length = 5
+        player.has_longest_road = True
+        player.development_cards.append(DevelopmentCard(DevelopmentCardType.VICTORY_POINT))
+
+        controller._record_victory_point_snapshot()
+        history = controller.get_endgame_review_history()
+
+        self.assertEqual(len(history), 1)
+        snapshot = history[0][1][player.player_number]
+        self.assertEqual(
+            snapshot,
+            PlayerScoreSnapshot(
+                total_vp=4,
+                visible_vp=3,
+                settlements=1,
+                cities=0,
+                hidden_vp_cards=1,
+                longest_road_length=5,
+                army_size=0,
+                has_longest_road=True,
+                has_largest_army=False,
+            ),
+        )
+
+    def test_endgame_review_labels_use_round_history(self):
+        p1 = PlayerNumber.P1
+        p2 = PlayerNumber.P2
+        p3 = PlayerNumber.P3
+        p4 = PlayerNumber.P4
+        history = [
+            (1, {
+                p1: PlayerScoreSnapshot(2, 2, 2, 0, 0, 2, 0, False, False),
+                p2: PlayerScoreSnapshot(2, 2, 2, 0, 0, 2, 0, False, False),
+                p3: PlayerScoreSnapshot(1, 1, 1, 0, 0, 1, 0, False, False),
+                p4: PlayerScoreSnapshot(2, 2, 1, 0, 0, 1, 0, False, False),
+            }),
+            (2, {
+                p1: PlayerScoreSnapshot(4, 4, 2, 0, 0, 5, 0, True, False),
+                p2: PlayerScoreSnapshot(3, 3, 3, 0, 0, 2, 0, False, False),
+                p3: PlayerScoreSnapshot(2, 2, 2, 0, 0, 1, 0, False, False),
+                p4: PlayerScoreSnapshot(4, 4, 2, 1, 0, 1, 0, False, False),
+            }),
+            (3, {
+                p1: PlayerScoreSnapshot(6, 6, 2, 1, 0, 6, 0, True, False),
+                p2: PlayerScoreSnapshot(4, 4, 2, 1, 0, 2, 0, False, False),
+                p3: PlayerScoreSnapshot(3, 3, 3, 0, 0, 2, 0, False, False),
+                p4: PlayerScoreSnapshot(5, 5, 1, 2, 0, 1, 0, False, False),
+            }),
+        ]
+        players = [
+            SimpleNamespace(player_number=p1, name="P1"),
+            SimpleNamespace(player_number=p2, name="P2"),
+            SimpleNamespace(player_number=p3, name="P3"),
+            SimpleNamespace(player_number=p4, name="P4"),
+        ]
+
+        lead, swing, closest = MainWindow._summarise_endgame_review_labels(history, players)
+
+        self.assertEqual(lead, "P1 took the lead in Round 3 and held it through Round 3.")
+        self.assertEqual(swing, "Round 2: P1 gained Longest Road and jumped by 2 VP.")
+        self.assertEqual(closest, "Round 2: P1 and P4 were tied at 4 VP.")
+
+    def test_endgame_plot_tooltip_lists_scores_leader_and_multiple_events(self):
+        p1 = PlayerNumber.P1
+        p2 = PlayerNumber.P2
+        p3 = PlayerNumber.P3
+        p4 = PlayerNumber.P4
+        history = [
+            (17, {
+                p1: PlayerScoreSnapshot(5, 5, 3, 1, 0, 4, 0, False, False),
+                p2: PlayerScoreSnapshot(4, 4, 2, 1, 0, 4, 0, False, False),
+                p3: PlayerScoreSnapshot(5, 5, 3, 1, 0, 4, 0, False, False),
+                p4: PlayerScoreSnapshot(7, 7, 3, 2, 0, 5, 0, True, False),
+            }),
+            (18, {
+                p1: PlayerScoreSnapshot(6, 6, 2, 2, 0, 4, 0, False, False),
+                p2: PlayerScoreSnapshot(4, 4, 2, 1, 0, 4, 0, False, False),
+                p3: PlayerScoreSnapshot(5, 5, 3, 1, 0, 4, 0, False, False),
+                p4: PlayerScoreSnapshot(5, 5, 3, 2, 0, 4, 0, False, False),
+            }),
+        ]
+        players = [
+            SimpleNamespace(player_number=p1, name="P1"),
+            SimpleNamespace(player_number=p2, name="P2"),
+            SimpleNamespace(player_number=p3, name="P3"),
+            SimpleNamespace(player_number=p4, name="P4"),
+        ]
+
+        tooltips = MainWindow._build_endgame_plot_tooltips(history, players)
+
+        self.assertEqual(
+            tooltips[18],
+            "\n".join([
+                "Turn 18",
+                "",
+                "P1: 6 VP",
+                "P2: 4 VP",
+                "P3: 5 VP",
+                "P4: 5 VP",
+                "",
+                "Leader: P1",
+                "Event:",
+                "- P1 built a city",
+                "- P4 lost Longest Road",
+            ])
+        )
+
+    def test_endgame_plot_tooltip_marks_tied_leader(self):
+        p1 = PlayerNumber.P1
+        p2 = PlayerNumber.P2
+        history = [
+            (18, {
+                p1: PlayerScoreSnapshot(6, 6, 2, 2, 0, 4, 0, False, False),
+                p2: PlayerScoreSnapshot(6, 6, 2, 2, 0, 4, 0, False, False),
+            }),
+        ]
+        players = [
+            SimpleNamespace(player_number=p1, name="P1"),
+            SimpleNamespace(player_number=p2, name="P2"),
+        ]
+
+        tooltips = MainWindow._build_endgame_plot_tooltips(history, players)
+
+        self.assertIn("Leader: P1 and P2 (tied)", tooltips[18])
+
+    def test_replay_feedback_details_include_turn_action_and_advice(self):
+        assessment = SimpleNamespace(
+            your_move="Build a road",
+            internal_score=0.53,
+            score_gap=0.35,
+            judgment_sentence="This road was playable, but it delayed a stronger city plan.",
+            better_move="End the turn",
+            tip="Preserve resources for the city upgrade.",
+        )
+        feedback = SimpleNamespace(
+            board_snapshot=SimpleNamespace(
+                game_state=SimpleNamespace(round_num=18),
+                get_all_players=lambda: [SimpleNamespace(name="P1", is_human=True)],
+            ),
+            assessment=assessment,
+            label="Okay",
+            title="Main Turn",
+            history_summary="[Okay] This road was playable.",
+        )
+
+        details = MainWindow._format_replay_feedback_details(feedback, 42)
+
+        self.assertEqual(details["turn_and_player"], "Turn 18 - P1")
+        self.assertEqual(details["action"], "Action: Build a road")
+        self.assertEqual(details["badge"], "Okay")
+        self.assertEqual(details["score"], "Score: 0.53 · Gap: +0.35")
+        self.assertEqual(
+            details["tutor_feedback"],
+            "Tutor feedback: This road was playable, but it delayed a stronger city plan.",
+        )
+        self.assertEqual(
+            details["advice"],
+            "Better move: End the turn\nTakeaway: Preserve resources for the city upgrade.",
+        )
+        self.assertEqual(details["turn_label"], "Turn 18 / 42")
+
+    def test_tutor_replay_history_is_not_trimmed_with_sidebar_history(self):
+        window = MainWindow.__new__(MainWindow)
+        window.tutor_feedback_history = []
+        window.tutor_feedback_replay_history = []
+        window._update_previous_feedback_button = lambda: None
+
+        feedbacks = [SimpleNamespace(index=i) for i in range(105)]
+        for feedback in feedbacks:
+            MainWindow._append_tutor_feedback_history(window, feedback)
+
+        self.assertEqual(len(window.tutor_feedback_history), 100)
+        self.assertEqual(len(window.tutor_feedback_replay_history), 105)
+        self.assertEqual(window.tutor_feedback_replay_history[0].index, 0)
+        self.assertEqual(window.tutor_feedback_history[0].index, 5)
 
     def test_move_quality_ratio_is_clamped_to_zero_to_one(self):
         self.assertEqual(move_quality_from_ratio(8.0, 10.0), 0.8)

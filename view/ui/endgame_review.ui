@@ -175,15 +175,21 @@
       </item>
       <item>
        <widget class="QTextEdit" name="selectedBreakdownBox">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Fixed" vsizetype="Expanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
         <property name="minimumSize">
          <size>
-          <width>300</width>
+          <width>280</width>
           <height>80</height>
          </size>
         </property>
         <property name="maximumSize">
          <size>
-          <width>300</width>
+          <width>280</width>
           <height>100</height>
          </size>
         </property>
@@ -211,7 +217,7 @@ p, li { white-space: pre-wrap; }
          <widget class="QPushButton" name="main_menu_btn">
           <property name="minimumSize">
            <size>
-            <width>150</width>
+            <width>120</width>
             <height>40</height>
            </size>
           </property>
@@ -238,7 +244,7 @@ p, li { white-space: pre-wrap; }
          <widget class="QPushButton" name="quit_btn">
           <property name="minimumSize">
            <size>
-            <width>150</width>
+            <width>120</width>
             <height>40</height>
            </size>
           </property>
@@ -318,14 +324,14 @@ Render historical board state here</string>
               </widget>
              </item>
              <item>
-              <widget class="QLabel" name="label">
+              <widget class="QLabel" name="turnAndPlayer">
                <property name="text">
                 <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Turn 18 – P1&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
                </property>
               </widget>
              </item>
              <item>
-              <widget class="QLabel" name="label">
+              <widget class="QLabel" name="actionLabel">
                <property name="text">
                 <string>Action: Built a road</string>
                </property>
@@ -334,14 +340,14 @@ Render historical board state here</string>
              <item>
               <layout class="QHBoxLayout">
                <item>
-                <widget class="QLabel" name="badgeOkay">
+                <widget class="QLabel" name="selectedMomentBadge">
                  <property name="text">
                   <string>Okay</string>
                  </property>
                 </widget>
                </item>
                <item>
-                <widget class="QLabel" name="label">
+                <widget class="QLabel" name="scoreLabel">
                  <property name="text">
                   <string>Score: 0.53 · Gap: +0.35</string>
                  </property>
@@ -363,7 +369,7 @@ Render historical board state here</string>
               </layout>
              </item>
              <item>
-              <widget class="QLabel" name="label">
+              <widget class="QLabel" name="tutorFeedback">
                <property name="text">
                 <string>&lt;b&gt;Tutor feedback:&lt;/b&gt;&lt;br/&gt;This road was playable, but ending the turn preserved resources for a stronger city plan.</string>
                </property>
@@ -373,14 +379,14 @@ Render historical board state here</string>
               </widget>
              </item>
              <item>
-              <widget class="QFrame" name="frame">
+              <widget class="QFrame" name="adviceDivider">
                <property name="frameShape">
                 <enum>QFrame::HLine</enum>
                </property>
               </widget>
              </item>
              <item>
-              <widget class="QLabel" name="label">
+              <widget class="QLabel" name="adviceLabel">
                <property name="text">
                 <string>&lt;b&gt;Better move:&lt;/b&gt; End the turn&lt;br/&gt;&lt;span style='color:#6b7280;'&gt;Gap: +0.35 move quality&lt;/span&gt;</string>
                </property>
@@ -412,7 +418,7 @@ Render historical board state here</string>
         <widget class="QFrame" name="panelFrame">
          <layout class="QHBoxLayout">
           <item>
-           <widget class="QPushButton" name="pushButton">
+           <widget class="QPushButton" name="prevTurn">
             <property name="text">
              <string>◀</string>
             </property>
@@ -432,14 +438,14 @@ Render historical board state here</string>
            </widget>
           </item>
           <item>
-           <widget class="QPushButton" name="pushButton">
+           <widget class="QPushButton" name="nextTurn">
             <property name="text">
              <string>▶</string>
             </property>
            </widget>
           </item>
           <item>
-           <widget class="QLabel" name="label">
+           <widget class="QLabel" name="turnLabel">
             <property name="text">
              <string>Turn 18 / 42</string>
             </property>
@@ -478,7 +484,7 @@ One line per player</string>
           <widget class="QFrame" name="panelFrame">
            <layout class="QVBoxLayout">
             <item>
-             <widget class="QLabel" name="label">
+              <widget class="QLabel" name="adviceLabel">
               <property name="font">
                <font>
                 <pointsize>10</pointsize>
@@ -490,7 +496,7 @@ One line per player</string>
              </widget>
             </item>
             <item>
-             <widget class="QLabel" name="label">
+             <widget class="QLabel" name="leadChangeLabel">
               <property name="text">
                <string>P1 took the lead on Turn 26 and held it until the end.</string>
               </property>
@@ -518,7 +524,7 @@ One line per player</string>
              </widget>
             </item>
             <item>
-             <widget class="QLabel" name="label">
+             <widget class="QLabel" name="biggestSwingLabel">
               <property name="text">
                <string>Turn 31: P1 gained Longest Road and jumped by 2 VP.</string>
               </property>
@@ -546,7 +552,7 @@ One line per player</string>
              </widget>
             </item>
             <item>
-             <widget class="QLabel" name="label">
+             <widget class="QLabel" name="closestMomentLabel">
               <property name="text">
                <string>Turn 22: P1 and P4 were tied at 6 VP.</string>
               </property>
