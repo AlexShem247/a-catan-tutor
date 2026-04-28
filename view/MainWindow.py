@@ -4,18 +4,19 @@ import math
 from typing import Dict, Tuple, List, Callable, Optional, Any
 
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QPointF, QEvent, QObject
-from PyQt6.QtGui import QCloseEvent, QIcon, QKeyEvent
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QPoint, QPointF, QEvent, QObject
+from PyQt6.QtGui import QCloseEvent, QCursor, QIcon, QKeyEvent
 import pyqtgraph as pg
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel, QToolButton, QSpacerItem,
-    QSizePolicy, QPushButton, QAbstractScrollArea, QListWidgetItem, QLayout, QFrame, QVBoxLayout
+    QSizePolicy, QPushButton, QAbstractScrollArea, QListWidgetItem, QLayout, QFrame, QVBoxLayout, QCheckBox
 )
 
 from GameController import GameController, PlayerScoreSnapshot
 from ai.actions import Action, ActionType
 from ai.tutor.explanations import ActionExplanation, ExplanationTemplate
-from ai.tutor.feedback import TutorFeedbackExplanation, move_quality_colour
+from ai.tutor.feedback import TutorDecisionType, TutorFeedbackExplanation, move_quality_colour
+from ai.tutor.move_quality import move_quality_label
 from ai.tutor.tutor import TutorStage, TUTOR_STAGE_CONTENT
 from game.Edge import Edge
 from game.Player import PlayerNumber, Player
@@ -89,15 +90,19 @@ class HoverTooltip(QFrame):
     def show_text(self, text: str, global_pos) -> None:
         self.label.setText(text)
         self.adjustSize()
-        local_pos = self.parentWidget().mapFromGlobal(global_pos)
-        x_pos = local_pos.x() + 16
-        y_pos = local_pos.y() + 16
+        if not isinstance(global_pos, QPoint):
+            global_pos = QPoint(int(global_pos.x()), int(global_pos.y()))
 
-        parent_rect = self.parentWidget().rect()
-        if x_pos + self.width() > parent_rect.right():
-            x_pos = max(0, local_pos.x() - self.width() - 16)
-        if y_pos + self.height() > parent_rect.bottom():
-            y_pos = max(0, local_pos.y() - self.height() - 16)
+        x_pos = global_pos.x() + 16
+        y_pos = global_pos.y() + 16
+
+        screen = self.parentWidget().screen() if self.parentWidget() is not None else self.screen()
+        if screen is not None:
+            screen_rect = screen.availableGeometry()
+            if x_pos + self.width() > screen_rect.right():
+                x_pos = max(screen_rect.left(), global_pos.x() - self.width() - 16)
+            if y_pos + self.height() > screen_rect.bottom():
+                y_pos = max(screen_rect.top(), global_pos.y() - self.height() - 16)
 
         self.move(x_pos, y_pos)
         self.show()
@@ -164,10 +169,19 @@ class MainWindow(QMainWindow):
         self.start_menu = uic.loadUi("view/ui/start_menu.ui")
         self.endgame_replay_canvas = SquareCanvas()
         self.endgame_replay_canvas.setMinimumSize(0, 0)
-        self.endgame_replay_canvas.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
+        self.endgame_replay_canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.endgame_replay_canvas.disable_interactivity = True
+        self.endgame_review_menu.replayMainLayout.removeWidget(self.endgame_review_menu.selectedMomentScrollArea)
+        self.endgame_replay_splitter = QSplitter(Qt.Orientation.Horizontal, self.endgame_review_menu.replayTab)
+        self.endgame_replay_splitter.setChildrenCollapsible(False)
+        self.endgame_replay_splitter.setHandleWidth(8)
+        self.endgame_replay_splitter.addWidget(self.endgame_replay_canvas)
+        self.endgame_replay_splitter.addWidget(self.endgame_review_menu.selectedMomentScrollArea)
+        self.endgame_replay_splitter.setStretchFactor(0, 1)
+        self.endgame_replay_splitter.setStretchFactor(1, 1)
+        self.endgame_replay_splitter.splitterMoved.connect(self._mark_endgame_replay_splitter_adjusted)
         self.endgame_review_menu.replayMainLayout.replaceWidget(
-            self.endgame_review_menu.boardPlaceholder, self.endgame_replay_canvas
+            self.endgame_review_menu.boardPlaceholder, self.endgame_replay_splitter
         )
         self.endgame_review_menu.boardPlaceholder.setParent(None)
         self.endgame_review_menu.boardPlaceholder.deleteLater()
@@ -196,6 +210,9 @@ class MainWindow(QMainWindow):
         self.endgame_replay_feedback: List[TutorFeedbackExplanation] = []
         self.endgame_replay_index: int | None = None
         self.endgame_total_turns = 0
+        self.endgame_replay_splitter_user_adjusted = False
+        self.endgame_replay_splitter_initialised = False
+        self.endgame_feedback_filter_checkboxes: Dict[str, QCheckBox] = {}
         scene = self.victory_points_plot.scene()
         if scene is not None and hasattr(scene, "sigMouseMoved"):
             scene.sigMouseMoved.connect(self._handle_endgame_plot_hover)
@@ -203,9 +220,18 @@ class MainWindow(QMainWindow):
         self.rule_window = uic.loadUi("view/ui/rules_window.ui")
         self.safe_connect(self.start_menu.help_btn, self.show_rules)
         self.safe_connect(self.main_menu.help_btn, self.show_rules)
+        self.tutor_menu.title_label.setText(
+            (
+                "<html><head/><body><p>"
+                "<img src=\"assets/tutor.png\" width=\"30\" height=\"30\"/> "
+                "<span style=\"font-weight:700;\">Tutor Window</span>"
+                "</p></body></html>"
+            )
+        )
         self.main_menu.home_btn.setText("")
         self.main_menu.home_btn.setIcon(QIcon(HOME_ICON))
         self.main_menu.home_btn.setIconSize(self.main_menu.home_btn.size())
+        self._configure_endgame_feedback_filters()
 
         self.history_nav_widget = QWidget(self.tutor_menu)
         self.history_nav_layout = QHBoxLayout(self.history_nav_widget)
@@ -536,7 +562,7 @@ class MainWindow(QMainWindow):
             self.hover_tooltip.hide()
             return
 
-        global_pos = self.victory_points_plot.mapToGlobal(self.victory_points_plot.mapFromScene(scene_pos))
+        global_pos = QCursor.pos()
         if self.active_endgame_tooltip_round == nearest_round and self.last_endgame_tooltip_text == tooltip:
             self.hover_tooltip.show_text(tooltip, global_pos)
             return
@@ -544,6 +570,18 @@ class MainWindow(QMainWindow):
         self.active_endgame_tooltip_round = nearest_round
         self.last_endgame_tooltip_text = tooltip
         self.hover_tooltip.show_text(tooltip, global_pos)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.active_endgame_tooltip_round = None
+        self.last_endgame_tooltip_text = None
+        self.hover_tooltip.hide()
+
+    def leaveEvent(self, event):
+        self.active_endgame_tooltip_round = None
+        self.last_endgame_tooltip_text = None
+        self.hover_tooltip.hide()
+        super().leaveEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent):
         if event.key() == Qt.Key.Key_F8 and self._try_apply_tutor_recommended_move():
@@ -692,8 +730,9 @@ class MainWindow(QMainWindow):
         )
         self.victory_points_plot.setMinimumSize(0, 0)
         self.endgame_replay_canvas.setMinimumSize(0, 0)
+        self.endgame_replay_canvas.setMinimumWidth(280)
         self.endgame_review_menu.selectedMomentScrollArea.setMinimumSize(0, 0)
-        self.endgame_review_menu.selectedMomentScrollArea.setMinimumWidth(340)
+        self.endgame_review_menu.selectedMomentScrollArea.setMinimumWidth(280)
         self.endgame_review_menu.selectedBreakdownBox.viewport().setCursor(Qt.CursorShape.ArrowCursor)
         self.endgame_review_menu.titleWinnerLabel.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
@@ -704,14 +743,23 @@ class MainWindow(QMainWindow):
         self.endgame_review_menu.selectedMomentScrollArea.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
-        self.endgame_review_menu.replayMainLayout.setStretch(0, 0)
-        self.endgame_review_menu.replayMainLayout.setStretch(1, 1)
+        self.endgame_replay_splitter.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        self.endgame_review_menu.replayMainLayout.setStretch(0, 1)
         self.endgame_review_menu.main_menu_btn.setSizePolicy(
             QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred
         )
         self.endgame_review_menu.quit_btn.setSizePolicy(
             QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred
         )
+
+    def _configure_endgame_feedback_filters(self) -> None:
+        checkboxes = self.endgame_review_menu.feedbackTab.findChildren(QCheckBox)
+        for checkbox in checkboxes:
+            label = checkbox.text().strip().lower()
+            self.endgame_feedback_filter_checkboxes[label] = checkbox
+            checkbox.toggled.connect(self._refresh_endgame_feedback_list)
 
     @staticmethod
     def _strip_html(text: str) -> str:
@@ -732,12 +780,146 @@ class MainWindow(QMainWindow):
             "Poor": "background: #fee2e2; color: #991b1b; border-radius: 9px; padding: 3px 8px; font-weight: 700;",
             "Okay": "background: #fef3c7; color: #92400e; border-radius: 9px; padding: 3px 8px; font-weight: 700;",
             "Good": "background: #dcfce7; color: #166534; border-radius: 9px; padding: 3px 8px; font-weight: 700;",
-            "Excellent": "background: #dcfce7; color: #166534; border-radius: 9px; padding: 3px 8px; font-weight: 700;",
+            "Excellent": "background: #dbeafe; color: #1d4ed8; border-radius: 9px; padding: 3px 8px; font-weight: 700;",
         }
         return styles.get(
             label,
             "background: #e5e7eb; color: #374151; border-radius: 9px; padding: 3px 8px; font-weight: 700;",
         )
+
+    @staticmethod
+    def _endgame_feedback_card_stylesheet() -> str:
+        return (
+            "QPushButton#endgameFeedbackCard {"
+            "background: #e5e7eb;"
+            "border: 1px solid #d1d5db;"
+            "border-radius: 8px;"
+            "padding: 10px 12px;"
+            "text-align: left;"
+            "}"
+            "QPushButton#endgameFeedbackCard:hover {"
+            "background: #ffffff;"
+            "border: 1px solid #9ca3af;"
+            "}"
+        )
+
+    @staticmethod
+    def _compact_feedback_action(action_text: str) -> str:
+        cleaned = " ".join((action_text or "").split()).strip()
+        if not cleaned:
+            return "Move"
+
+        replacements = {
+            "ending the turn": "End Turn",
+            "building a road": "Built Road",
+            "building a settlement": "Built Settlement",
+            "upgrading to a city": "Built City",
+            "buying a development card": "Bought Development Card",
+            "playing a development card": "Played Development Card",
+            "making a bank trade": "Bank Trade",
+            "making a player trade": "Player Trade",
+            "move the robber": "Robber Placement",
+            "discard resources": "Discarded Resources",
+        }
+        lowered = cleaned.lower()
+        if lowered in replacements:
+            return replacements[lowered]
+        return cleaned.title()
+
+    @classmethod
+    def _feedback_card_title(cls, feedback: TutorFeedbackExplanation) -> str:
+        turn_num = getattr(feedback.board_snapshot.game_state, "round_num", 0)
+        action_text = cls._compact_feedback_action(feedback.assessment.your_move or feedback.title)
+        return f"Turn {turn_num} - {action_text}"
+
+    def _endgame_feedback_filter_state(self) -> Dict[str, bool]:
+        def is_checked(label: str) -> bool:
+            checkbox = self.endgame_feedback_filter_checkboxes.get(label)
+            return checkbox.isChecked() if checkbox is not None else False
+
+        return {
+            "poor": is_checked("biggest mistakes"),
+            "okay": is_checked("okay moves"),
+            "good": is_checked("good moves"),
+            "excellent": is_checked("excellent moves"),
+        }
+
+    def _feedback_matches_filter(self, feedback: TutorFeedbackExplanation) -> bool:
+        filter_state = self._endgame_feedback_filter_state()
+        label = feedback.label.strip().lower()
+        if label == "poor":
+            return filter_state["poor"]
+        if label == "okay":
+            return filter_state["okay"]
+        if label == "good":
+            return filter_state["good"]
+        if label == "excellent":
+            return filter_state["excellent"]
+        return True
+
+    def _jump_to_endgame_feedback(self, index: int) -> None:
+        self.endgame_review_menu.reviewTabs.setCurrentIndex(0)
+        self._render_endgame_replay_feedback(index)
+
+    def _build_endgame_feedback_card(self, feedback: TutorFeedbackExplanation, index: int) -> QPushButton:
+        card_btn = QPushButton()
+        card_btn.setObjectName("endgameFeedbackCard")
+        card_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        card_btn.setStyleSheet(self._endgame_feedback_card_stylesheet())
+        card_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+
+        layout = QVBoxLayout(card_btn)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        title_label = QLabel(self._feedback_card_title(feedback), card_btn)
+        title_label.setStyleSheet("font-weight: 600; color: #111827;")
+        title_label.setWordWrap(True)
+        layout.addWidget(title_label)
+
+        score_label = QLabel(
+            f"Score: {feedback.assessment.internal_score:.2f} . Gap: +{feedback.assessment.score_gap:.2f}",
+            card_btn,
+        )
+        score_label.setStyleSheet("color: #374151;")
+        score_label.setWordWrap(True)
+        layout.addWidget(score_label)
+
+        body_label = QLabel(feedback.assessment.judgment_sentence.strip(), card_btn)
+        body_label.setStyleSheet("color: #111827;")
+        body_label.setWordWrap(True)
+        layout.addWidget(body_label)
+
+        badge_label = QLabel(feedback.label, card_btn)
+        badge_label.setStyleSheet(self._endgame_badge_styles(feedback.label))
+        badge_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        layout.addWidget(badge_label, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        card_btn.clicked.connect(
+            lambda _checked=False, replay_index=index: self._jump_to_endgame_feedback(replay_index)
+        )
+        return card_btn
+
+    def _refresh_endgame_feedback_list(self) -> None:
+        layout = self.endgame_review_menu.feedbackListLayout
+        self._clear_layout(layout)
+
+        visible_feedback = [
+            (index, feedback)
+            for index, feedback in enumerate(self.endgame_replay_feedback)
+            if self._feedback_matches_filter(feedback)
+        ]
+
+        if not visible_feedback:
+            empty_label = QLabel("No feedback items match the selected filters.")
+            empty_label.setStyleSheet("color: #6b7280;")
+            empty_label.setWordWrap(True)
+            layout.addWidget(empty_label)
+        else:
+            for index, feedback in visible_feedback:
+                layout.addWidget(self._build_endgame_feedback_card(feedback, index))
+
+        layout.addStretch(1)
 
     @classmethod
     def _replay_feedback_player_name(cls, feedback: TutorFeedbackExplanation) -> str:
@@ -783,23 +965,144 @@ class MainWindow(QMainWindow):
             "turn_label": f"Turn {turn_num} / {max(total_turns, turn_num)}",
         }
 
+    @staticmethod
+    def _overall_performance_summary(feedback_items: List[TutorFeedbackExplanation]) -> Dict[str, str]:
+        if not feedback_items:
+            return {
+                "turn_and_player": "",
+                "action": "Your Performance",
+                "badge": "N/A",
+                "score": "Overall: N/A",
+                "tutor_feedback": "Strengths:\n- No tutor feedback history was recorded.",
+                "advice": "Weaknesses:\n- No tutor feedback history was recorded.",
+                "turn_label": "Game Summary",
+            }
+
+        average_score = sum(item.assessment.internal_score for item in feedback_items) / len(feedback_items)
+        overall_label = move_quality_label(average_score)
+        category_scores: Dict[str, List[float]] = {}
+        for feedback in feedback_items:
+            category = MainWindow._performance_category(feedback)
+            category_scores.setdefault(category, []).append(feedback.assessment.internal_score)
+
+        ranked_categories = sorted(
+            (
+                (category, sum(scores) / len(scores), len(scores))
+                for category, scores in category_scores.items()
+            ),
+            key=lambda item: (item[1], item[2]),
+            reverse=True,
+        )
+
+        strengths = [
+            MainWindow._performance_line(category, score, True)
+            for category, score, _count in ranked_categories
+            if score >= 0.6
+        ][:2]
+        weaknesses = [
+            MainWindow._performance_line(category, score, False)
+            for category, score, _count in sorted(ranked_categories, key=lambda item: (item[1], -item[2]))
+            if score < 0.55
+        ][:2]
+
+        if not strengths:
+            strengths = [
+                MainWindow._performance_line(category, score, True)
+                for category, score, _count in ranked_categories[:2]
+            ]
+        if not weaknesses:
+            fallback = sorted(ranked_categories, key=lambda item: (item[1], -item[2]))
+            weaknesses = [
+                MainWindow._performance_line(category, score, False)
+                for category, score, _count in fallback[:2]
+            ]
+
+        return {
+            "turn_and_player": "",
+            "action": "Your Performance",
+            "badge": overall_label,
+            "score": f"Overall: {overall_label} ({average_score:.2f})",
+            "tutor_feedback": "Strengths:\n" + "\n".join(f"- {line}" for line in strengths),
+            "advice": "Weaknesses:\n" + "\n".join(f"- {line}" for line in weaknesses),
+            "turn_label": "Game Summary",
+        }
+
+    @staticmethod
+    def _performance_category(feedback: TutorFeedbackExplanation) -> str:
+        decision_type = feedback.assessment.decision_type
+        move_text = (feedback.assessment.your_move or "").lower()
+        if decision_type == TutorDecisionType.ROBBER:
+            return "robber"
+        if decision_type == TutorDecisionType.DISCARD:
+            return "discard"
+        if decision_type in {TutorDecisionType.TRADE_PARTNER, TutorDecisionType.TRADE_RESPONSE}:
+            return "trade"
+        if decision_type in {TutorDecisionType.YEAR_OF_PLENTY, TutorDecisionType.MONOPOLY}:
+            return "dev_cards"
+        if decision_type in {TutorDecisionType.OPENING_SETTLEMENT, TutorDecisionType.OPENING_ROAD}:
+            return "opening"
+        if "ending the turn" in move_text:
+            return "turn_timing"
+        if any(text in move_text for text in ("building a settlement", "building a road", "upgrading to a city")):
+            return "builds"
+        return "planning"
+
+    @staticmethod
+    def _performance_line(category: str, score: float, positive: bool) -> str:
+        if positive:
+            lines = {
+                "robber": "Robber placement (consistent high-quality choices)",
+                "discard": "Discard decisions (protected key resources well)",
+                "trade": "Trade decisions (found efficient exchanges)",
+                "dev_cards": "Development card usage (timed card value well)",
+                "opening": "Opening placements (set up a stable start)",
+                "turn_timing": "Turn timing (rarely wasted turns)",
+                "builds": "Build choices (kept city and settlement timing on track)",
+                "planning": "Main-turn planning (kept useful lines open)",
+            }
+            return lines.get(category, "General play (steady decisions)")
+
+        lines = {
+            "robber": "Robber placement (missed stronger blocks or steals)",
+            "discard": "Discard decisions (lost key resources multiple times)",
+            "trade": "Trade decisions (gave up too much value)",
+            "dev_cards": "Development card usage (left card value on the table)",
+            "opening": "Opening placements (gave up some early efficiency)",
+            "turn_timing": "Turn timing (ended turns with stronger lines still available)",
+            "builds": "Missed builds (delayed cities or settlements)",
+            "planning": "Main-turn planning (stronger follow-up lines were available)",
+        }
+        default_line = "General play (several decisions could be tightened)"
+        if score < 0.25 and category == "turn_timing":
+            return "Turn timing (gave away full turns of tempo)"
+        return lines.get(category, default_line)
+
     def _render_endgame_replay_feedback(self, index: int) -> None:
-        if not self.endgame_replay_feedback:
+        if not self.endgame_replay_feedback and not hasattr(self, "endgame_final_board_source"):
             return
 
-        index = max(0, min(index, len(self.endgame_replay_feedback) - 1))
+        max_index = len(self.endgame_replay_feedback)
+        index = max(0, min(index, max_index))
         self.endgame_replay_index = index
-        feedback = self.endgame_replay_feedback[index]
-        details = self._format_replay_feedback_details(feedback, self.endgame_total_turns)
+        is_summary = index == len(self.endgame_replay_feedback)
+        if index == len(self.endgame_replay_feedback):
+            details = self._overall_performance_summary(self.endgame_replay_feedback)
+            self.endgame_replay_canvas.display_board(self.endgame_final_board_source)
+            self.endgame_replay_canvas.clear_planned_builds()
+            self.endgame_replay_canvas.clear_feedback_builds()
+        else:
+            feedback = self.endgame_replay_feedback[index]
+            details = self._format_replay_feedback_details(feedback, self.endgame_total_turns)
 
-        self.endgame_replay_canvas.display_board(feedback.board_snapshot)
-        self.endgame_replay_canvas.clear_planned_builds()
-        self.endgame_replay_canvas.clear_feedback_builds()
-        if feedback.recommended_visual_plan:
-            self.endgame_replay_canvas.render_planned_builds(feedback.recommended_visual_plan)
-        if feedback.visual_build_plan:
-            self.endgame_replay_canvas.render_feedback_builds(feedback.visual_build_plan)
+            self.endgame_replay_canvas.display_board(feedback.board_snapshot)
+            self.endgame_replay_canvas.clear_planned_builds()
+            self.endgame_replay_canvas.clear_feedback_builds()
+            if feedback.recommended_visual_plan:
+                self.endgame_replay_canvas.render_planned_builds(feedback.recommended_visual_plan)
+            if feedback.visual_build_plan:
+                self.endgame_replay_canvas.render_feedback_builds(feedback.visual_build_plan)
 
+        self.endgame_review_menu.sectionTitle.setText("Game Summary" if is_summary else "Selected Moment")
         self.endgame_review_menu.turnAndPlayer.setText(details["turn_and_player"])
         self.endgame_review_menu.actionLabel.setText(details["action"])
         self.endgame_review_menu.selectedMomentBadge.setText(details["badge"])
@@ -814,7 +1117,7 @@ class MainWindow(QMainWindow):
         slider.setValue(index)
         slider.blockSignals(was_blocked)
         self.endgame_review_menu.prevTurn.setEnabled(index > 0)
-        self.endgame_review_menu.nextTurn.setEnabled(index < len(self.endgame_replay_feedback) - 1)
+        self.endgame_review_menu.nextTurn.setEnabled(index < len(self.endgame_replay_feedback))
         self._sync_endgame_replay_layout()
 
     def _show_previous_endgame_replay_feedback(self) -> None:
@@ -827,25 +1130,36 @@ class MainWindow(QMainWindow):
             return
         self._render_endgame_replay_feedback(self.endgame_replay_index + 1)
 
+    def _mark_endgame_replay_splitter_adjusted(self) -> None:
+        if self.endgame_replay_splitter_initialised:
+            self.endgame_replay_splitter_user_adjusted = True
+
+    def _set_endgame_replay_splitter_sizes(self, prefer_equal: bool = False) -> None:
+        splitter = self.endgame_replay_splitter
+        if splitter is None:
+            return
+
+        total_width = max(0, splitter.width())
+        if total_width <= 0:
+            return
+
+        if prefer_equal or not self.endgame_replay_splitter_user_adjusted:
+            left_width = max(self.endgame_replay_canvas.minimumWidth(), total_width // 2)
+            right_width = max(
+                self.endgame_review_menu.selectedMomentScrollArea.minimumWidth(),
+                total_width - left_width,
+            )
+            if left_width + right_width > total_width:
+                left_width = max(self.endgame_replay_canvas.minimumWidth(), total_width - right_width)
+            splitter.setSizes([left_width, right_width])
+            self.endgame_replay_splitter_initialised = True
+
     def _sync_endgame_replay_layout(self) -> None:
         replay_tab = self.endgame_review_menu.replayTab
         if not replay_tab.isVisible():
             return
 
-        layout = self.endgame_review_menu.replayMainLayout
-        margins = layout.contentsMargins()
-        spacing = layout.spacing()
-        available_width = max(0, replay_tab.width() - margins.left() - margins.right() - spacing)
-        available_height = max(
-            280,
-            min(
-                self.endgame_review_menu.selectedMomentScrollArea.height(),
-                replay_tab.height(),
-            ),
-        )
-        advice_min_width = 340
-        canvas_width = max(260, min(available_height, max(260, available_width - advice_min_width)))
-        self.endgame_replay_canvas.setFixedWidth(canvas_width)
+        self._set_endgame_replay_splitter_sizes(prefer_equal=not self.endgame_replay_splitter_initialised)
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if watched in {
@@ -1188,7 +1502,13 @@ class MainWindow(QMainWindow):
         winner_total_vp = winner.calc_victory_points()[1]
 
         self.endgame_review_menu.titleWinnerLabel.setText(
-            f"🏆 Winner: {winner.name}\n{winner_total_vp} victory points"
+            (
+                "<html><head/><body><p>"
+                "<img src=\"assets/trophy.png\" width=\"24\" height=\"24\"/> "
+                f"<span style=\"font-weight:700;\">Winner: {winner.name}</span><br/>"
+                f"{winner_total_vp} victory points"
+                "</p></body></html>"
+            )
         )
 
         ranking_layout = self.endgame_review_menu.rankingCardsLayout
@@ -1220,11 +1540,15 @@ class MainWindow(QMainWindow):
             self._select_endgame_rank_card(self.endgame_rank_cards[0], winner)
         self._populate_tutor_endgame_performance(controller)
         self.endgame_replay_feedback = list(self.tutor_feedback_replay_history)
+        self._refresh_endgame_feedback_list()
+        self.endgame_final_board_source = controller
+        self.endgame_replay_splitter_user_adjusted = False
+        self.endgame_replay_splitter_initialised = False
         history = controller.get_victory_point_history()
         self.endgame_total_turns = max((round_num for round_num, _ in history), default=0)
         replay_slider = self.endgame_review_menu.timelineSlider
         replay_slider.setMinimum(0)
-        replay_slider.setMaximum(max(0, len(self.endgame_replay_feedback) - 1))
+        replay_slider.setMaximum(max(0, len(self.endgame_replay_feedback)))
         replay_slider.setEnabled(bool(self.endgame_replay_feedback))
         self.safe_connect(self.endgame_review_menu.prevTurn, self._show_previous_endgame_replay_feedback)
         self.safe_connect(self.endgame_review_menu.nextTurn, self._show_next_endgame_replay_feedback)
@@ -1234,7 +1558,7 @@ class MainWindow(QMainWindow):
             pass
         replay_slider.valueChanged.connect(self._render_endgame_replay_feedback)
         if self.endgame_replay_feedback:
-            self._render_endgame_replay_feedback(len(self.endgame_replay_feedback) - 1)
+            self._render_endgame_replay_feedback(len(self.endgame_replay_feedback))
         else:
             self.endgame_replay_canvas.clear_shapes()
             self.endgame_review_menu.turnAndPlayer.setText("No replay moments recorded")
@@ -1496,12 +1820,12 @@ class MainWindow(QMainWindow):
 
     def _concise_explanation_html(self, explanation: ActionExplanation) -> Tuple[str, str]:
         concise_title, concise_explanation = explanation.generate_text_concise()
-        move_quality_label = explanation.tutor_move_quality_label
-        move_quality_colour_value = self._move_quality_colour(move_quality_label)
+        quality_label = explanation.tutor_move_quality_label
+        move_quality_colour_value = self._move_quality_colour(quality_label)
         concise_html = (
             f"{concise_explanation}"
             f"<br><br><b>Move Quality:</b> "
-            f"<span style=\"color: {move_quality_colour_value};\"><b>{escape(move_quality_label)}</b></span>"
+            f"<span style=\"color: {move_quality_colour_value};\"><b>{escape(quality_label)}</b></span>"
         )
         return concise_title, concise_html
 

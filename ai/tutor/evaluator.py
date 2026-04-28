@@ -8,9 +8,11 @@ from ai.simulation.board_sim_utils import find_edge_toward_vertex, get_legal_set
 from ai.tutor.explanations import ActionExplanation, ReasonType, RoadExplanationKind
 from ai.tutor.feedback import TutorAssessment, TutorDecisionType, TutorFeedbackExplanation
 from ai.tutor.move_quality import (
+    clamp_move_quality,
     initial_road_connection_move_quality,
     initial_road_expansion_move_quality,
     initial_road_flexible_move_quality,
+    move_quality_label,
 )
 from game.Edge import Edge
 from game.Game import Game
@@ -346,6 +348,11 @@ class TutorEvaluator:
             best_explanation: ActionExplanation,
     ) -> TutorAssessment:
         same_choice = actual_explanation.chosen_action == best_explanation.chosen_action
+        display_score, display_best_score = self._display_scores_for_feedback(
+            actual_explanation,
+            best_explanation,
+            same_choice,
+        )
         strengths = self._reason_sentences(actual_explanation, actual_explanation.sorted_reasons_for(), limit=2)
         weaknesses = self._weakness_sentences(actual_explanation, best_explanation, limit=2) if not same_choice else []
         better_move_reasons = self._better_move_reason_sentences(
@@ -371,9 +378,9 @@ class TutorEvaluator:
 
         return TutorAssessment(
             decision_type=decision_type,
-            internal_score=actual_explanation.move_quality,
-            best_internal_score=best_explanation.move_quality,
-            label=actual_explanation.move_quality_label,
+            internal_score=display_score,
+            best_internal_score=display_best_score,
+            label=move_quality_label(display_score),
             judgment_sentence=judgment,
             your_move=self._move_sentence(actual_explanation),
             better_move=better_move,
@@ -382,6 +389,38 @@ class TutorEvaluator:
             better_move_reasons=better_move_reasons,
             tip=self._TIP_BY_DECISION[decision_type],
         )
+
+    @staticmethod
+    def _display_scores_for_feedback(
+            actual_explanation: ActionExplanation,
+            best_explanation: ActionExplanation,
+            same_choice: bool,
+    ) -> Tuple[float, float]:
+        actual_score = actual_explanation.move_quality
+        best_score = best_explanation.move_quality
+
+        if not same_choice:
+            return actual_score, best_score
+
+        chosen_action = actual_explanation.chosen_action
+        chosen_candidate = actual_explanation.chosen_candidate
+
+        if (
+            chosen_action.type == ActionType.END_TURN
+            and float(getattr(chosen_candidate, "etw_before", 0.0) or 0.0) <= 1e-6
+        ):
+            return 1.0, 1.0
+
+        floor_score = 0.3
+        if chosen_action.type == ActionType.BUILD:
+            payload = chosen_action.payload
+            buildable = payload[0] if isinstance(payload, tuple) and payload else None
+            if buildable in {Buildable.SETTLEMENT, Buildable.CITY}:
+                floor_score = 0.5
+
+        adjusted_score = clamp_move_quality(max(actual_score, floor_score))
+        adjusted_best_score = clamp_move_quality(max(best_score, adjusted_score))
+        return adjusted_score, adjusted_best_score
 
     def _distinct_reasons_from_seed(self, candidates: List[str], existing: List[str], limit: int) -> List[str]:
         selected: List[str] = []

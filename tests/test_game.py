@@ -8,6 +8,7 @@ from ai.actions import Action, ActionType, Phase
 from ai.BasicAI import BasicAI
 from ai.simulation.EtwEstimator import EtwEstimator
 from ai.simulation.SimGame import make_sim_game_for_player
+from ai.tutor.feedback import TutorDecisionType
 from ai.tutor.move_quality import (
     initial_road_connection_move_quality,
     initial_road_flexible_move_quality,
@@ -448,6 +449,103 @@ class TestGame(unittest.TestCase):
             "Better move: End the turn\nTakeaway: Preserve resources for the city upgrade.",
         )
         self.assertEqual(details["turn_label"], "Turn 18 / 42")
+
+    def test_feedback_card_title_uses_turn_and_compact_action(self):
+        feedback = SimpleNamespace(
+            board_snapshot=SimpleNamespace(game_state=SimpleNamespace(round_num=18)),
+            assessment=SimpleNamespace(your_move="building a road"),
+            title="Main Turn",
+        )
+
+        title = MainWindow._feedback_card_title(feedback)
+
+        self.assertEqual(title, "Turn 18 - Built Road")
+
+    def test_feedback_filter_maps_labels_to_requested_groups(self):
+        window = MainWindow.__new__(MainWindow)
+        window.endgame_feedback_filter_checkboxes = {
+            "biggest mistakes": SimpleNamespace(isChecked=lambda: True),
+            "okay moves": SimpleNamespace(isChecked=lambda: False),
+            "good moves": SimpleNamespace(isChecked=lambda: True),
+            "excellent moves": SimpleNamespace(isChecked=lambda: False),
+        }
+
+        self.assertTrue(MainWindow._feedback_matches_filter(window, SimpleNamespace(label="Poor")))
+        self.assertFalse(MainWindow._feedback_matches_filter(window, SimpleNamespace(label="Okay")))
+        self.assertTrue(MainWindow._feedback_matches_filter(window, SimpleNamespace(label="Good")))
+        self.assertFalse(MainWindow._feedback_matches_filter(window, SimpleNamespace(label="Excellent")))
+
+    def test_feedback_card_title_uses_turn_and_compact_action(self):
+        feedback = SimpleNamespace(
+            board_snapshot=SimpleNamespace(game_state=SimpleNamespace(round_num=18)),
+            assessment=SimpleNamespace(your_move="building a road"),
+            title="Main Turn",
+        )
+
+        title = MainWindow._feedback_card_title(feedback)
+
+        self.assertEqual(title, "Turn 18 - Built Road")
+
+    def test_feedback_filter_maps_poor_okay_good_and_excellent(self):
+        window = MainWindow.__new__(MainWindow)
+        window.endgame_feedback_filter_checkboxes = {
+            "biggest mistakes": SimpleNamespace(isChecked=lambda: True),
+            "okay moves": SimpleNamespace(isChecked=lambda: False),
+            "good moves": SimpleNamespace(isChecked=lambda: True),
+            "excellent moves": SimpleNamespace(isChecked=lambda: False),
+        }
+
+        poor_feedback = SimpleNamespace(label="Poor")
+        okay_feedback = SimpleNamespace(label="Okay")
+        good_feedback = SimpleNamespace(label="Good")
+        excellent_feedback = SimpleNamespace(label="Excellent")
+
+        self.assertTrue(MainWindow._feedback_matches_filter(window, poor_feedback))
+        self.assertFalse(MainWindow._feedback_matches_filter(window, okay_feedback))
+        self.assertTrue(MainWindow._feedback_matches_filter(window, good_feedback))
+        self.assertFalse(MainWindow._feedback_matches_filter(window, excellent_feedback))
+
+    def test_overall_performance_summary_uses_final_summary_format(self):
+        feedbacks = [
+            SimpleNamespace(
+                assessment=SimpleNamespace(
+                    decision_type=TutorDecisionType.ROBBER,
+                    your_move="Move the robber",
+                    internal_score=0.9,
+                )
+            ),
+            SimpleNamespace(
+                assessment=SimpleNamespace(
+                    decision_type=TutorDecisionType.MAIN_TURN,
+                    your_move="Ending the turn",
+                    internal_score=0.75,
+                )
+            ),
+            SimpleNamespace(
+                assessment=SimpleNamespace(
+                    decision_type=TutorDecisionType.DISCARD,
+                    your_move="Discard resources",
+                    internal_score=0.2,
+                )
+            ),
+            SimpleNamespace(
+                assessment=SimpleNamespace(
+                    decision_type=TutorDecisionType.MAIN_TURN,
+                    your_move="Upgrading to a city",
+                    internal_score=0.3,
+                )
+            ),
+        ]
+
+        summary = MainWindow._overall_performance_summary(feedbacks)
+
+        self.assertEqual(summary["turn_and_player"], "")
+        self.assertEqual(summary["action"], "Your Performance")
+        self.assertEqual(summary["badge"], "Good")
+        self.assertEqual(summary["score"], "Overall: Good (0.54)")
+        self.assertIn("Robber placement", summary["tutor_feedback"])
+        self.assertIn("Turn timing", summary["tutor_feedback"])
+        self.assertIn("Discard decisions", summary["advice"])
 
     def test_tutor_replay_history_is_not_trimmed_with_sidebar_history(self):
         window = MainWindow.__new__(MainWindow)

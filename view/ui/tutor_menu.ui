@@ -52,7 +52,7 @@
         <string notr="true">font-weight: bold;</string>
        </property>
        <property name="text">
-        <string>🎓 Tutor Window</string>
+        <string>Tutor Window</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>

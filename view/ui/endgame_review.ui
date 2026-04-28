@@ -84,7 +84,7 @@
          </size>
         </property>
         <property name="text">
-         <string>🏆 Winner: P1
+         <string>Winner: P1
 10 victory points</string>
         </property>
        </widget>
@@ -269,7 +269,7 @@ p, li { white-space: pre-wrap; }
    <item>
     <widget class="QTabWidget" name="reviewTabs">
      <property name="currentIndex">
-      <number>0</number>
+      <number>2</number>
      </property>
      <widget class="QWidget" name="replayTab">
       <attribute name="title">
@@ -311,8 +311,8 @@ Render historical board state here</string>
              <rect>
               <x>0</x>
               <y>0</y>
-              <width>475</width>
-              <height>545</height>
+              <width>338</width>
+              <height>418</height>
              </rect>
             </property>
             <layout class="QVBoxLayout" name="selectedMomentLayout">
@@ -484,7 +484,7 @@ One line per player</string>
           <widget class="QFrame" name="panelFrame">
            <layout class="QVBoxLayout">
             <item>
-              <widget class="QLabel" name="adviceLabel">
+             <widget class="QLabel" name="adviceLabel">
               <property name="font">
                <font>
                 <pointsize>10</pointsize>
@@ -613,6 +613,16 @@ One line per player</string>
            <widget class="QCheckBox" name="checkBox">
             <property name="text">
              <string>Good moves</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="checkBox_2">
+            <property name="text">
+             <string>Excellent moves</string>
             </property>
             <property name="checked">
              <bool>true</bool>

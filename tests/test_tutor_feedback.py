@@ -72,6 +72,42 @@ class TestTutorFeedback(unittest.TestCase):
         self.assertFalse(assessment.top_weaknesses)
         self.assertIn("matched the tutor's preferred move", assessment.judgment_sentence)
 
+    def test_matching_city_build_is_never_scored_as_poor(self):
+        explanation = self._build_explanation(
+            Action(ActionType.BUILD, (Buildable.CITY, None)),
+            [Reason(ReasonType.FASTEST_PROGRESS, ReasonLabel.PLAN_CITY_VALUE, 1.0)],
+            [],
+            move_quality=0.0,
+        )
+
+        assessment = self.evaluator._build_assessment(TutorDecisionType.MAIN_TURN, explanation, explanation)
+
+        self.assertEqual(assessment.internal_score, 0.5)
+        self.assertEqual(assessment.best_internal_score, 0.5)
+        self.assertEqual(assessment.label, "Good")
+
+    def test_matching_winning_end_turn_scores_as_excellent(self):
+        candidate = CandidateExplanation(
+            action=Action(ActionType.END_TURN),
+            full_plan=[Action(ActionType.END_TURN)],
+            etw_before=0.0,
+            etw_after=0.0,
+            etw_delta=0.0,
+            reasons_for=[],
+            reasons_against=[],
+        )
+        explanation = ActionExplanation(
+            chosen_action=Action(ActionType.END_TURN),
+            chosen_candidate=candidate,
+            move_quality=0.0,
+        )
+
+        assessment = self.evaluator._build_assessment(TutorDecisionType.MAIN_TURN, explanation, explanation)
+
+        self.assertEqual(assessment.internal_score, 1.0)
+        self.assertEqual(assessment.best_internal_score, 1.0)
+        self.assertEqual(assessment.label, "Excellent")
+
     def test_poor_stays_poor_in_feedback_but_maps_to_okay_for_tutor_hints(self):
         actual = self._build_explanation(
             Action(ActionType.END_TURN),

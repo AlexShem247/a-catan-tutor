@@ -10,7 +10,7 @@ from game.PlayerAssets import Buildable
 
 def move_quality_colour(label: str) -> str:
     if label == "Excellent":
-        return "#248f24"
+        return "#2563eb"
     if label == "Good":
         return "#89b538"
     if label == "Poor":
