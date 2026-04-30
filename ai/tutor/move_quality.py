@@ -10,11 +10,11 @@ def clamp_move_quality(move_quality: Optional[float]) -> float:
 
 def move_quality_label(move_quality: float) -> str:
     move_quality = clamp_move_quality(move_quality)
-    if move_quality >= 0.8:  # raised threshold for "Excellent"
+    if move_quality >= 0.88:
         return "Excellent"
-    if move_quality >= 0.5:
+    if move_quality >= 0.62:
         return "Good"
-    if move_quality >= 0.3:
+    if move_quality >= 0.38:
         return "Okay"
     return "Poor"
 
@@ -155,6 +155,6 @@ def strategic_turn_move_quality(
         score = 0.65 * utility_score + 0.35 * relative_score
     else:
         score = relative_score
-    # final global compression
-    score = max(0.0, min(1.0, (score ** 1.2)))
+    # final global compression; slightly stronger to avoid over-rewarding merely acceptable turns
+    score = max(0.0, min(1.0, (score ** 1.35)))
     return clamp_move_quality(score)

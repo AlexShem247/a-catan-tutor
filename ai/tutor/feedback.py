@@ -68,7 +68,9 @@ class TutorAssessment:
     label: str
     judgment_sentence: str
     your_move: str
+    move_context: str = ""
     better_move: Optional[str] = None
+    better_move_context: str = ""
     top_strengths: List[str] = field(default_factory=list)
     top_weaknesses: List[str] = field(default_factory=list)
     better_move_reasons: List[str] = field(default_factory=list)
@@ -114,16 +116,24 @@ class TutorAssessment:
             f"<span style=\"color: {label_colour};\"><b>{escape(self.label)}.</b></span> "
             f"{escape(self.judgment_sentence)}"
         ]
+        if self.move_context:
+            parts.append(f"<b>Resources:</b> {escape(self.move_context)}")
         if (self.better_move and self._normalise_display_text(self.better_move) !=
                 self._normalise_display_text(self.your_move)):
             parts.append(f"<b>Better move:</b> {escape(self.better_move)}")
+            if self.better_move_context:
+                parts.append(f"<b>Better move resources:</b> {escape(self.better_move_context)}")
         return "<br>".join(parts)
 
     def detailed_html(self) -> str:
         parts = [f"<b>Your move:</b> {escape(self.your_move)}"]
+        if self.move_context:
+            parts.append(f"<b>Resources:</b> {escape(self.move_context)}")
         if (self.better_move and self._normalise_display_text(self.better_move) !=
                 self._normalise_display_text(self.your_move)):
             parts.append(f"<b>Better move:</b> {escape(self.better_move)}")
+            if self.better_move_context:
+                parts.append(f"<b>Better move resources:</b> {escape(self.better_move_context)}")
 
         reasons = self._dedupe_display_texts([
             *self.top_strengths[:1],

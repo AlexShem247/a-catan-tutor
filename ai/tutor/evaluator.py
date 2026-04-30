@@ -5,7 +5,7 @@ from ai.RuleBasedAI import RuleBasedAI
 from ai.actions import Action, ActionType, Phase
 from ai.simulation.SimGame import make_sim_game_for_player
 from ai.simulation.board_sim_utils import find_edge_toward_vertex, get_legal_settlement_vertices, moves_toward_vertex
-from ai.tutor.explanations import ActionExplanation, ReasonType, RoadExplanationKind
+from ai.tutor.explanations import ActionExplanation, ExplanationTemplate, ReasonType, RoadExplanationKind
 from ai.tutor.feedback import TutorAssessment, TutorDecisionType, TutorFeedbackExplanation
 from ai.tutor.move_quality import (
     clamp_move_quality,
@@ -371,10 +371,12 @@ class TutorEvaluator:
         if same_choice:
             judgment = f"{self._strip_period(positive)} and it matched the tutor's preferred move."
             better_move = None
+            better_move_context = ""
         else:
             negative = weaknesses[0] if weaknesses else "A stronger alternative was available."
             judgment = f"{self._strip_period(positive)}, but {self._lowercase_first(self._strip_period(negative))}."
             better_move = self._move_sentence(best_explanation)
+            better_move_context = self._move_context(best_explanation)
 
         return TutorAssessment(
             decision_type=decision_type,
@@ -383,7 +385,9 @@ class TutorEvaluator:
             label=move_quality_label(display_score),
             judgment_sentence=judgment,
             your_move=self._move_sentence(actual_explanation),
+            move_context=self._move_context(actual_explanation),
             better_move=better_move,
+            better_move_context=better_move_context,
             top_strengths=strengths,
             top_weaknesses=weaknesses,
             better_move_reasons=better_move_reasons,
@@ -411,15 +415,18 @@ class TutorEvaluator:
         ):
             return 1.0, 1.0
 
-        floor_score = 0.3
+        floor_score = 0.38
         if chosen_action.type == ActionType.BUILD:
             payload = chosen_action.payload
             buildable = payload[0] if isinstance(payload, tuple) and payload else None
             if buildable in {Buildable.SETTLEMENT, Buildable.CITY}:
-                floor_score = 0.5
+                floor_score = 0.4
 
         adjusted_score = clamp_move_quality(max(actual_score, floor_score))
         adjusted_best_score = clamp_move_quality(max(best_score, adjusted_score))
+        if chosen_action.type == ActionType.END_TURN:
+            adjusted_score = min(adjusted_score, 0.62)
+            adjusted_best_score = min(max(adjusted_best_score, adjusted_score), 0.62)
         return adjusted_score, adjusted_best_score
 
     def _distinct_reasons_from_seed(self, candidates: List[str], existing: List[str], limit: int) -> List[str]:
@@ -602,6 +609,78 @@ class TutorEvaluator:
         if template is not None and sentence:
             return self._sentence(sentence)
         return self._sentence(explanation.describe_action(short=False))
+
+    def _move_context(self, explanation: ActionExplanation) -> str:
+        template = explanation.metadata.get("template") or explanation.chosen_candidate.metadata.get("template")
+        metadata = explanation.chosen_candidate.metadata
+        action = explanation.chosen_action
+
+        if template == ExplanationTemplate.TRADE_PARTNER:
+            exchange = self._trade_exchange_text(metadata.get("payment"), metadata.get("buying"))
+            return f"Exchange: {exchange}" if exchange else ""
+
+        if template == ExplanationTemplate.TRADE_RESPONSE:
+            offered = metadata.get("selling_to_us")
+            requested = metadata.get("payment")
+            decision = metadata.get("decision")
+            if decision == "counter":
+                exchange = self._trade_exchange_text(metadata.get("counter_payment"), offered)
+                return f"Counteroffer: {exchange}" if exchange else ""
+            exchange = self._trade_exchange_text(requested, offered)
+            return f"Offer: {exchange}" if exchange else ""
+
+        if template == ExplanationTemplate.DISCARD_RESOURCES:
+            discard_text = self._resource_count_text(metadata.get("discard_resources", {}))
+            return f"Discarded: {discard_text}" if discard_text else ""
+
+        if template == ExplanationTemplate.YEAR_OF_PLENTY_RESOURCES:
+            selected_text = self._resource_count_text(metadata.get("selected_resources", {}))
+            return f"Picked: {selected_text}" if selected_text else ""
+
+        if template == ExplanationTemplate.MONOPOLY_RESOURCE:
+            selected_resource = metadata.get("selected_resource")
+            if selected_resource is None:
+                return ""
+            return f"Called: {self._resource_name(selected_resource)}"
+
+        if action.type in {ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER}:
+            payload = action.payload
+            if isinstance(payload, tuple) and len(payload) == 2:
+                exchange = self._trade_exchange_text(payload[0], payload[1])
+                return f"Exchange: {exchange}" if exchange else ""
+
+        return ""
+
+    @staticmethod
+    def _resource_name(resource: Any) -> str:
+        return getattr(resource, "name", str(resource)).replace("_", " ").title()
+
+    def _resource_count_text(self, resources: Any) -> str:
+        if not resources:
+            return ""
+        parts: List[str] = []
+        for resource, amount in resources.items():
+            if not amount or amount <= 0:
+                continue
+            parts.append(f"{amount} {self._resource_name(resource)}")
+        if not parts:
+            return ""
+        if len(parts) == 1:
+            return parts[0]
+        if len(parts) == 2:
+            return f"{parts[0]} and {parts[1]}"
+        return ", ".join(parts[:-1]) + f", and {parts[-1]}"
+
+    def _trade_exchange_text(self, payment: Any, buying: Any) -> str:
+        pay_text = self._resource_count_text(payment)
+        receive_text = self._resource_count_text(buying)
+        if pay_text and receive_text:
+            return f"give {pay_text} for {receive_text}"
+        if receive_text:
+            return f"receive {receive_text}"
+        if pay_text:
+            return f"give {pay_text}"
+        return ""
 
     @staticmethod
     def _recommended_build_visual_plan(explanation: ActionExplanation) -> List[Tuple[Buildable, object]]:

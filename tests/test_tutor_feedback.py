@@ -49,7 +49,7 @@ class TestTutorFeedback(unittest.TestCase):
         assessment = self.evaluator._build_assessment(TutorDecisionType.MAIN_TURN, actual, best)
         feedback = TutorFeedbackExplanation.from_assessment("Main Turn", assessment, SimpleNamespace())
 
-        self.assertEqual(assessment.label, "Good")
+        self.assertEqual(assessment.label, "Okay")
         self.assertAlmostEqual(assessment.score_gap, 0.35)
         self.assertIn("build a road", assessment.your_move.lower())
         self.assertIn("build a settlement", (assessment.better_move or "").lower())
@@ -82,9 +82,23 @@ class TestTutorFeedback(unittest.TestCase):
 
         assessment = self.evaluator._build_assessment(TutorDecisionType.MAIN_TURN, explanation, explanation)
 
-        self.assertEqual(assessment.internal_score, 0.5)
-        self.assertEqual(assessment.best_internal_score, 0.5)
-        self.assertEqual(assessment.label, "Good")
+        self.assertEqual(assessment.internal_score, 0.4)
+        self.assertEqual(assessment.best_internal_score, 0.4)
+        self.assertEqual(assessment.label, "Okay")
+
+    def test_matching_choice_is_at_least_okay(self):
+        explanation = self._build_explanation(
+            Action(ActionType.BUY_DEV_CARD),
+            [Reason(ReasonType.HIDDEN_VALUE, ReasonLabel.HIDDEN_DEV_VALUE, 1.0)],
+            [],
+            move_quality=0.0,
+        )
+
+        assessment = self.evaluator._build_assessment(TutorDecisionType.MAIN_TURN, explanation, explanation)
+
+        self.assertEqual(assessment.internal_score, 0.38)
+        self.assertEqual(assessment.best_internal_score, 0.38)
+        self.assertEqual(assessment.label, "Okay")
 
     def test_matching_winning_end_turn_scores_as_excellent(self):
         candidate = CandidateExplanation(
@@ -107,6 +121,28 @@ class TestTutorFeedback(unittest.TestCase):
         self.assertEqual(assessment.internal_score, 1.0)
         self.assertEqual(assessment.best_internal_score, 1.0)
         self.assertEqual(assessment.label, "Excellent")
+
+    def test_matching_non_winning_end_turn_is_capped_at_good(self):
+        candidate = CandidateExplanation(
+            action=Action(ActionType.END_TURN),
+            full_plan=[Action(ActionType.END_TURN)],
+            etw_before=4.0,
+            etw_after=4.0,
+            etw_delta=0.0,
+            reasons_for=[],
+            reasons_against=[],
+        )
+        explanation = ActionExplanation(
+            chosen_action=Action(ActionType.END_TURN),
+            chosen_candidate=candidate,
+            move_quality=0.95,
+        )
+
+        assessment = self.evaluator._build_assessment(TutorDecisionType.MAIN_TURN, explanation, explanation)
+
+        self.assertEqual(assessment.internal_score, 0.62)
+        self.assertEqual(assessment.best_internal_score, 0.62)
+        self.assertEqual(assessment.label, "Good")
 
     def test_poor_stays_poor_in_feedback_but_maps_to_okay_for_tutor_hints(self):
         actual = self._build_explanation(

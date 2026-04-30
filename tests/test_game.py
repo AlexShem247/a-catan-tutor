@@ -1,14 +1,16 @@
 import math
 import unittest
+from dataclasses import dataclass
 from random import Random
 from types import SimpleNamespace
+from typing import cast
 
 from ai.RuleBasedAI import RuleBasedAI
 from ai.actions import Action, ActionType, Phase
 from ai.BasicAI import BasicAI
 from ai.simulation.EtwEstimator import EtwEstimator
 from ai.simulation.SimGame import make_sim_game_for_player
-from ai.tutor.feedback import TutorDecisionType
+from ai.tutor.feedback import TutorDecisionType, TutorFeedbackExplanation
 from ai.tutor.move_quality import (
     initial_road_connection_move_quality,
     initial_road_flexible_move_quality,
@@ -23,15 +25,54 @@ from GameController import GameController, PlayerScoreSnapshot
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game
 from game.HexTile import HexTile
+from game.Player import Player
 from game.Player import PlayerNumber
 from game.PlayerAssets import Buildable, DevelopmentCard, DevelopmentCardType
 from game.Resources import Resource, HexType
 from game.Vertex import Vertex, Building, VertexDirection, Port
+from PyQt6.QtWidgets import QCheckBox
 from view.View import GameMode
 from view.MainWindow import MainWindow
 
 
 class TestGame(unittest.TestCase):
+
+    @dataclass
+    class _ReplayMarker:
+        index: int
+
+    @staticmethod
+    def _fake_player(player_number: PlayerNumber, name: str, is_human: bool = False) -> Player:
+        return cast(Player, SimpleNamespace(player_number=player_number, name=name, is_human=is_human))
+
+    @staticmethod
+    def _fake_checkbox(checked: bool) -> QCheckBox:
+        return cast(QCheckBox, SimpleNamespace(isChecked=lambda: checked))
+
+    @staticmethod
+    def _fake_assessment(**kwargs):
+        defaults = dict(
+            decision_type=TutorDecisionType.MAIN_TURN,
+            internal_score=0.0,
+            best_internal_score=0.0,
+            label="Okay",
+            judgment_sentence="",
+            your_move="",
+            move_context="",
+            better_move=None,
+            better_move_context="",
+            top_strengths=[],
+            top_weaknesses=[],
+            better_move_reasons=[],
+            tip="",
+            score_gap=0.0,
+        )
+        defaults.update(kwargs)
+        return SimpleNamespace(**defaults)
+
+    @staticmethod
+    def _fake_feedback(**kwargs) -> TutorFeedbackExplanation:
+        return cast(TutorFeedbackExplanation, SimpleNamespace(**kwargs))
 
     def setUp(self):
         player_config = {
@@ -339,10 +380,10 @@ class TestGame(unittest.TestCase):
             }),
         ]
         players = [
-            SimpleNamespace(player_number=p1, name="P1"),
-            SimpleNamespace(player_number=p2, name="P2"),
-            SimpleNamespace(player_number=p3, name="P3"),
-            SimpleNamespace(player_number=p4, name="P4"),
+            self._fake_player(p1, "P1"),
+            self._fake_player(p2, "P2"),
+            self._fake_player(p3, "P3"),
+            self._fake_player(p4, "P4"),
         ]
 
         lead, swing, closest = MainWindow._summarise_endgame_review_labels(history, players)
@@ -371,10 +412,10 @@ class TestGame(unittest.TestCase):
             }),
         ]
         players = [
-            SimpleNamespace(player_number=p1, name="P1"),
-            SimpleNamespace(player_number=p2, name="P2"),
-            SimpleNamespace(player_number=p3, name="P3"),
-            SimpleNamespace(player_number=p4, name="P4"),
+            self._fake_player(p1, "P1"),
+            self._fake_player(p2, "P2"),
+            self._fake_player(p3, "P3"),
+            self._fake_player(p4, "P4"),
         ]
 
         tooltips = MainWindow._build_endgame_plot_tooltips(history, players)
@@ -406,8 +447,8 @@ class TestGame(unittest.TestCase):
             }),
         ]
         players = [
-            SimpleNamespace(player_number=p1, name="P1"),
-            SimpleNamespace(player_number=p2, name="P2"),
+            self._fake_player(p1, "P1"),
+            self._fake_player(p2, "P2"),
         ]
 
         tooltips = MainWindow._build_endgame_plot_tooltips(history, players)
@@ -415,7 +456,7 @@ class TestGame(unittest.TestCase):
         self.assertIn("Leader: P1 and P2 (tied)", tooltips[18])
 
     def test_replay_feedback_details_include_turn_action_and_advice(self):
-        assessment = SimpleNamespace(
+        assessment = self._fake_assessment(
             your_move="Build a road",
             internal_score=0.53,
             score_gap=0.35,
@@ -423,10 +464,10 @@ class TestGame(unittest.TestCase):
             better_move="End the turn",
             tip="Preserve resources for the city upgrade.",
         )
-        feedback = SimpleNamespace(
+        feedback = self._fake_feedback(
             board_snapshot=SimpleNamespace(
                 game_state=SimpleNamespace(round_num=18),
-                get_all_players=lambda: [SimpleNamespace(name="P1", is_human=True)],
+                get_all_players=lambda: [self._fake_player(PlayerNumber.P1, "P1", is_human=True)],
             ),
             assessment=assessment,
             label="Okay",
@@ -450,10 +491,45 @@ class TestGame(unittest.TestCase):
         )
         self.assertEqual(details["turn_label"], "Turn 18 / 42")
 
+    def test_replay_feedback_details_include_resource_context_for_trade_feedback(self):
+        assessment = self._fake_assessment(
+            your_move="Offer 2 Wood in exchange for 1 Brick.",
+            move_context="Exchange: give 2 Wood for 1 Brick",
+            internal_score=0.41,
+            score_gap=0.22,
+            judgment_sentence="The trade was legal, but it paid too much.",
+            better_move="Offer 1 Wood in exchange for 1 Brick.",
+            better_move_context="Exchange: give 1 Wood for 1 Brick",
+            tip="Keep more flexibility for the build after the trade.",
+        )
+        feedback = self._fake_feedback(
+            board_snapshot=SimpleNamespace(
+                game_state=SimpleNamespace(round_num=7),
+                get_all_players=lambda: [self._fake_player(PlayerNumber.P1, "P1", is_human=True)],
+            ),
+            assessment=assessment,
+            label="Okay",
+            title="Trade",
+            history_summary="[Okay] The trade was legal.",
+        )
+
+        details = MainWindow._format_replay_feedback_details(feedback, 20)
+
+        self.assertEqual(
+            details["action"],
+            "Action: Offer 2 Wood in exchange for 1 Brick.\nExchange: give 2 Wood for 1 Brick",
+        )
+        self.assertEqual(
+            details["advice"],
+            "Better move: Offer 1 Wood in exchange for 1 Brick.\n"
+            "Exchange: give 1 Wood for 1 Brick\n"
+            "Takeaway: Keep more flexibility for the build after the trade.",
+        )
+
     def test_feedback_card_title_uses_turn_and_compact_action(self):
-        feedback = SimpleNamespace(
+        feedback = self._fake_feedback(
             board_snapshot=SimpleNamespace(game_state=SimpleNamespace(round_num=18)),
-            assessment=SimpleNamespace(your_move="building a road"),
+            assessment=self._fake_assessment(your_move="building a road"),
             title="Main Turn",
         )
 
@@ -463,42 +539,31 @@ class TestGame(unittest.TestCase):
 
     def test_feedback_filter_maps_labels_to_requested_groups(self):
         window = MainWindow.__new__(MainWindow)
-        window.endgame_feedback_filter_checkboxes = {
-            "biggest mistakes": SimpleNamespace(isChecked=lambda: True),
-            "okay moves": SimpleNamespace(isChecked=lambda: False),
-            "good moves": SimpleNamespace(isChecked=lambda: True),
-            "excellent moves": SimpleNamespace(isChecked=lambda: False),
-        }
+        window.endgame_feedback_filter_checkboxes = cast(dict[str, QCheckBox], {
+            "biggest mistakes": self._fake_checkbox(True),
+            "okay moves": self._fake_checkbox(False),
+            "good moves": self._fake_checkbox(True),
+            "excellent moves": self._fake_checkbox(False),
+        })
 
-        self.assertTrue(MainWindow._feedback_matches_filter(window, SimpleNamespace(label="Poor")))
-        self.assertFalse(MainWindow._feedback_matches_filter(window, SimpleNamespace(label="Okay")))
-        self.assertTrue(MainWindow._feedback_matches_filter(window, SimpleNamespace(label="Good")))
-        self.assertFalse(MainWindow._feedback_matches_filter(window, SimpleNamespace(label="Excellent")))
-
-    def test_feedback_card_title_uses_turn_and_compact_action(self):
-        feedback = SimpleNamespace(
-            board_snapshot=SimpleNamespace(game_state=SimpleNamespace(round_num=18)),
-            assessment=SimpleNamespace(your_move="building a road"),
-            title="Main Turn",
-        )
-
-        title = MainWindow._feedback_card_title(feedback)
-
-        self.assertEqual(title, "Turn 18 - Built Road")
+        self.assertTrue(MainWindow._feedback_matches_filter(window, self._fake_feedback(label="Poor")))
+        self.assertFalse(MainWindow._feedback_matches_filter(window, self._fake_feedback(label="Okay")))
+        self.assertTrue(MainWindow._feedback_matches_filter(window, self._fake_feedback(label="Good")))
+        self.assertFalse(MainWindow._feedback_matches_filter(window, self._fake_feedback(label="Excellent")))
 
     def test_feedback_filter_maps_poor_okay_good_and_excellent(self):
         window = MainWindow.__new__(MainWindow)
-        window.endgame_feedback_filter_checkboxes = {
-            "biggest mistakes": SimpleNamespace(isChecked=lambda: True),
-            "okay moves": SimpleNamespace(isChecked=lambda: False),
-            "good moves": SimpleNamespace(isChecked=lambda: True),
-            "excellent moves": SimpleNamespace(isChecked=lambda: False),
-        }
+        window.endgame_feedback_filter_checkboxes = cast(dict[str, QCheckBox], {
+            "biggest mistakes": self._fake_checkbox(True),
+            "okay moves": self._fake_checkbox(False),
+            "good moves": self._fake_checkbox(True),
+            "excellent moves": self._fake_checkbox(False),
+        })
 
-        poor_feedback = SimpleNamespace(label="Poor")
-        okay_feedback = SimpleNamespace(label="Okay")
-        good_feedback = SimpleNamespace(label="Good")
-        excellent_feedback = SimpleNamespace(label="Excellent")
+        poor_feedback = self._fake_feedback(label="Poor")
+        okay_feedback = self._fake_feedback(label="Okay")
+        good_feedback = self._fake_feedback(label="Good")
+        excellent_feedback = self._fake_feedback(label="Excellent")
 
         self.assertTrue(MainWindow._feedback_matches_filter(window, poor_feedback))
         self.assertFalse(MainWindow._feedback_matches_filter(window, okay_feedback))
@@ -506,46 +571,48 @@ class TestGame(unittest.TestCase):
         self.assertFalse(MainWindow._feedback_matches_filter(window, excellent_feedback))
 
     def test_overall_performance_summary_uses_final_summary_format(self):
-        feedbacks = [
-            SimpleNamespace(
-                assessment=SimpleNamespace(
-                    decision_type=TutorDecisionType.ROBBER,
-                    your_move="Move the robber",
-                    internal_score=0.9,
-                )
-            ),
-            SimpleNamespace(
-                assessment=SimpleNamespace(
-                    decision_type=TutorDecisionType.MAIN_TURN,
-                    your_move="Ending the turn",
-                    internal_score=0.75,
-                )
-            ),
-            SimpleNamespace(
-                assessment=SimpleNamespace(
-                    decision_type=TutorDecisionType.DISCARD,
-                    your_move="Discard resources",
-                    internal_score=0.2,
-                )
-            ),
-            SimpleNamespace(
-                assessment=SimpleNamespace(
-                    decision_type=TutorDecisionType.MAIN_TURN,
-                    your_move="Upgrading to a city",
-                    internal_score=0.3,
-                )
-            ),
-        ]
+        feedbacks = cast(list[TutorFeedbackExplanation], [
+            self._fake_feedback(assessment=self._fake_assessment(
+                decision_type=TutorDecisionType.ROBBER, your_move="Move the robber", internal_score=0.9
+            )),
+            self._fake_feedback(assessment=self._fake_assessment(
+                decision_type=TutorDecisionType.MAIN_TURN, your_move="Ending the turn", internal_score=0.75
+            )),
+            self._fake_feedback(assessment=self._fake_assessment(
+                decision_type=TutorDecisionType.DISCARD, your_move="Discard resources", internal_score=0.2
+            )),
+            self._fake_feedback(assessment=self._fake_assessment(
+                decision_type=TutorDecisionType.MAIN_TURN, your_move="Upgrading to a city", internal_score=0.3
+            )),
+        ])
 
-        summary = MainWindow._overall_performance_summary(feedbacks)
+        final_snapshot = PlayerScoreSnapshot(3, 3, 3, 0, 0, 3, 0, False, False)
+        summary = MainWindow._overall_performance_summary(feedbacks, final_snapshot, leader_vp=10)
 
         self.assertEqual(summary["turn_and_player"], "")
         self.assertEqual(summary["action"], "Your Performance")
-        self.assertEqual(summary["badge"], "Good")
-        self.assertEqual(summary["score"], "Overall: Good (0.54)")
+        self.assertEqual(summary["badge"], "Poor")
+        self.assertEqual(summary["score"], "Overall: Poor (0.34) | Moves 0.54 | VP 0.30 | Win 0.00")
         self.assertIn("Robber placement", summary["tutor_feedback"])
-        self.assertIn("Turn timing", summary["tutor_feedback"])
+        self.assertIn("finished on only 3 VP", summary["advice"])
         self.assertIn("Discard decisions", summary["advice"])
+
+    def test_overall_performance_summary_does_not_rate_two_vp_finish_as_good(self):
+        feedbacks = cast(list[TutorFeedbackExplanation], [
+            self._fake_feedback(assessment=self._fake_assessment(
+                decision_type=TutorDecisionType.MAIN_TURN,
+                your_move="Building a road",
+                internal_score=0.8,
+            )),
+        ])
+
+        summary = MainWindow._overall_performance_summary(
+            feedbacks,
+            PlayerScoreSnapshot(2, 2, 2, 0, 0, 2, 0, False, False),
+            leader_vp=10,
+        )
+
+        self.assertEqual(summary["badge"], "Poor")
 
     def test_tutor_replay_history_is_not_trimmed_with_sidebar_history(self):
         window = MainWindow.__new__(MainWindow)
@@ -553,14 +620,14 @@ class TestGame(unittest.TestCase):
         window.tutor_feedback_replay_history = []
         window._update_previous_feedback_button = lambda: None
 
-        feedbacks = [SimpleNamespace(index=i) for i in range(105)]
+        feedbacks = [self._ReplayMarker(index=i) for i in range(105)]
         for feedback in feedbacks:
-            MainWindow._append_tutor_feedback_history(window, feedback)
+            MainWindow._append_tutor_feedback_history(window, cast(TutorFeedbackExplanation, feedback))
 
         self.assertEqual(len(window.tutor_feedback_history), 100)
         self.assertEqual(len(window.tutor_feedback_replay_history), 105)
-        self.assertEqual(window.tutor_feedback_replay_history[0].index, 0)
-        self.assertEqual(window.tutor_feedback_history[0].index, 5)
+        self.assertEqual(cast(self._ReplayMarker, window.tutor_feedback_replay_history[0]).index, 0)
+        self.assertEqual(cast(self._ReplayMarker, window.tutor_feedback_history[0]).index, 5)
 
     def test_move_quality_ratio_is_clamped_to_zero_to_one(self):
         self.assertEqual(move_quality_from_ratio(8.0, 10.0), 0.8)
@@ -579,15 +646,16 @@ class TestGame(unittest.TestCase):
     def test_move_quality_labels_use_zero_to_one_thresholds(self):
         self.assertEqual(move_quality_label(0.9), "Excellent")
         self.assertEqual(move_quality_label(0.7), "Good")
-        self.assertEqual(move_quality_label(0.5), "Good")
-        self.assertEqual(move_quality_label(0.3), "Okay")
+        self.assertEqual(move_quality_label(0.5), "Okay")
+        self.assertEqual(move_quality_label(0.3), "Poor")
+        self.assertEqual(move_quality_label(0.4), "Okay")
         self.assertEqual(move_quality_label(0.25), "Poor")
         self.assertEqual(move_quality_label(0.1), "Poor")
 
     def test_strategic_turn_move_quality_uses_etw_reduction(self):
         candidate = SimpleNamespace(etw_before=20.0, etw_after=16.0, etw_delta=4.0, utility_total=12.0)
         quality = strategic_turn_move_quality(candidate, second_utility=6.0, worst_utility=0.0)
-        self.assertAlmostEqual(quality, 0.3948074730641816)
+        self.assertAlmostEqual(quality, 0.3515066414812375)
         self.assertLessEqual(quality, 1.0)
 
     def test_strategic_turn_move_quality_defaults_low_when_no_gain(self):

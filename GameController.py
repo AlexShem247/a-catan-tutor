@@ -139,10 +139,16 @@ class GameController:
         )
         return action
 
-    def _set_debug_tutor_shortcut_handler(self, handler: Optional[Callable[[], Any]]) -> None:
+    def _set_tutor_shortcut_handlers(
+            self,
+            recommended_handler: Optional[Callable[[], Any]],
+    ) -> None:
         if self.view is None:
             return
-        self.view.set_debug_tutor_shortcut_handler(handler if self.game_mode == GameMode.TUTOR else None)
+        if self.game_mode == GameMode.TUTOR:
+            self.view.set_debug_tutor_shortcut_handler(recommended_handler)
+        else:
+            self.view.set_debug_tutor_shortcut_handler(None)
 
     def _prepare_tutor_main_action_comparison(
             self, player: Player, action: Action, played_dev_card: bool) -> Optional[TutorFeedbackExplanation]:
@@ -257,11 +263,11 @@ class GameController:
                 def select_tutor_initial_settlement() -> Optional[Vertex]:
                     return self.tutor_ai.select_initial_settlement_location(player, self._game, vertices)
 
-                self._set_debug_tutor_shortcut_handler(select_tutor_initial_settlement)
+                self._set_tutor_shortcut_handlers(select_tutor_initial_settlement)
                 try:
                     vertex: Vertex = self.view.draw_selectable_vertices(vertices)
                 finally:
-                    self._set_debug_tutor_shortcut_handler(None)
+                    self._set_tutor_shortcut_handlers(None)
                 self._raise_if_return_home(vertex)
                 self.view.display_board()
             else:
@@ -345,11 +351,11 @@ class GameController:
         def select_tutor_initial_road() -> Optional[Edge]:
             return selector(edges)
 
-        self._set_debug_tutor_shortcut_handler(select_tutor_initial_road)
+        self._set_tutor_shortcut_handlers(select_tutor_initial_road)
         try:
             edge: Edge = self.view.draw_selectable_edges(edges)
         finally:
-            self._set_debug_tutor_shortcut_handler(None)
+            self._set_tutor_shortcut_handlers(None)
         self._raise_if_return_home(edge)
 
         return edge
@@ -393,11 +399,11 @@ class GameController:
                     def respond_to_trade_for_player() -> Tuple[bool, Optional[ResourceCount]]:
                         return self.tutor_ai.respond_to_trade(player, self._game, selling_player, selling, buying)
 
-                    self._set_debug_tutor_shortcut_handler(respond_to_trade_for_player)
+                    self._set_tutor_shortcut_handlers(respond_to_trade_for_player)
                     try:
                         trade_decision = self.view.display_trade_manager(player, selling, buying, selling_player)
                     finally:
-                        self._set_debug_tutor_shortcut_handler(None)
+                        self._set_tutor_shortcut_handlers(None)
                     self._raise_if_return_home(trade_decision)
                     interested, counter = trade_decision
                     if self.game_mode == GameMode.TUTOR:
@@ -464,12 +470,12 @@ class GameController:
                         def select_tutor_discard_resources() -> ResourceCount:
                             return self.tutor_ai.select_discard_resources(p, self._game, discard_count)
 
-                        self._set_debug_tutor_shortcut_handler(select_tutor_discard_resources)
+                        self._set_tutor_shortcut_handlers(select_tutor_discard_resources)
                         try:
                             resources_to_discard = self.view.show_resource_chooser(
                                 p, discard_count, "The robber has been rolled!", p.resources)
                         finally:
-                            self._set_debug_tutor_shortcut_handler(None)
+                            self._set_tutor_shortcut_handlers(None)
                         self._raise_if_return_home(resources_to_discard)
                         if self.game_mode == GameMode.TUTOR:
                             discard_feedback = self.tutor_evaluator.evaluate_discard_choice(
@@ -517,11 +523,11 @@ class GameController:
             def select_tutor_robber_hex() -> HexTile:
                 return self.tutor_ai.select_robber_target(player, self._game, available_hexes)[0]
 
-            self._set_debug_tutor_shortcut_handler(select_tutor_robber_hex)
+            self._set_tutor_shortcut_handlers(select_tutor_robber_hex)
             try:
                 selected_hex: HexTile = self.view.draw_selectable_tiles(available_hexes)
             finally:
-                self._set_debug_tutor_shortcut_handler(None)
+                self._set_tutor_shortcut_handlers(None)
             self._raise_if_return_home(selected_hex)
             if self.game_mode == GameMode.TUTOR:
                 robber_placement_feedback = self.tutor_evaluator.evaluate_robber_choice(
@@ -564,11 +570,11 @@ class GameController:
                         adjacent_player_buildings[0],
                     )
 
-                self._set_debug_tutor_shortcut_handler(select_tutor_robber_target_building)
+                self._set_tutor_shortcut_handlers(select_tutor_robber_target_building)
                 try:
                     selected_player_building: Vertex = self.view.draw_selectable_vertices(adjacent_player_buildings)
                 finally:
-                    self._set_debug_tutor_shortcut_handler(None)
+                    self._set_tutor_shortcut_handlers(None)
                 self._raise_if_return_home(selected_player_building)
                 selected_player = selected_player_building.owner
                 if self.game_mode == GameMode.TUTOR:
@@ -685,12 +691,12 @@ class GameController:
                 def select_tutor_year_of_plenty_resources() -> ResourceCount:
                     return self.tutor_ai.select_year_of_plenty_resources(player, self._game)
 
-                self._set_debug_tutor_shortcut_handler(select_tutor_year_of_plenty_resources)
+                self._set_tutor_shortcut_handlers(select_tutor_year_of_plenty_resources)
                 try:
                     resources = self.view.show_resource_chooser(
                         player, 2, "Year of Plenty: choose any two resources from the bank.", self._game.bank_resources)
                 finally:
-                    self._set_debug_tutor_shortcut_handler(None)
+                    self._set_tutor_shortcut_handlers(None)
                 self._raise_if_return_home(resources)
                 if self.game_mode == GameMode.TUTOR:
                     year_of_plenty_feedback = self.tutor_evaluator.evaluate_year_of_plenty_choice(
@@ -726,13 +732,13 @@ class GameController:
                 def select_tutor_monopoly_choice() -> ResourceCount:
                     return {self.tutor_ai.select_monopoly_resource(player, self._game): 1}
 
-                self._set_debug_tutor_shortcut_handler(select_tutor_monopoly_choice)
+                self._set_tutor_shortcut_handlers(select_tutor_monopoly_choice)
                 try:
                     chosen = self.view.show_resource_chooser(
                         player, 1, "Monopoly: choose a resource to get from the other players.",
                         {res: 1 for res in Resource})
                 finally:
-                    self._set_debug_tutor_shortcut_handler(None)
+                    self._set_tutor_shortcut_handlers(None)
                 self._raise_if_return_home(chosen)
                 # Extract the single Resource enum
                 resource = next(iter(chosen.keys()))
@@ -791,11 +797,11 @@ class GameController:
                     return recommended_action.payload
                 return False
 
-            self._set_debug_tutor_shortcut_handler(select_tutor_pre_roll_card)
+            self._set_tutor_shortcut_handlers(select_tutor_pre_roll_card)
             try:
                 played_card = self.view.pre_roll(player)
             finally:
-                self._set_debug_tutor_shortcut_handler(None)
+                self._set_tutor_shortcut_handlers(None)
             self._raise_if_return_home(played_card)
             if isinstance(played_card, DevelopmentCardType):
                 pre_roll_feedback = None
@@ -818,11 +824,11 @@ class GameController:
             def select_tutor_main_action() -> Action:
                 return self.get_tutor_recommended_main_action(player, played_dev_card)
 
-            self._set_debug_tutor_shortcut_handler(select_tutor_main_action)
+            self._set_tutor_shortcut_handlers(select_tutor_main_action)
             try:
                 action = self.view.display_board_turn(player, (d1, d2, total), played_dev_card)
             finally:
-                self._set_debug_tutor_shortcut_handler(None)
+                self._set_tutor_shortcut_handlers(None)
             self._raise_if_return_home(action)
             action_feedback = self._prepare_tutor_main_action_comparison(player, action, played_dev_card)
             if action.type == ActionType.END_TURN:
@@ -862,11 +868,11 @@ class GameController:
                             player, self._game, selling, buying, affordable_offers
                         )
 
-                    self._set_debug_tutor_shortcut_handler(select_tutor_trade_partner)
+                    self._set_tutor_shortcut_handlers(select_tutor_trade_partner)
                     try:
                         deal = self.view.select_player_trade_offer(player, selling, buying, affordable_offers)
                     finally:
-                        self._set_debug_tutor_shortcut_handler(None)
+                        self._set_tutor_shortcut_handlers(None)
                     self._raise_if_return_home(deal)
                     if deal is not None:
                         buying_player, counter = deal

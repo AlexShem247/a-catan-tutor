@@ -34,6 +34,19 @@ HIGHLIGHT_COLOR = QColor(Qt.GlobalColor.yellow)
 TOKEN_COLOR = QColor(Qt.GlobalColor.white)
 TOKEN_OUTLINE_COLOR = OUTLINE_COLOR
 TOKEN_COMMON_COLOR = QColor(Qt.GlobalColor.red)
+TOOLTIP_BACKGROUND_COLOR = QColor("#111827")
+TOOLTIP_BORDER_COLOR = QColor("#374151")
+TOOLTIP_TEXT_COLOR = QColor("#f9fafb")
+ENDGAME_PLOT_BACKGROUND_COLOR = QColor("#f9fafb")
+ENDGAME_RANK_CARD_DEFAULT_BACKGROUND_COLOR = QColor("#f9fafb")
+ENDGAME_RANK_CARD_DEFAULT_BORDER_COLOR = QColor("#e5e7eb")
+ENDGAME_RANK_CARD_SELECTED_BACKGROUND_COLOR = QColor("#eff6ff")
+ENDGAME_RANK_CARD_SELECTED_BORDER_COLOR = QColor("#2563eb")
+ENDGAME_RANK_CARD_BORDER_RADIUS_PX = 8
+ENDGAME_RANK_CARD_DEFAULT_BORDER_WIDTH_PX = 1
+ENDGAME_RANK_CARD_SELECTED_BORDER_WIDTH_PX = 2
+ENDGAME_RANK_CARD_PADDING = "10px 12px"
+ENDGAME_RANK_CARD_FONT_WEIGHT = 600
 
 TERRAIN_COLORS: Dict[HexType, QColor] = {
     HexType.FIELDS: QColor(255, 184, 38),
@@ -102,3 +115,35 @@ def hex_to_filepath(hex_type: HexType) -> str:
         raise ValueError(f"No pixmap for resource {resource}")
 
     return pixmap
+
+
+def qcolor_hex(colour: QColor) -> str:
+    return colour.name()
+
+
+def endgame_rank_card_stylesheet(selected: bool) -> str:
+    background = (
+        ENDGAME_RANK_CARD_SELECTED_BACKGROUND_COLOR
+        if selected
+        else ENDGAME_RANK_CARD_DEFAULT_BACKGROUND_COLOR
+    )
+    border_colour = (
+        ENDGAME_RANK_CARD_SELECTED_BORDER_COLOR
+        if selected
+        else ENDGAME_RANK_CARD_DEFAULT_BORDER_COLOR
+    )
+    border_width = (
+        ENDGAME_RANK_CARD_SELECTED_BORDER_WIDTH_PX
+        if selected
+        else ENDGAME_RANK_CARD_DEFAULT_BORDER_WIDTH_PX
+    )
+    return (
+        "QPushButton#rankCard {"
+        f"background: {qcolor_hex(background)};"
+        f"border: {border_width}px solid {qcolor_hex(border_colour)};"
+        f"border-radius: {ENDGAME_RANK_CARD_BORDER_RADIUS_PX}px;"
+        f"padding: {ENDGAME_RANK_CARD_PADDING};"
+        "text-align: left;"
+        f"font-weight: {ENDGAME_RANK_CARD_FONT_WEIGHT};"
+        "}"
+    )

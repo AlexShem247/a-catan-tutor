@@ -17,7 +17,7 @@ class HeadlessView(View):
     def set_debug_tutor_shortcut_handler(self, handler):
         pass
 
-    def set_debug_tutor_shortcut_finaliser(self, finaliser):
+    def set_debug_tutor_shortcut_finalizer(self, finalizer):
         pass
 
     def display_board(self, player: Optional[Player] = None, msg: Optional[str] = None) -> None:

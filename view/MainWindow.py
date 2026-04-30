@@ -5,7 +5,7 @@ from typing import Dict, Tuple, List, Callable, Optional, Any
 
 from PyQt6 import uic
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QPoint, QPointF, QEvent, QObject
-from PyQt6.QtGui import QCloseEvent, QCursor, QIcon, QKeyEvent
+from PyQt6.QtGui import QBrush, QCloseEvent, QColor, QCursor, QIcon, QKeyEvent, QPainter, QPen
 import pyqtgraph as pg
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel, QToolButton, QSpacerItem,
@@ -27,11 +27,16 @@ from view.board_display_source import BoardDisplaySource
 from view.SquareCanvas import SquareCanvas
 from config.view_constants import (
     CROWN_SYM,
+    ENDGAME_PLOT_BACKGROUND_COLOR,
     TUTOR_FEEDBACK_FADE_STEPS,
     TUTOR_FEEDBACK_MAX_DISPLAY_SECONDS,
     TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS,
+    endgame_rank_card_stylesheet,
     HOME_ICON,
     PLAYER_COLORS,
+    TOOLTIP_BACKGROUND_COLOR,
+    TOOLTIP_BORDER_COLOR,
+    TOOLTIP_TEXT_COLOR,
 )
 from view.View import GameMode
 from view.display_utils import format_counter_offer, get_player_lead_status
@@ -61,31 +66,33 @@ class IntegerAxisItem(pg.AxisItem):
 
 
 class HoverTooltip(QFrame):
+    BORDER_RADIUS = 8
+
     def __init__(self, parent: QWidget):
         super().__init__(parent, Qt.WindowType.FramelessWindowHint | Qt.WindowType.ToolTip)
         self.setObjectName("hoverTooltip")
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        self.setStyleSheet(
-            "QFrame#hoverTooltip {"
-            "background: #111827;"
-            "color: #f9fafb;"
-            "border: 1px solid #374151;"
-            "border-radius: 8px;"
-            "}"
-            "QLabel {"
-            "color: #f9fafb;"
-            "padding: 8px 10px;"
-            "}"
-        )
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(10, 8, 10, 8)
         self.label = QLabel(self)
         self.label.setTextFormat(Qt.TextFormat.PlainText)
         self.label.setWordWrap(False)
+        label_palette = self.label.palette()
+        label_palette.setColor(self.label.foregroundRole(), TOOLTIP_TEXT_COLOR)
+        self.label.setPalette(label_palette)
         layout.addWidget(self.label)
         self.hide()
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(TOOLTIP_BORDER_COLOR, 1))
+        painter.setBrush(QBrush(TOOLTIP_BACKGROUND_COLOR))
+        rect = self.rect().adjusted(0, 0, -1, -1)
+        painter.drawRoundedRect(rect, self.BORDER_RADIUS, self.BORDER_RADIUS)
+        super().paintEvent(event)
 
     def show_text(self, text: str, global_pos) -> None:
         self.label.setText(text)
@@ -194,7 +201,7 @@ class MainWindow(QMainWindow):
             }
         )
         self.victory_points_plot.setObjectName("victoryPointsPlot")
-        self.victory_points_plot.setBackground("#f9fafb")
+        self.victory_points_plot.setBackground(ENDGAME_PLOT_BACKGROUND_COLOR)
         self.victory_points_plot.setMinimumSize(0, 0)
         self.victory_points_plot.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.endgame_review_menu.performanceLayout.replaceWidget(
@@ -498,15 +505,24 @@ class MainWindow(QMainWindow):
     def set_debug_tutor_shortcut_finalizer(self, finalizer: Optional[Callable[[], None]]):
         self.debug_tutor_shortcut_finalizer = finalizer
 
-    def _try_apply_tutor_recommended_move(self) -> bool:
-        if self.debug_tutor_shortcut_handler is None:
+    def _clear_tutor_shortcut_ui_state(self) -> None:
+        if self.dismiss_tutor_hint_callback is not None:
+            self.dismiss_tutor_hint_callback()
+        self.clear_trade_preview()
+
+    def _try_apply_tutor_shortcut(self, handler: Optional[Callable[[], object]]) -> bool:
+        if handler is None:
             return False
 
-        result = self.debug_tutor_shortcut_handler()
+        self._clear_tutor_shortcut_ui_state()
+        result = handler()
         if self.debug_tutor_shortcut_finalizer is not None:
             self.debug_tutor_shortcut_finalizer()
         self.debugShortcutResult.emit(result)
         return True
+
+    def _try_apply_tutor_recommended_move(self) -> bool:
+        return self._try_apply_tutor_shortcut(self.debug_tutor_shortcut_handler)
 
     def _show_fullscreen_panel(self, panel: QWidget):
         current_size = self.size()
@@ -680,28 +696,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _endgame_rank_card_stylesheet(selected: bool) -> str:
-        if selected:
-            return (
-                "QPushButton#rankCard {"
-                "background: #eff6ff;"
-                "border: 2px solid #2563eb;"
-                "border-radius: 8px;"
-                "padding: 10px 12px;"
-                "text-align: left;"
-                "font-weight: 600;"
-                "}"
-            )
-
-        return (
-            "QPushButton#rankCard {"
-            "background: #f9fafb;"
-            "border: 1px solid #e5e7eb;"
-            "border-radius: 8px;"
-            "padding: 10px 12px;"
-            "text-align: left;"
-            "font-weight: 600;"
-            "}"
-        )
+        return endgame_rank_card_stylesheet(selected)
 
     def _select_endgame_rank_card(self, card_btn: QPushButton, player: Player):
         if self.selected_endgame_rank_card is not None:
@@ -938,6 +933,9 @@ class MainWindow(QMainWindow):
         turn_num = getattr(feedback.board_snapshot.game_state, "round_num", 0)
         player_name = cls._replay_feedback_player_name(feedback)
         action_text = feedback.assessment.your_move or feedback.title
+        move_context = getattr(feedback.assessment, "move_context", "")
+        if move_context:
+            action_text += f"\n{move_context}"
         score_text = (
             f"Score: {feedback.assessment.internal_score:.2f} · "
             f"Gap: +{feedback.assessment.score_gap:.2f}"
@@ -948,6 +946,9 @@ class MainWindow(QMainWindow):
                 feedback.assessment.better_move.strip().lower() != action_text.strip().lower()
         ):
             advice_text = f"Better move: {feedback.assessment.better_move}"
+            better_move_context = getattr(feedback.assessment, "better_move_context", "")
+            if better_move_context:
+                advice_text += f"\n{better_move_context}"
             if feedback.assessment.tip:
                 advice_text += f"\nTakeaway: {feedback.assessment.tip}"
         elif feedback.assessment.tip:
@@ -966,7 +967,11 @@ class MainWindow(QMainWindow):
         }
 
     @staticmethod
-    def _overall_performance_summary(feedback_items: List[TutorFeedbackExplanation]) -> Dict[str, str]:
+    def _overall_performance_summary(
+            feedback_items: List[TutorFeedbackExplanation],
+            final_snapshot: PlayerScoreSnapshot | None = None,
+            leader_vp: int | None = None,
+    ) -> Dict[str, str]:
         if not feedback_items:
             return {
                 "turn_and_player": "",
@@ -978,8 +983,13 @@ class MainWindow(QMainWindow):
                 "turn_label": "Game Summary",
             }
 
-        average_score = sum(item.assessment.internal_score for item in feedback_items) / len(feedback_items)
-        overall_label = move_quality_label(average_score)
+        weighted_quality = sum(item.assessment.internal_score for item in feedback_items) / len(feedback_items)
+        vp_score = None if final_snapshot is None else max(0.0, min(float(final_snapshot.total_vp) / 10.0, 1.0))
+        win_bonus = None if final_snapshot is None else (1 if final_snapshot.total_vp >= 10 else 0.0)
+        overall_score = weighted_quality
+        if vp_score is not None and win_bonus is not None:
+            overall_score = max(0.0, min(1.0, 0.3 * weighted_quality + 0.6 * vp_score + 0.1 * win_bonus))
+        overall_label = move_quality_label(overall_score)
         category_scores: Dict[str, List[float]] = {}
         for feedback in feedback_items:
             category = MainWindow._performance_category(feedback)
@@ -1017,15 +1027,67 @@ class MainWindow(QMainWindow):
                 for category, score, _count in fallback[:2]
             ]
 
+        outcome_strength = MainWindow._outcome_strength_line(final_snapshot)
+        if outcome_strength and outcome_strength not in strengths:
+            strengths = [outcome_strength, *strengths][:2]
+
+        outcome_weakness = MainWindow._outcome_weakness_line(final_snapshot, leader_vp)
+        if outcome_weakness and outcome_weakness not in weaknesses:
+            weaknesses = [outcome_weakness, *weaknesses][:2]
+
+        score_text = f"Overall: {overall_label} ({overall_score:.2f})"
+        if vp_score is not None and win_bonus is not None:
+            score_text = (
+                f"Overall: {overall_label} ({overall_score:.2f})"
+                f" | Moves {weighted_quality:.2f}"
+                f" | VP {vp_score:.2f}"
+                f" | Win {win_bonus:.2f}"
+            )
+
         return {
             "turn_and_player": "",
             "action": "Your Performance",
             "badge": overall_label,
-            "score": f"Overall: {overall_label} ({average_score:.2f})",
+            "score": score_text,
             "tutor_feedback": "Strengths:\n" + "\n".join(f"- {line}" for line in strengths),
             "advice": "Weaknesses:\n" + "\n".join(f"- {line}" for line in weaknesses),
             "turn_label": "Game Summary",
         }
+
+    @staticmethod
+    def _outcome_performance_score(
+            final_snapshot: PlayerScoreSnapshot | None
+    ) -> float | None:
+        if final_snapshot is None:
+            return None
+
+        final_vp = max(0, final_snapshot.total_vp)
+        return max(0.0, min(float(final_vp) / 10.0, 1.0))
+
+    @staticmethod
+    def _outcome_strength_line(
+            final_snapshot: PlayerScoreSnapshot | None
+    ) -> str | None:
+        outcome_score = MainWindow._outcome_performance_score(final_snapshot)
+        if outcome_score is None or final_snapshot is None:
+            return None
+        if final_snapshot.total_vp >= 10:
+            return f"Game result (converted decisions into {final_snapshot.total_vp} VP)"
+        return None
+
+    @staticmethod
+    def _outcome_weakness_line(
+            final_snapshot: PlayerScoreSnapshot | None,
+            leader_vp: int | None,
+    ) -> str | None:
+        outcome_score = MainWindow._outcome_performance_score(final_snapshot)
+        if outcome_score is None or final_snapshot is None:
+            return None
+        if final_snapshot.total_vp <= 4:
+            return f"Game result (finished on only {final_snapshot.total_vp} VP)"
+        if leader_vp is not None and final_snapshot.total_vp <= leader_vp - 3:
+            return "Game result (fell too far behind the leader)"
+        return None
 
     @staticmethod
     def _performance_category(feedback: TutorFeedbackExplanation) -> str:
@@ -1086,7 +1148,11 @@ class MainWindow(QMainWindow):
         self.endgame_replay_index = index
         is_summary = index == len(self.endgame_replay_feedback)
         if index == len(self.endgame_replay_feedback):
-            details = self._overall_performance_summary(self.endgame_replay_feedback)
+            details = self._overall_performance_summary(
+                self.endgame_replay_feedback,
+                getattr(self, "endgame_human_final_snapshot", None),
+                getattr(self, "endgame_final_leader_vp", None),
+            )
             self.endgame_replay_canvas.display_board(self.endgame_final_board_source)
             self.endgame_replay_canvas.clear_planned_builds()
             self.endgame_replay_canvas.clear_feedback_builds()
@@ -1542,9 +1608,19 @@ class MainWindow(QMainWindow):
         self.endgame_replay_feedback = list(self.tutor_feedback_replay_history)
         self._refresh_endgame_feedback_list()
         self.endgame_final_board_source = controller
+        self.endgame_human_final_snapshot = None
+        self.endgame_final_leader_vp = None
         self.endgame_replay_splitter_user_adjusted = False
         self.endgame_replay_splitter_initialised = False
         history = controller.get_victory_point_history()
+        review_history = controller.get_endgame_review_history()
+        if review_history:
+            final_snapshot = review_history[-1][1]
+            human_player = next((player for player in controller.get_all_players() if player.is_human), None)
+            if human_player is not None:
+                self.endgame_human_final_snapshot = final_snapshot.get(human_player.player_number)
+            if final_snapshot:
+                self.endgame_final_leader_vp = max(player.total_vp for player in final_snapshot.values())
         self.endgame_total_turns = max((round_num for round_num, _ in history), default=0)
         replay_slider = self.endgame_review_menu.timelineSlider
         replay_slider.setMinimum(0)
