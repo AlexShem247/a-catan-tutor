@@ -14,11 +14,16 @@ from game.Vertex import Vertex
 
 
 class HeadlessView(View):
+    ai_decision_animation_delay = 0.0
+
     def set_debug_tutor_shortcut_handler(self, handler):
         pass
 
     def set_debug_tutor_shortcut_finalizer(self, finalizer):
         pass
+
+    def consume_return_home_request(self) -> bool:
+        return False
 
     def display_board(self, player: Optional[Player] = None, msg: Optional[str] = None) -> None:
         pass

@@ -1,5 +1,6 @@
 import math
 import unittest
+import GameController as GameControllerModule
 from dataclasses import dataclass
 from random import Random
 from types import SimpleNamespace
@@ -20,7 +21,7 @@ from ai.tutor.move_quality import (
     move_quality_label,
     strategic_turn_move_quality,
 )
-from config.player_policies import STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC
+from config.player_policies import EVO_VS_RULE_BASED, STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC
 from GameController import GameController, PlayerScoreSnapshot
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game
@@ -31,11 +32,132 @@ from game.PlayerAssets import Buildable, DevelopmentCard, DevelopmentCardType
 from game.Resources import Resource, HexType
 from game.Vertex import Vertex, Building, VertexDirection, Port
 from PyQt6.QtWidgets import QCheckBox
+from view.HeadlessView import HeadlessView
 from view.View import GameMode
 from view.MainWindow import MainWindow
 
 
 class TestGame(unittest.TestCase):
+    class _InvalidLoopAI(BasicAI):
+        def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:
+            return Action(ActionType.BUILD, (Buildable.CITY, None))
+
+    class _HomeRequestingView(HeadlessView):
+        def __init__(self):
+            self._return_home_requested = False
+
+        def display_board_turn_ai(self, player: Player, dice_info, msg: str, increase_delay=False) -> None:
+            self._return_home_requested = True
+
+        def consume_return_home_request(self) -> bool:
+            requested = self._return_home_requested
+            self._return_home_requested = False
+            return requested
+
+    class _TutorFollowingView(HeadlessView):
+        def __init__(self, controller: GameController):
+            self.controller = controller
+            self.current_player: Player | None = None
+            self.last_selected_hex: HexTile | None = None
+
+        def display_board(self, player: Player | None = None, msg: str | None = None) -> None:
+            self.current_player = player
+
+        def display_board_turn(self, player: Player, dice_info, played_dev_card: bool = False) -> Action:
+            self.current_player = player
+            return self.controller.get_tutor_recommended_main_action(player, played_dev_card)
+
+        def draw_selectable_vertices(self, vertices, disable_interactivity: bool = False):
+            player = self.current_player
+            game = self.controller.get_game_state()
+            if player is None:
+                return vertices[0]
+
+            if self.last_selected_hex is not None:
+                selected_owner = self.controller._get_tutor_recommended_robber_choice(
+                    player,
+                    [self.last_selected_hex],
+                )[1]
+                if selected_owner is not None:
+                    for building in vertices:
+                        if building.owner == selected_owner:
+                            return building
+
+            return self.controller._run_tutor_decision(
+                lambda: self.controller.tutor_ai.select_initial_settlement_location(player, game, vertices)
+            )
+
+        def draw_selectable_edges(self, edges, disable_interactivity: bool = False):
+            player = self.current_player
+            if player is None:
+                return edges[0]
+            return self.controller._run_tutor_decision(
+                lambda: self.controller.tutor_ai.select_initial_road_location(
+                    player,
+                    self.controller.get_game_state(),
+                    edges,
+                )
+            )
+
+        def draw_selectable_tiles(self, tiles):
+            player = self.current_player
+            if player is None:
+                return tiles[0]
+            self.last_selected_hex = self.controller._get_tutor_recommended_robber_choice(player, tiles)[0]
+            return self.last_selected_hex
+
+        def show_resource_chooser(self, player: Player, num_resources: int, title: str, resource_caps=None):
+            game = self.controller.get_game_state()
+            title_lower = title.lower()
+            if "robber has been rolled" in title_lower:
+                return self.controller._run_tutor_decision(
+                    lambda: self.controller.tutor_ai.select_discard_resources(player, game, num_resources)
+                )
+            if "year of plenty" in title_lower:
+                return self.controller._run_tutor_decision(
+                    lambda: self.controller.tutor_ai.select_year_of_plenty_resources(player, game)
+                )
+            if "monopoly" in title_lower:
+                chosen_resource = self.controller._run_tutor_decision(
+                    lambda: self.controller.tutor_ai.select_monopoly_resource(player, game)
+                )
+                return {chosen_resource: 1}
+            return {}
+
+        def display_trade_manager(self, player: Player, selling, buying, selling_player: Player):
+            return self.controller._run_tutor_decision(
+                lambda: self.controller.tutor_ai.respond_to_trade(
+                    player,
+                    self.controller.get_game_state(),
+                    selling_player,
+                    selling,
+                    buying,
+                )
+            )
+
+        def select_player_trade_offer(self, player: Player, selling, buying, willing_players):
+            return self.controller._run_tutor_decision(
+                lambda: self.controller.tutor_ai.choose_trade_partner(
+                    player,
+                    self.controller.get_game_state(),
+                    selling,
+                    buying,
+                    willing_players,
+                )
+            )
+
+        def pre_roll(self, player: Player):
+            action = self.controller._run_tutor_decision(
+                lambda: self.controller.tutor_ai.next_action(
+                    player,
+                    self.controller.get_game_state(),
+                    Phase.PRE_ROLL,
+                    False,
+                )
+            )
+            if action.type == ActionType.PLAY_DEV_CARD:
+                return action.payload
+            return False
 
     @dataclass
     class _ReplayMarker:
@@ -73,6 +195,49 @@ class TestGame(unittest.TestCase):
     @staticmethod
     def _fake_feedback(**kwargs) -> TutorFeedbackExplanation:
         return cast(TutorFeedbackExplanation, SimpleNamespace(**kwargs))
+
+    @staticmethod
+    def _controller_state_snapshot(controller: GameController, include_roles: bool = True):
+        def normalize_pos(position):
+            return tuple(getattr(part, "value", part) for part in position)
+
+        game = controller.get_game_state()
+        robber_tile = next((tile for tile in game.get_all_hexes() if tile.robber), None)
+        robber_pos = None if robber_tile is None else (robber_tile.q, robber_tile.r)
+
+        player_snapshots = tuple(
+            (
+                player.player_number.name,
+                player.is_human if include_roles else None,
+                (None if player.policy is None else player.policy.policy_name) if include_roles else None,
+                tuple((resource.name, player.resources.get(resource, 0)) for resource in Resource),
+                tuple(sorted(normalize_pos(vertex.pos) for vertex in player.settlements)),
+                tuple(sorted(normalize_pos(vertex.pos) for vertex in player.cities)),
+                tuple(sorted(normalize_pos(edge.pos) for edge in player.roads)),
+                tuple(sorted((card.card_type.name, card.playable) for card in player.development_cards)),
+                player.army_size,
+                player.longest_road_length,
+                player.has_longest_road,
+                player.has_largest_army,
+            )
+            for player in game.players
+        )
+        bank_resources = tuple((resource.name, game.bank_resources[resource]) for resource in Resource)
+        development_deck = tuple(card.card_type.name for card in game.development_deck._deck)
+        played_cards = tuple(
+            (card_type.name, count)
+            for card_type, count in sorted(game.development_deck._played.items(), key=lambda item: item[0].name)
+        )
+
+        return (
+            game.round_num,
+            game.game_over,
+            robber_pos,
+            bank_resources,
+            player_snapshots,
+            development_deck,
+            played_cards,
+        )
 
     def setUp(self):
         player_config = {
@@ -312,6 +477,78 @@ class TestGame(unittest.TestCase):
         controller = GameController(STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC, game_seed=0)
 
         self.assertIsNot(controller.tutor_ai.rng, controller.game_rng)
+
+    def test_tutor_mode_uses_simulation_policy_for_tutor_ai(self):
+        controller = GameController(STANDARD_SINGLEPLAYER, EVO_VS_RULE_BASED, game_seed=0)
+        controller.game_mode = GameMode.TUTOR
+        controller.reset_game()
+
+        self.assertEqual(controller.tutor_ai.policy_name, "RuleBasedAI Evo")
+
+    def test_quick_and_guided_simulations_share_same_seeded_game(self):
+        controllers = {}
+        for mode in (GameMode.SIMULATION, GameMode.GUIDED):
+            controller = GameController(STANDARD_SINGLEPLAYER, EVO_VS_RULE_BASED, game_seed=0)
+            controller.view = HeadlessView()
+            controller.game_mode = mode
+            controller.reset_game()
+            controllers[mode] = controller
+
+        for controller in controllers.values():
+            players = controller.get_all_players()
+            self.assertFalse(players[0].is_human)
+            self.assertEqual(players[0].policy.policy_name, "RuleBasedAI Evo")
+            self.assertEqual(players[1].policy.policy_name, "RuleBasedAI Original")
+            self.assertEqual(players[2].policy.policy_name, "RuleBasedAI Original")
+            self.assertEqual(players[3].policy.policy_name, "RuleBasedAI Original")
+
+            controller.run_initial_placement()
+            for player in controller.get_all_players():
+                controller.make_round_move_ai(player)
+            controller.get_game_state().round_num += 1
+
+        self.assertEqual(
+            self._controller_state_snapshot(controllers[GameMode.SIMULATION]),
+            self._controller_state_snapshot(controllers[GameMode.GUIDED]),
+        )
+
+    def test_quick_simulation_home_request_interrupts_ai_turn(self):
+        controller = GameController(STANDARD_SINGLEPLAYER, EVO_VS_RULE_BASED, game_seed=0)
+        controller.view = self._HomeRequestingView()
+        controller.game_mode = GameMode.SIMULATION
+        controller.reset_game()
+        controller.run_initial_placement()
+
+        with self.assertRaises(GameControllerModule.ReturnToStart):
+            controller.make_round_move_ai(controller.get_all_players()[0])
+
+    def test_tutor_following_recommendations_matches_guided_simulation(self):
+        guided = GameController(STANDARD_SINGLEPLAYER, EVO_VS_RULE_BASED, game_seed=0)
+        guided.view = HeadlessView()
+        guided.game_mode = GameMode.GUIDED
+        guided.reset_game()
+
+        tutor = GameController(STANDARD_SINGLEPLAYER, EVO_VS_RULE_BASED, game_seed=0)
+        tutor.game_mode = GameMode.TUTOR
+        tutor.view = self._TutorFollowingView(tutor)
+        tutor.reset_game()
+
+        guided.run_initial_placement()
+        tutor.run_initial_placement()
+
+        for player in guided.get_all_players():
+            guided.make_round_move_ai(player)
+
+        for player in tutor.get_all_players():
+            if player.is_human:
+                tutor.make_round_move(player)
+            else:
+                tutor.make_round_move_ai(player)
+
+        self.assertEqual(
+            self._controller_state_snapshot(guided, include_roles=False),
+            self._controller_state_snapshot(tutor, include_roles=False),
+        )
 
     def test_victory_point_history_records_true_points(self):
         controller = GameController(STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC, game_seed=0)
@@ -707,6 +944,26 @@ class TestGame(unittest.TestCase):
 
         self.assertEqual(action.type, ActionType.BUILD)
         self.assertEqual(action.payload[0], Buildable.CITY)
+
+    def test_start_game_aborts_when_ai_exceeds_action_request_limit(self):
+        original_limit = GameControllerModule.MAX_AI_ACTION_REQUESTS_PER_TURN
+        GameControllerModule.MAX_AI_ACTION_REQUESTS_PER_TURN = 5
+        try:
+            simulation_players = {
+                PlayerNumber.P1: self._InvalidLoopAI,
+                PlayerNumber.P2: BasicAI,
+                PlayerNumber.P3: BasicAI,
+                PlayerNumber.P4: BasicAI,
+            }
+            controller = GameController({}, simulation_players, game_seed=0)
+            controller.view = HeadlessView()
+
+            controller.start_game(max_rounds=20)
+
+            self.assertTrue(controller.ai_action_limit_reached)
+            self.assertFalse(controller.round_limit_reached)
+        finally:
+            GameControllerModule.MAX_AI_ACTION_REQUESTS_PER_TURN = original_limit
 
 
 if __name__ == "__main__":

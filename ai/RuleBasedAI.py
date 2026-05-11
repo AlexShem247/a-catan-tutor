@@ -1,8 +1,12 @@
+from dataclasses import dataclass
 from random import Random
-from typing import Dict, List, Optional, Tuple
+from functools import wraps
+from typing import Any, Dict, List, Optional, Tuple
 
 from ai.AI import AI
+from ai.RandomAI import RandomAI
 from ai.simulation.EtwEstimator import EtwEstimator
+from ai.simulation.EtwEstimator import EtwTradeStateSnapshot
 from ai.simulation.SimGame import make_sim_game_for_player
 from ai.simulation.SimPlayerState import SimPlayerState, dice_probability
 from ai.utils.action_utils import play_development_card_action
@@ -30,6 +34,7 @@ from ai.tutor.explanations import (
 )
 from ai.utils.resource_utils import calc_step_resources
 from ai.utils.trade_utils import respond_to_trade_batna, select_best_trade_partner
+from config.settings import AI_DIFFICULTY_STRATEGIC_MOVE_PROBABILITIES, load_effective_settings
 from config.StrategyWeights import StrategyWeights
 from game.Edge import Edge
 from game.Game import Game
@@ -40,37 +45,180 @@ from game.Resources import ResourceCount, Resource
 from game.Vertex import Vertex
 
 
+def use_strategy_weights(method):
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self.strategy_weights.applied():
+            return method(self, *args, **kwargs)
+    return wrapper
+
+
+@dataclass(frozen=True)
+class RuleBasedAIDecisionConfig:
+    use_etw_planning: bool = True
+    use_opponent_interference: bool = True
+    use_time_discount: bool = True
+    use_player_trading: bool = True
+    use_development_cards: bool = True
+
+    @classmethod
+    def full_system(cls) -> "RuleBasedAIDecisionConfig":
+        return cls()
+
+    @classmethod
+    def no_etw_planning(cls) -> "RuleBasedAIDecisionConfig":
+        return cls(use_etw_planning=False)
+
+    @classmethod
+    def single_step_etw_rollout(cls) -> "RuleBasedAIDecisionConfig":
+        """Keep ETW scoring, but disable multi-step candidate plans."""
+        return cls(use_etw_planning=False)
+
+    @classmethod
+    def no_opponent_interference(cls) -> "RuleBasedAIDecisionConfig":
+        return cls(use_opponent_interference=False)
+
+    @classmethod
+    def no_time_discount(cls) -> "RuleBasedAIDecisionConfig":
+        return cls(use_time_discount=False)
+
+    @classmethod
+    def no_player_trading(cls) -> "RuleBasedAIDecisionConfig":
+        return cls(use_player_trading=False)
+
+    @classmethod
+    def no_development_cards(cls) -> "RuleBasedAIDecisionConfig":
+        return cls(use_development_cards=False)
+
+
+@dataclass(frozen=True)
+class RuleBasedAIStateSnapshot:
+    rng_state: Any
+    trade_state: EtwTradeStateSnapshot
+
+
 class RuleBasedAI(AI):
-    def __init__(self, rng: Random):
+    def __init__(
+            self,
+            rng: Random,
+            strategy_weights: Optional[StrategyWeights] = None,
+            decision_config: Optional[RuleBasedAIDecisionConfig] = None):
         super().__init__(rng)
+        self.strategy_weights = strategy_weights or StrategyWeights()
+        self.decision_config = decision_config or RuleBasedAIDecisionConfig()
         self.etw_estimator = EtwEstimator()
+        self.random_ai = RandomAI(rng)
 
     def new_turn(self):
         self.etw_estimator.new_turn()
 
+    def snapshot_state(self) -> RuleBasedAIStateSnapshot:
+        return RuleBasedAIStateSnapshot(
+            rng_state=self.rng.getstate(),
+            trade_state=self.etw_estimator.snapshot_trade_state(),
+        )
+
+    def restore_state(self, snapshot: RuleBasedAIStateSnapshot) -> None:
+        self.rng.setstate(snapshot.rng_state)
+        self.etw_estimator.restore_trade_state(snapshot.trade_state)
+
+    def _use_strategic_move(self) -> bool:
+        settings = load_effective_settings()
+        difficulty = str(settings.get("ai_difficulty", "medium")).lower()
+        strategic_move_probability = AI_DIFFICULTY_STRATEGIC_MOVE_PROBABILITIES.get(
+            difficulty,
+            AI_DIFFICULTY_STRATEGIC_MOVE_PROBABILITIES["medium"],
+        )
+        return self.rng.random() < strategic_move_probability
+
+    def _build_random_action_explanation(self, action: Action, phase: Phase) -> ActionExplanation:
+        candidate = CandidateExplanation(
+            action=action,
+            full_plan=[action],
+            reasons_for=[
+                Reason(
+                    ReasonType.HEURISTIC_CHOICE,
+                    ReasonLabel.QUICK_GENERIC,
+                    0.0,
+                )
+            ],
+            metadata={"phase": phase.name.lower(), "selection_mode": "random"},
+        )
+        return ActionExplanation(
+            chosen_action=action,
+            chosen_candidate=candidate,
+            alternatives=[],
+            move_quality=0.0,
+            assumptions=[],
+            metadata={"phase": phase.name.lower(), "selection_mode": "random"},
+        )
+
+    def _planner_kwargs(self, ignore_opponents: bool = False) -> Dict[str, object]:
+        return {
+            "include_player_trades": self.decision_config.use_player_trading,
+            "ignore_opponents": ignore_opponents or not self.decision_config.use_opponent_interference,
+            "use_time_discount": self.decision_config.use_time_discount,
+            "allow_development_cards": self.decision_config.use_development_cards,
+            "use_planning": self.decision_config.use_etw_planning,
+        }
+
+    def _etw_kwargs(self, include_player_trades: bool = True) -> Dict[str, object]:
+        return {
+            "include_player_trades": include_player_trades,
+            "allow_development_cards": self.decision_config.use_development_cards,
+            "use_planning": self.decision_config.use_etw_planning,
+        }
+
+    def _trade_risk_kwargs(self) -> Dict[str, float]:
+        if self.decision_config.use_opponent_interference:
+            return {}
+        return {
+            "lambda_leader": float("inf"),
+            "lambda_base": float("inf"),
+            "leader_penalty": 0.0,
+        }
+
+    @use_strategy_weights
     def select_initial_settlement_location(
             self, player: Player, game: Game, available_vertices: List[Vertex]) -> Optional[Vertex]:
         """Return the best initial settlement vertex based on utility evaluation."""
         vertex, _ = self.select_initial_settlement_location_with_explanation(player, game, available_vertices)
         return vertex
 
+    @use_strategy_weights
     def select_initial_road_location(
             self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
         """Return the best initial road edge connecting settlements or toward high-utility vertices."""
         edge, _ = self.select_initial_road_location_with_explanation(player, game, available_edges)
         return edge
 
+    @use_strategy_weights
     def select_initial_settlement_location_with_explanation(
             self, player: Player, game: Game,
             available_vertices: List[Vertex]) -> Tuple[Optional[Vertex], Optional[ActionExplanation]]:
         """Return the best initial settlement vertex together with an explanation."""
         if not available_vertices:
             return None, None
+        if not self._use_strategic_move():
+            vertex = self.random_ai.select_initial_settlement_location(player, game, available_vertices)
+            if vertex is None:
+                return None, None
+            return vertex, self.explain_initial_settlement_choice(player, game, available_vertices, vertex)
 
         first_settlement = len(player.settlements) == 0
         scored_vertices = sorted(
             [
-                (vertex, self.vertex_utility(vertex, player, game, available_vertices, first_settlement))
+                (
+                    vertex,
+                    self.vertex_utility(
+                        vertex,
+                        player,
+                        game,
+                        available_vertices,
+                        first_settlement,
+                        use_opponent_interference=self.decision_config.use_opponent_interference,
+                    ),
+                )
                 for vertex in available_vertices
             ],
             key=lambda item: item[1],
@@ -82,13 +230,41 @@ class RuleBasedAI(AI):
         explanation = self._build_initial_settlement_explanation(player, best_vertex, best_score, max_score)
         return best_vertex, explanation
 
+    @use_strategy_weights
+    def explain_initial_settlement_choice(
+            self, player: Player, game: Game,
+            available_vertices: List[Vertex], chosen_vertex: Vertex) -> ActionExplanation:
+        first_settlement = len(player.settlements) == 0
+        vertex_scores = {
+            vertex: self.vertex_utility(
+                vertex,
+                player,
+                game,
+                available_vertices,
+                first_settlement,
+                use_opponent_interference=self.decision_config.use_opponent_interference,
+            )
+            for vertex in available_vertices
+        }
+        chosen_score = vertex_scores.get(chosen_vertex, float("-inf"))
+        max_score = max(vertex_scores.values(), default=0.0)
+        return self._build_initial_settlement_explanation(player, chosen_vertex, chosen_score, max_score)
+
+    @use_strategy_weights
     def score_initial_settlement_choice(
             self, player: Player, game: Game, available_vertices: List[Vertex], chosen_vertex: Vertex) -> float:
         if chosen_vertex not in available_vertices:
             return 0.0
         first_settlement = len(player.settlements) == 0
         vertex_scores = {
-            vertex: self.vertex_utility(vertex, player, game, available_vertices, first_settlement)
+            vertex: self.vertex_utility(
+                vertex,
+                player,
+                game,
+                available_vertices,
+                first_settlement,
+                use_opponent_interference=self.decision_config.use_opponent_interference,
+            )
             for vertex in available_vertices
         }
         return initial_settlement_move_quality(
@@ -96,12 +272,18 @@ class RuleBasedAI(AI):
             max(vertex_scores.values(), default=0.0),
         )
 
+    @use_strategy_weights
     def select_initial_road_location_with_explanation(
             self, player: Player, game: Game,
             available_edges: List[Edge]) -> Tuple[Optional[Edge], Optional[ActionExplanation]]:
         """Return the best initial road edge together with an explanation."""
         if not available_edges:
             return None, None
+        if not self._use_strategic_move():
+            edge = self.random_ai.select_initial_road_location(player, game, available_edges)
+            if edge is None:
+                return None, None
+            return edge, self.explain_initial_road_choice(player, game, available_edges, edge)
 
         if len(player.settlements) + len(player.cities) >= 2:
             edge = self.road_building_placement(player, game, available_edges)
@@ -118,7 +300,14 @@ class RuleBasedAI(AI):
         current_settlement = player.settlements[-1]
         legal_vertices = get_legal_settlement_vertices(make_sim_game_for_player(game, player))
         vertex_scores = {
-            vertex: self.vertex_utility(vertex, player, game, legal_vertices, first_settlement=False)
+            vertex: self.vertex_utility(
+                vertex,
+                player,
+                game,
+                legal_vertices,
+                first_settlement=False,
+                use_opponent_interference=self.decision_config.use_opponent_interference,
+            )
             for vertex in legal_vertices
         }
         max_legal_vertex_utility = max(vertex_scores.values(), default=0.0)
@@ -176,6 +365,91 @@ class RuleBasedAI(AI):
         )
         return edge, explanation
 
+    @use_strategy_weights
+    def explain_initial_road_choice(
+            self, player: Player, game: Game, available_edges: List[Edge], chosen_edge: Edge) -> ActionExplanation:
+        if len(player.settlements) + len(player.cities) >= 2:
+            return self._build_initial_road_explanation(
+                chosen_edge,
+                target_vertex=None,
+                explanation_kind=RoadExplanationKind.FLEXIBLE,
+                move_quality=initial_road_flexible_move_quality(),
+            )
+
+        current_settlement = player.settlements[-1]
+        legal_vertices = get_legal_settlement_vertices(make_sim_game_for_player(game, player))
+        vertex_scores = {
+            vertex: self.vertex_utility(
+                vertex,
+                player,
+                game,
+                legal_vertices,
+                first_settlement=False,
+                use_opponent_interference=self.decision_config.use_opponent_interference,
+            )
+            for vertex in legal_vertices
+        }
+        max_legal_vertex_utility = max(vertex_scores.values(), default=0.0)
+
+        if len(player.settlements) == 1:
+            target_vertices = [
+                vertex for vertex in legal_vertices
+                if find_edge_toward_vertex(current_settlement, vertex, available_edges) == chosen_edge
+            ]
+            if target_vertices:
+                best_vertex = max(target_vertices, key=vertex_scores.get)
+                return self._build_initial_road_explanation(
+                    chosen_edge,
+                    target_vertex=best_vertex,
+                    explanation_kind=RoadExplanationKind.EXPANSION,
+                    move_quality=initial_road_expansion_move_quality(
+                        vertex_scores[best_vertex],
+                        max_legal_vertex_utility,
+                    ),
+                )
+            return self._build_initial_road_explanation(
+                chosen_edge,
+                target_vertex=None,
+                explanation_kind=RoadExplanationKind.FLEXIBLE,
+                move_quality=initial_road_flexible_move_quality(),
+            )
+
+        connection_edges = [
+            edge for edge in available_edges
+            if moves_toward_vertex(edge.get_other_vertex(current_settlement), player.settlements[0])
+        ]
+        if chosen_edge in connection_edges:
+            return self._build_initial_road_explanation(
+                chosen_edge,
+                target_vertex=player.settlements[0],
+                explanation_kind=RoadExplanationKind.CONNECTION,
+                move_quality=initial_road_connection_move_quality(len(connection_edges)),
+            )
+
+        target_vertices = [
+            vertex for vertex in legal_vertices
+            if find_edge_toward_vertex(current_settlement, vertex, available_edges) == chosen_edge
+        ]
+        if target_vertices:
+            best_vertex = max(target_vertices, key=vertex_scores.get)
+            return self._build_initial_road_explanation(
+                chosen_edge,
+                target_vertex=best_vertex,
+                explanation_kind=RoadExplanationKind.EXPANSION,
+                move_quality=initial_road_expansion_move_quality(
+                    vertex_scores[best_vertex],
+                    max_legal_vertex_utility,
+                ),
+            )
+
+        return self._build_initial_road_explanation(
+            chosen_edge,
+            target_vertex=None,
+            explanation_kind=RoadExplanationKind.FLEXIBLE,
+            move_quality=initial_road_flexible_move_quality(),
+        )
+
+    @use_strategy_weights
     def score_initial_road_choice(
             self, player: Player, game: Game, available_edges: List[Edge], chosen_edge: Edge) -> float:
         if chosen_edge not in available_edges:
@@ -186,7 +460,14 @@ class RuleBasedAI(AI):
         current_settlement = player.settlements[-1]
         legal_vertices = get_legal_settlement_vertices(make_sim_game_for_player(game, player))
         vertex_scores = {
-            vertex: self.vertex_utility(vertex, player, game, legal_vertices, first_settlement=False)
+            vertex: self.vertex_utility(
+                vertex,
+                player,
+                game,
+                legal_vertices,
+                first_settlement=False,
+                use_opponent_interference=self.decision_config.use_opponent_interference,
+            )
             for vertex in legal_vertices
         }
         max_legal_vertex_utility = max(vertex_scores.values(), default=0.0)
@@ -220,7 +501,7 @@ class RuleBasedAI(AI):
     @staticmethod
     def vertex_utility(
             vertex: Vertex, player: Player, game: Game, available_vertices: List[Vertex],
-            first_settlement: bool = True) -> float:
+            first_settlement: bool = True, use_opponent_interference: bool = True) -> float:
         """Compute utility score for a vertex as a potential settlement location."""
         if not vertex.hexes:
             return float("-inf")
@@ -236,21 +517,22 @@ class RuleBasedAI(AI):
         sim_game = make_sim_game_for_player(game, player)
         blocking_penalty = 1.0
 
-        for opp in game.players:
-            if opp == player:
-                continue
+        if use_opponent_interference:
+            for opp in game.players:
+                if opp == player:
+                    continue
 
-            for opp_v in opp.settlements:
-                reachable = get_reachable_vertices(
-                    start_vertex=opp_v, player_number=opp.player_number, sim_game=sim_game,
-                    available_vertices=available_vertices)
-                # If an opponent could reasonably reach this spot, blocking value is low.
-                if vertex in reachable:
-                    blocking_penalty = 0.0
+                for opp_v in opp.settlements:
+                    reachable = get_reachable_vertices(
+                        start_vertex=opp_v, player_number=opp.player_number, sim_game=sim_game,
+                        available_vertices=available_vertices)
+                    # If an opponent could reasonably reach this spot, blocking value is low.
+                    if vertex in reachable:
+                        blocking_penalty = 0.0
+                        break
+
+                if blocking_penalty == 0.0:
                     break
-
-            if blocking_penalty == 0.0:
-                break
 
         # Base utility: yield + diversity, with an optional blocking component.
         utility = (StrategyWeights.INIT_PLACE_YIELD * dice_sum + StrategyWeights.INIT_PLACE_DIVERSITY * diversity
@@ -349,6 +631,7 @@ class RuleBasedAI(AI):
 
         return reasons
 
+    @use_strategy_weights
     def choose_trade_partner(
             self, player: Player, game: Game, selling: ResourceCount, buying: ResourceCount,
             available_players: List[Tuple[Player, Optional[ResourceCount]]]) -> Optional[
@@ -357,11 +640,22 @@ class RuleBasedAI(AI):
         selection, _ = self.choose_trade_partner_with_explanation(player, game, selling, buying, available_players)
         return selection
 
+    @use_strategy_weights
     def choose_trade_partner_with_explanation(
             self, player: Player, game: Game, selling: ResourceCount, buying: ResourceCount,
             available_players: List[Tuple[Player, Optional[ResourceCount]]]) -> Tuple[
             Optional[Tuple[Player, Optional[ResourceCount]]], Optional[ActionExplanation]]:
         """Return the chosen trade partner and a structured explanation."""
+        if not self.decision_config.use_player_trading:
+            return None, None
+        if not self._use_strategic_move():
+            selection = self.random_ai.choose_trade_partner(player, game, selling, buying, available_players)
+            if selection is None:
+                return None, None
+            chosen_player, counter = selection
+            explanation = self.explain_trade_partner_choice(
+                player, game, selling, buying, available_players, chosen_player, counter)
+            return selection, explanation
 
         # Build a lightweight simulated view of the game (we know our own hand, opponents are hidden-info).
         sim_game = make_sim_game_for_player(game, player)
@@ -371,7 +665,7 @@ class RuleBasedAI(AI):
         # Pick the partner (and optional counter-offer) that improves our ETW without helping the leader too much.
         selection = select_best_trade_partner(
             player_sim=sim_us, sim_game=sim_game, etw_estimator=self.etw_estimator, selling_orig=selling,
-            buying=buying, available_players=available_sim_players)
+            buying=buying, available_players=available_sim_players, **self._trade_risk_kwargs())
 
         if selection is None:
             return None, None
@@ -383,6 +677,7 @@ class RuleBasedAI(AI):
             player, sim_us, sim_game, selling, buying, available_players, chosen_player, counter)
         return (chosen_player, counter), explanation
 
+    @use_strategy_weights
     def explain_trade_partner_choice(
             self, player: Player, game: Game, selling: ResourceCount, buying: ResourceCount,
             available_players: List[Tuple[Player, Optional[ResourceCount]]], chosen_player: Player,
@@ -392,21 +687,43 @@ class RuleBasedAI(AI):
         return self._build_trade_partner_explanation(
             player, sim_us, sim_game, selling, buying, available_players, chosen_player, counter)
 
+    @use_strategy_weights
     def select_robber_target(
             self, player: Player, game: Game, valid_hexes: List[HexTile]) -> Tuple[HexTile, Optional[Player]]:
         """Select which hex tile to place the robber on, prioritising opponents' resources."""
         tile, steal_from, _ = self.select_robber_target_with_explanation(player, game, valid_hexes)
         return tile, steal_from
 
+    @use_strategy_weights
     def select_robber_target_with_explanation(
             self, player: Player, game: Game,
             valid_hexes: List[HexTile]) -> Tuple[HexTile, Optional[Player], Optional[ActionExplanation]]:
         """Select robber placement and return a structured explanation."""
+        if not self._use_strategic_move():
+            tile, steal_from = self.random_ai.select_robber_target(player, game, valid_hexes)
+            return tile, steal_from, self.explain_robber_choice(player, game, valid_hexes, tile, steal_from)
+
         best_score = float("-inf")
         best_hex: Optional[HexTile] = None
 
         # Used to avoid blocking ourselves unless it's clearly worth it.
         our_resource_tiles = {h for v in (player.settlements + player.cities) for h in v.hexes}
+
+        if not self.decision_config.use_opponent_interference:
+            neutral_hexes = [hex_tile for hex_tile in valid_hexes if hex_tile not in our_resource_tiles]
+            best_hex = self.rng.choice(neutral_hexes or valid_hexes)
+            players_on_best_hex = [p for p in game.get_players_on_hex(best_hex) if p != player]
+            best_player = self.rng.choice(players_on_best_hex) if players_on_best_hex else None
+            self_harm = 0.0
+            if best_hex in our_resource_tiles:
+                self_harm = sum(
+                    dice_probability(best_hex.production_number) * (2.0 if vertex in player.cities else 1.0)
+                    for vertex in (player.settlements + player.cities)
+                    if best_hex in vertex.hexes
+                )
+            explanation = self._build_robber_explanation(
+                best_hex, best_player, 0.0, best_hex in our_resource_tiles, self_harm, 0.0)
+            return best_hex, best_player, explanation
 
         sim_game_for_robber = make_sim_game_for_player(game, player)
 
@@ -425,7 +742,7 @@ class RuleBasedAI(AI):
             sim_game_opp = make_sim_game_for_player(game, opponent)
             best_action = self.etw_estimator.calculate_best_game_action(
                 sim_game=sim_game_opp, player_number=opponent.player_number, dev_played=False,
-                ignore_affordability=True, ignore_opponents=True)
+                ignore_affordability=True, **self._planner_kwargs(ignore_opponents=True))
 
             required = calc_step_resources(best_action)
             total = sum(required.values())
@@ -495,10 +812,21 @@ class RuleBasedAI(AI):
         )
         return best_hex, best_player, explanation
 
+    @use_strategy_weights
     def explain_robber_choice(
             self, player: Player, game: Game, _valid_hexes: List[HexTile], chosen_hex: HexTile,
             chosen_player: Optional[Player]) -> ActionExplanation:
         our_resource_tiles = {h for v in (player.settlements + player.cities) for h in v.hexes}
+        if not self.decision_config.use_opponent_interference:
+            self_harm = 0.0
+            if chosen_hex in our_resource_tiles:
+                self_harm = sum(
+                    dice_probability(chosen_hex.production_number) * (2.0 if vertex in player.cities else 1.0)
+                    for vertex in (player.settlements + player.cities)
+                    if chosen_hex in vertex.hexes
+                )
+            return self._build_robber_explanation(
+                chosen_hex, chosen_player, 0.0, chosen_hex in our_resource_tiles, self_harm, 0.0)
         sim_game_for_robber = make_sim_game_for_player(game, player)
         our_vp = player.calc_victory_points()[0]
         opp_vps = [p.calc_victory_points()[0] for p in game.players if p != player]
@@ -512,7 +840,7 @@ class RuleBasedAI(AI):
             sim_game_opp = make_sim_game_for_player(game, opponent)
             best_action = self.etw_estimator.calculate_best_game_action(
                 sim_game=sim_game_opp, player_number=opponent.player_number, dev_played=False,
-                ignore_affordability=True, ignore_opponents=True)
+                ignore_affordability=True, **self._planner_kwargs(ignore_opponents=True))
             required = calc_step_resources(best_action)
             total = sum(required.values())
             opponent_importance[opponent.player_number] = (
@@ -553,14 +881,20 @@ class RuleBasedAI(AI):
             leader_vp_ratio,
         )
 
+    @use_strategy_weights
     def select_discard_resources(self, player: Player, game: Game, num_resources: int) -> ResourceCount:
         """Select resources to discard, keeping critical ones for best next action."""
         discard, _ = self.select_discard_resources_with_explanation(player, game, num_resources)
         return discard
 
+    @use_strategy_weights
     def select_discard_resources_with_explanation(
             self, player: Player, game: Game, num_resources: int) -> Tuple[ResourceCount, Optional[ActionExplanation]]:
         """Select the legal discard that maximises the displayed discard move quality."""
+        if not self._use_strategic_move():
+            discard = self.random_ai.select_discard_resources(player, game, num_resources)
+            return discard, self.explain_discard_choice(player, game, discard)
+
         current_resources, needed, best_plan_explanation = self._discard_context(player, game)
         best_discard: Optional[ResourceCount] = None
         best_explanation: Optional[ActionExplanation] = None
@@ -580,6 +914,7 @@ class RuleBasedAI(AI):
                 best_discard, current_resources, needed, best_plan_explanation)
         return best_discard, best_explanation
 
+    @use_strategy_weights
     def explain_discard_choice(
             self, player: Player, game: Game, discard: ResourceCount) -> ActionExplanation:
         current_resources, needed, best_plan_explanation = self._discard_context(player, game)
@@ -592,7 +927,7 @@ class RuleBasedAI(AI):
         current_resources = {resource: int(player.resources.get(resource, 0)) for resource in Resource}
         sim_game = make_sim_game_for_player(game, player)
         best_plan_explanation = self.etw_estimator.calculate_best_game_action_with_explanation(
-            sim_game=sim_game, player_number=player.player_number, dev_played=False)
+            sim_game=sim_game, player_number=player.player_number, dev_played=False, **self._planner_kwargs())
         needed = {resource: int(calc_step_resources(best_plan_explanation.chosen_action).get(resource, 0))
                   for resource in Resource}
         return current_resources, needed, best_plan_explanation
@@ -759,17 +1094,23 @@ class RuleBasedAI(AI):
             return "play a development card"
         return "take the next planned action"
 
+    @use_strategy_weights
     def select_year_of_plenty_resources(self, player: Player, game: Game) -> ResourceCount:
         """Select the most-needed resources for the player's next action."""
         resources, _ = self.select_year_of_plenty_resources_with_explanation(player, game)
         return resources
 
+    @use_strategy_weights
     def select_year_of_plenty_resources_with_explanation(
             self, player: Player, game: Game) -> Tuple[ResourceCount, Optional[ActionExplanation]]:
         """Select Year of Plenty resources and return a structured explanation."""
+        if not self._use_strategic_move():
+            selected = self.random_ai.select_year_of_plenty_resources(player, game)
+            return selected, self.explain_year_of_plenty_choice(player, game, selected)
+
         sim_game = make_sim_game_for_player(game, player)
         best_plan_explanation = self.etw_estimator.calculate_best_game_action_with_explanation(
-            sim_game=sim_game, player_number=player.player_number, dev_played=False)
+            sim_game=sim_game, player_number=player.player_number, dev_played=False, **self._planner_kwargs())
         primary_action, target_action, target_shortfalls, already_had_next_step = self._year_of_plenty_plan_target(
             player, best_plan_explanation)
 
@@ -808,21 +1149,23 @@ class RuleBasedAI(AI):
         )
         return selected, explanation
 
+    @use_strategy_weights
     def explain_year_of_plenty_choice(
             self, player: Player, game: Game, selected: ResourceCount) -> ActionExplanation:
+        normalized_selected = {resource: int(selected.get(resource, 0)) for resource in Resource}
         sim_game = make_sim_game_for_player(game, player)
         best_plan_explanation = self.etw_estimator.calculate_best_game_action_with_explanation(
-            sim_game=sim_game, player_number=player.player_number, dev_played=False)
+            sim_game=sim_game, player_number=player.player_number, dev_played=False, **self._planner_kwargs())
         primary_action, target_action, target_shortfalls, already_had_next_step = self._year_of_plenty_plan_target(
             player, best_plan_explanation)
         clearly_supports_follow_up = (
             target_action is not None
-            and 0 < sum(selected.values()) == sum(
-                min(selected[resource], target_shortfalls[resource]) for resource in Resource
+            and 0 < sum(normalized_selected.values()) == sum(
+                min(normalized_selected[resource], target_shortfalls[resource]) for resource in Resource
             )
         )
         return self._build_year_of_plenty_explanation(
-            selected,
+            normalized_selected,
             primary_action,
             target_action if clearly_supports_follow_up or already_had_next_step else None,
             clearly_supports_follow_up,
@@ -830,14 +1173,33 @@ class RuleBasedAI(AI):
             best_plan_explanation,
         )
 
+    @use_strategy_weights
     def select_monopoly_resource(self, player: Player, game: Game) -> Resource:
         """Select the resource that will most hurt opponents based on their likely next actions."""
         resource, _ = self.select_monopoly_resource_with_explanation(player, game)
         return resource
 
+    @use_strategy_weights
     def select_monopoly_resource_with_explanation(
             self, player: Player, game: Game) -> Tuple[Resource, Optional[ActionExplanation]]:
         """Select Monopoly resource and return a structured explanation."""
+        if not self._use_strategic_move():
+            chosen = self.random_ai.select_monopoly_resource(player, game)
+            return chosen, self.explain_monopoly_choice(player, game, chosen)
+
+        if not self.decision_config.use_opponent_interference:
+            best_self_action = self.etw_estimator.calculate_best_game_action(
+                sim_game=make_sim_game_for_player(game, player),
+                player_number=player.player_number,
+                dev_played=False,
+                ignore_affordability=True,
+                **self._planner_kwargs(ignore_opponents=True),
+            )
+            required = calc_step_resources(best_self_action)
+            candidates = [resource for resource, amount in required.items() if amount > 0]
+            chosen = self.rng.choice(candidates) if candidates else self.rng.choice(list(Resource))
+            explanation = self._build_monopoly_resource_explanation(chosen, 0, float(required.get(chosen, 0)), 0.0)
+            return chosen, explanation
 
         # Count how often each resource appears in opponents' next planned actions.
         need_counts: Dict[Resource, int] = {r: 0 for r in Resource}
@@ -856,7 +1218,7 @@ class RuleBasedAI(AI):
             sim_game_opp = make_sim_game_for_player(game, opponent)
             best_action = self.etw_estimator.calculate_best_game_action(
                 sim_game=sim_game_opp, player_number=opponent.player_number, dev_played=False,
-                ignore_affordability=True, ignore_opponents=True)
+                ignore_affordability=True, **self._planner_kwargs(ignore_opponents=True))
 
             # Tally required resources for that action.
             required = calc_step_resources(best_action)
@@ -877,7 +1239,7 @@ class RuleBasedAI(AI):
             player_number=player.player_number,
             dev_played=False,
             ignore_affordability=True,
-            ignore_opponents=True,
+            **self._planner_kwargs(ignore_opponents=True),
         )
         self_gain_efficiency = float(calc_step_resources(best_self_action).get(chosen, 0))
         leader_share = leader_counts[chosen] / max(held_counts[chosen], 1) if held_counts[chosen] > 0 else 0.0
@@ -889,6 +1251,7 @@ class RuleBasedAI(AI):
         )
         return chosen, explanation
 
+    @use_strategy_weights
     def explain_monopoly_choice(self, player: Player, game: Game, chosen: Resource) -> ActionExplanation:
         held_counts: Dict[Resource, int] = {r: 0 for r in Resource}
         leader_counts: Dict[Resource, int] = {r: 0 for r in Resource}
@@ -908,7 +1271,7 @@ class RuleBasedAI(AI):
             player_number=player.player_number,
             dev_played=False,
             ignore_affordability=True,
-            ignore_opponents=True,
+            **self._planner_kwargs(ignore_opponents=True),
         )
         self_gain_efficiency = float(calc_step_resources(best_self_action).get(chosen, 0))
         leader_share = leader_counts[chosen] / max(held_counts[chosen], 1) if held_counts[chosen] > 0 else 0.0
@@ -1046,6 +1409,7 @@ class RuleBasedAI(AI):
             return sorted_resources[:2]
         return sorted_resources
 
+    @use_strategy_weights
     def respond_to_trade(
             self, player: Player, game: Game, opponent: Player, selling: ResourceCount,
             buying: ResourceCount) -> Tuple[bool, Optional[ResourceCount]]:
@@ -1053,10 +1417,18 @@ class RuleBasedAI(AI):
         accepted, counter, _ = self.respond_to_trade_with_explanation(player, game, opponent, selling, buying)
         return accepted, counter
 
+    @use_strategy_weights
     def respond_to_trade_with_explanation(
             self, player: Player, game: Game, opponent: Player, selling: ResourceCount,
             buying: ResourceCount) -> Tuple[bool, Optional[ResourceCount], Optional[ActionExplanation]]:
         """Respond to a proposed trade and return a structured explanation."""
+        if not self.decision_config.use_player_trading:
+            return False, None, None
+        if not self._use_strategic_move():
+            accepted, counter = self.random_ai.respond_to_trade(player, game, opponent, selling, buying)
+            explanation = self.explain_trade_response_choice(
+                player, game, opponent, selling, buying, accepted, counter)
+            return accepted, counter, explanation
 
         # Evaluate the offer in a simulated state.
         sim_game = make_sim_game_for_player(game, player)
@@ -1069,11 +1441,20 @@ class RuleBasedAI(AI):
         # Accept if it improves our ETW versus waiting/bank trades, but avoid helping a close/leading opponent.
         accepted, counter = respond_to_trade_batna(
             player_sim=sim_us, opponent_sim=opponent_sim, sim_game=sim_game, etw_estimator=self.etw_estimator,
-            selling_to_us=selling, buying_from_us=buying, opponents=opponents)
+            selling_to_us=selling,
+            buying_from_us=buying,
+            opponents=opponents,
+            **{
+                key: value
+                for key, value in self._trade_risk_kwargs().items()
+                if key != "leader_penalty"
+            },
+        )
         explanation = self._build_trade_response_explanation(
             player, opponent, sim_us, opponent_sim, sim_game, selling, buying, opponents, accepted, counter)
         return accepted, counter, explanation
 
+    @use_strategy_weights
     def explain_trade_response_choice(
             self, player: Player, game: Game, opponent: Player, selling: ResourceCount,
             buying: ResourceCount, accepted: bool, counter: Optional[ResourceCount]) -> ActionExplanation:
@@ -1089,13 +1470,13 @@ class RuleBasedAI(AI):
             available_players: List[Tuple[Player, Optional[ResourceCount]]], chosen_player: Player,
             counter: Optional[ResourceCount]) -> ActionExplanation:
         batna_etw = self.etw_estimator.estimated_time_to_win(
-            sim_us, sim_game, False, include_player_trades=False)
+            sim_us, sim_game, False, **self._etw_kwargs(include_player_trades=False))
         candidate_explanations: List[CandidateExplanation] = []
 
         all_sims = [sim_us] + [SimPlayerState(opp, opponent=True) for opp, _ in available_players]
         etw_by_player = {
             sim_player: self.etw_estimator.estimated_time_to_win(
-                sim_player.copy(), sim_game, False, include_player_trades=False)
+                sim_player.copy(), sim_game, False, **self._etw_kwargs(include_player_trades=False))
             for sim_player in all_sims
         }
         leading_sim = min(etw_by_player, key=etw_by_player.get)
@@ -1112,27 +1493,33 @@ class RuleBasedAI(AI):
             sim_game_after = make_sim_game_for_player(sim_game.game, player)
             sim_game_after.overlay.set_sim_player(sim_after)
             etw_after = self.etw_estimator.estimated_time_to_win(
-                sim_after, sim_game_after, False, include_player_trades=False)
+                sim_after, sim_game_after, False, **self._etw_kwargs(include_player_trades=False))
             delta_ai = batna_etw - etw_after
             if delta_ai <= 0:
                 continue
 
-            etw_opp_before = self.etw_estimator.estimated_time_to_win(
-                opp_sim, sim_game, False, include_player_trades=False)
-            sim_opp_after = opp_sim.copy()
-            sim_opp_after.add_resources(payment)
-            sim_opp_after.remove_resources(buying)
-            sim_game_opp_after = make_sim_game_for_player(sim_game.game, player)
-            sim_game_opp_after.overlay.set_sim_player(sim_opp_after)
-            etw_opp_after = self.etw_estimator.estimated_time_to_win(
-                sim_opp_after, sim_game_opp_after, False, include_player_trades=False)
-            delta_opp = max(0.0, etw_opp_before - etw_opp_after)
+            delta_opp = 0.0
+            if self.decision_config.use_opponent_interference:
+                etw_opp_before = self.etw_estimator.estimated_time_to_win(
+                    opp_sim, sim_game, False, **self._etw_kwargs(include_player_trades=False))
+                sim_opp_after = opp_sim.copy()
+                sim_opp_after.add_resources(payment)
+                sim_opp_after.remove_resources(buying)
+                sim_game_opp_after = make_sim_game_for_player(sim_game.game, player)
+                sim_game_opp_after.overlay.set_sim_player(sim_opp_after)
+                etw_opp_after = self.etw_estimator.estimated_time_to_win(
+                    sim_opp_after, sim_game_opp_after, False, **self._etw_kwargs(include_player_trades=False))
+                delta_opp = max(0.0, etw_opp_before - etw_opp_after)
 
             is_leader = opp_sim == leading_sim
             vp_gap = opp_sim.victory_points() - sim_us.victory_points()
             is_close = vp_gap >= -StrategyWeights.CLOSE_OPPONENT_VP_GAP
             lambda_risk = StrategyWeights.LAMBDA_RISK_LEADER if is_leader else StrategyWeights.LAMBDA_RISK_BASE
-            if (is_close or is_leader) and delta_opp >= lambda_risk * delta_ai:
+            if (
+                self.decision_config.use_opponent_interference
+                and (is_close or is_leader)
+                and delta_opp >= lambda_risk * delta_ai
+            ):
                 continue
 
             reasons_for = [
@@ -1142,7 +1529,7 @@ class RuleBasedAI(AI):
                 saved_resources = max(0.0, float(sum(selling.values()) - sum(payment.values())))
                 reasons_for.append(
                     Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.TRADE_PARTNER_COUNTER_VALUE, saved_resources))
-            if is_close or is_leader:
+            if self.decision_config.use_opponent_interference and (is_close or is_leader):
                 safety_margin = max(0.0, lambda_risk * delta_ai - delta_opp)
                 reasons_for.append(
                     Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.TRADE_PARTNER_SAFE_OPPONENT, safety_margin))
@@ -1154,7 +1541,10 @@ class RuleBasedAI(AI):
                 etw_before=batna_etw,
                 etw_after=etw_after,
                 etw_delta=delta_ai,
-                utility_total=batna_etw - etw_after - (StrategyWeights.TRADE_LEADER_PENALTY if is_leader else 0.0),
+                utility_total=batna_etw - etw_after - (
+                    StrategyWeights.TRADE_LEADER_PENALTY
+                    if self.decision_config.use_opponent_interference and is_leader else 0.0
+                ),
                 reasons_for=reasons_for,
                 metadata={
                     "template": ExplanationTemplate.TRADE_PARTNER,
@@ -1211,7 +1601,7 @@ class RuleBasedAI(AI):
             selling_to_us: ResourceCount, buying_from_us: ResourceCount, opponents: List[SimPlayerState],
             accepted: bool, counter: Optional[ResourceCount]) -> ActionExplanation:
         etw_before = self.etw_estimator.estimated_time_to_win(
-            sim_us, sim_game, False, include_player_trades=False)
+            sim_us, sim_game, False, **self._etw_kwargs(include_player_trades=False))
 
         offered_after = sim_us.copy()
         offered_after.add_resources(selling_to_us)
@@ -1219,13 +1609,13 @@ class RuleBasedAI(AI):
         offered_game = make_sim_game_for_player(sim_game.game, player)
         offered_game.overlay.set_sim_player(offered_after)
         etw_after_offer = self.etw_estimator.estimated_time_to_win(
-            offered_after, offered_game, False, include_player_trades=False)
+            offered_after, offered_game, False, **self._etw_kwargs(include_player_trades=False))
         delta_offer = etw_before - etw_after_offer
 
         all_players = [sim_us, *opponents]
         etw_by_player = {
             sim_player: self.etw_estimator.estimated_time_to_win(
-                sim_player.copy(), sim_game, False, include_player_trades=False)
+                sim_player.copy(), sim_game, False, **self._etw_kwargs(include_player_trades=False))
             for sim_player in all_players
         }
         leading = min(etw_by_player, key=etw_by_player.get)
@@ -1234,16 +1624,18 @@ class RuleBasedAI(AI):
         is_close = vp_gap >= -StrategyWeights.CLOSE_OPPONENT_VP_GAP
         lambda_risk = StrategyWeights.LAMBDA_RISK_LEADER if is_leader else StrategyWeights.LAMBDA_RISK_BASE
 
-        opp_before = self.etw_estimator.estimated_time_to_win(
-            opponent_sim, sim_game, False, include_player_trades=False)
-        opp_after_offer = opponent_sim.copy()
-        opp_after_offer.remove_resources(selling_to_us)
-        opp_after_offer.add_resources(buying_from_us)
-        opp_game = make_sim_game_for_player(sim_game.game, player)
-        opp_game.overlay.set_sim_player(opp_after_offer)
-        opp_after = self.etw_estimator.estimated_time_to_win(
-            opp_after_offer, opp_game, False, include_player_trades=False)
-        delta_opp_offer = max(0.0, opp_before - opp_after)
+        delta_opp_offer = 0.0
+        if self.decision_config.use_opponent_interference:
+            opp_before = self.etw_estimator.estimated_time_to_win(
+                opponent_sim, sim_game, False, **self._etw_kwargs(include_player_trades=False))
+            opp_after_offer = opponent_sim.copy()
+            opp_after_offer.remove_resources(selling_to_us)
+            opp_after_offer.add_resources(buying_from_us)
+            opp_game = make_sim_game_for_player(sim_game.game, player)
+            opp_game.overlay.set_sim_player(opp_after_offer)
+            opp_after = self.etw_estimator.estimated_time_to_win(
+                opp_after_offer, opp_game, False, **self._etw_kwargs(include_player_trades=False))
+            delta_opp_offer = max(0.0, opp_before - opp_after)
 
         decision = "reject"
         payment = buying_from_us
@@ -1256,7 +1648,7 @@ class RuleBasedAI(AI):
             decision = "accept"
             reasons_for.append(Reason(ReasonType.FASTEST_PROGRESS, ReasonLabel.TRADE_RESPONSE_ACCEPT_VALUE,
                                       delta_offer))
-            if is_close or is_leader:
+            if self.decision_config.use_opponent_interference and (is_close or is_leader):
                 reasons_for.append(Reason(
                     ReasonType.HEURISTIC_CHOICE, ReasonLabel.TRADE_PARTNER_SAFE_OPPONENT,
                     max(0.0, lambda_risk * delta_offer - delta_opp_offer)))
@@ -1269,7 +1661,7 @@ class RuleBasedAI(AI):
             counter_game = make_sim_game_for_player(sim_game.game, player)
             counter_game.overlay.set_sim_player(counter_after)
             etw_after = self.etw_estimator.estimated_time_to_win(
-                counter_after, counter_game, False, include_player_trades=False)
+                counter_after, counter_game, False, **self._etw_kwargs(include_player_trades=False))
             etw_delta = etw_before - etw_after
             reasons_for.append(
                 Reason(ReasonType.FASTEST_PROGRESS, ReasonLabel.TRADE_RESPONSE_COUNTER_VALUE, etw_delta))
@@ -1293,6 +1685,7 @@ class RuleBasedAI(AI):
                 "template": ExplanationTemplate.TRADE_RESPONSE,
                 "decision": decision,
                 "opponent_name": opponent.name,
+                "turn_player_number": opponent.player_number,
                 "selling_to_us": selling_to_us,
                 "payment": buying_from_us,
                 "counter_payment": counter,
@@ -1302,9 +1695,13 @@ class RuleBasedAI(AI):
             chosen_action=chosen_action,
             chosen_candidate=candidate,
             move_quality=strategic_turn_move_quality(candidate),
-            metadata={"template": ExplanationTemplate.TRADE_RESPONSE},
+            metadata={
+                "template": ExplanationTemplate.TRADE_RESPONSE,
+                "turn_player_number": opponent.player_number,
+            },
         )
 
+    @use_strategy_weights
     def road_building_placement(
             self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
         """Select an edge for road building, prioritising network connections or high-utility settlements."""
@@ -1320,7 +1717,14 @@ class RuleBasedAI(AI):
         if legal_vertices:
             best_vertex = max(
                 legal_vertices,
-                key=lambda v: self.vertex_utility(v, player, game, legal_vertices, first_settlement=False),
+                key=lambda v: self.vertex_utility(
+                    v,
+                    player,
+                    game,
+                    legal_vertices,
+                    first_settlement=False,
+                    use_opponent_interference=self.decision_config.use_opponent_interference,
+                ),
                 default=None)
             if best_vertex:
                 return find_edge_toward_vertex_from_any(player.player_number, sim_game, best_vertex, available_edges)
@@ -1328,26 +1732,45 @@ class RuleBasedAI(AI):
         # Fallback: keep the agent moving even if no clear preference exists.
         return self.rng.choice(available_edges) if available_edges else None
 
+    @use_strategy_weights
     def next_action_with_explanation(
             self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Tuple[Action, ActionExplanation]:
         """Determine the next action and return a structured explanation."""
+        if not self._use_strategic_move():
+            action = self.random_ai.next_action(player, game, phase, dev_played)
+            return action, self._build_random_action_explanation(action, phase)
+
         if phase == Phase.PRE_ROLL:
-            if not dev_played:
+            if not dev_played and self.decision_config.use_development_cards:
                 sim_game = make_sim_game_for_player(game, player)
                 sim_us = sim_game.overlay.get_sim_player(player.player_number)
 
                 dev_candidates = play_development_card_action(sim_us, sim_game)
 
                 if dev_candidates:
-                    etw_before = self.etw_estimator.estimated_time_to_win(sim_us.copy(), sim_game, dev_played)
+                    etw_before = self.etw_estimator.estimated_time_to_win(
+                        sim_us.copy(), sim_game, dev_played, **self._etw_kwargs())
 
-                    opponents_etw_before: Dict[PlayerNumber, float] = {
-                        opp.player_number: self.etw_estimator.estimated_time_to_win(opp.copy(), sim_game, False)
-                        for opp in get_opponents(sim_game, player.player_number)
-                    }
+                    opponents_etw_before: Dict[PlayerNumber, float] = {}
+                    if self.decision_config.use_opponent_interference:
+                        opponents_etw_before = {
+                            opp.player_number: self.etw_estimator.estimated_time_to_win(
+                                opp.copy(), sim_game, False, **self._etw_kwargs())
+                            for opp in get_opponents(sim_game, player.player_number)
+                        }
 
                     explained_candidates = self.etw_estimator.evaluate_candidates_with_explanations(
-                        sim_us, sim_game, dev_played, dev_candidates, etw_before, opponents_etw_before)
+                        sim_us,
+                        sim_game,
+                        dev_played,
+                        dev_candidates,
+                        etw_before,
+                        opponents_etw_before,
+                        include_player_trades=self.decision_config.use_player_trading,
+                        allow_development_cards=self.decision_config.use_development_cards,
+                        use_planning=self.decision_config.use_etw_planning,
+                        use_time_discount=self.decision_config.use_time_discount,
+                    )
 
                     if explained_candidates:
                         best_candidate = explained_candidates[0]
@@ -1380,31 +1803,44 @@ class RuleBasedAI(AI):
         sim_game = make_sim_game_for_player(game, player)
 
         explanation = self.etw_estimator.calculate_best_game_action_with_explanation(
-            sim_game=sim_game, player_number=player.player_number, dev_played=dev_played)
+            sim_game=sim_game, player_number=player.player_number, dev_played=dev_played, **self._planner_kwargs())
 
         best_action = explanation.chosen_action
 
         if best_action.type == ActionType.TRADE_WITH_PLAYER:
-            self.etw_estimator._last_trade_proposed = True
-            self.etw_estimator._last_trade_resources = player.resources.copy()
+            self.etw_estimator.record_trade_proposal(player.resources)
         else:
-            self.etw_estimator._last_trade_proposed = False
-            self.etw_estimator._last_trade_resources = None
+            self.etw_estimator.clear_trade_proposal()
 
         return best_action, explanation
 
+    @use_strategy_weights
     def explain_pre_roll_dev_choice(
             self, player: Player, game: Game, card_type: DevelopmentCardType) -> ActionExplanation:
         sim_game = make_sim_game_for_player(game, player)
         sim_us = sim_game.overlay.get_sim_player(player.player_number)
         dev_candidates = play_development_card_action(sim_us, sim_game)
-        etw_before = self.etw_estimator.estimated_time_to_win(sim_us.copy(), sim_game, False)
-        opponents_etw_before: Dict[PlayerNumber, float] = {
-            opp.player_number: self.etw_estimator.estimated_time_to_win(opp.copy(), sim_game, False)
-            for opp in get_opponents(sim_game, player.player_number)
-        }
+        etw_before = self.etw_estimator.estimated_time_to_win(sim_us.copy(), sim_game, False, **self._etw_kwargs())
+        opponents_etw_before: Dict[PlayerNumber, float] = {}
+        if self.decision_config.use_opponent_interference:
+            opponents_etw_before = {
+                opp.player_number: self.etw_estimator.estimated_time_to_win(
+                    opp.copy(), sim_game, False, **self._etw_kwargs()
+                )
+                for opp in get_opponents(sim_game, player.player_number)
+            }
         explained_candidates = self.etw_estimator.evaluate_candidates_with_explanations(
-            sim_us, sim_game, False, dev_candidates, etw_before, opponents_etw_before)
+            sim_us,
+            sim_game,
+            False,
+            dev_candidates,
+            etw_before,
+            opponents_etw_before,
+            include_player_trades=self.decision_config.use_player_trading,
+            allow_development_cards=self.decision_config.use_development_cards,
+            use_planning=self.decision_config.use_etw_planning,
+            use_time_discount=self.decision_config.use_time_discount,
+        )
         chosen_candidate = next((
             candidate for candidate in explained_candidates
             if candidate.action.type == ActionType.PLAY_DEV_CARD and candidate.action.payload == card_type
@@ -1429,6 +1865,7 @@ class RuleBasedAI(AI):
             metadata={"phase": "pre_roll"},
         )
 
+    @use_strategy_weights
     def explain_action(
             self, player: Player, game: Game, phase: Phase, dev_played: bool, action: Action) -> ActionExplanation:
         if phase == Phase.PRE_ROLL:
@@ -1451,8 +1888,10 @@ class RuleBasedAI(AI):
             player_number=player.player_number,
             dev_played=dev_played,
             action=action,
+            **self._planner_kwargs(),
         )
 
+    @use_strategy_weights
     def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:
         """Determine the next action to take for the current phase of the game."""
         action, _ = self.next_action_with_explanation(player, game, phase, dev_played)

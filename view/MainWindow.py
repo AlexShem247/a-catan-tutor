@@ -1,15 +1,16 @@
-from html import escape, unescape
 from itertools import groupby
 import math
+import re
 from typing import Dict, Tuple, List, Callable, Optional, Any
 
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QPoint, QPointF, QEvent, QObject
-from PyQt6.QtGui import QBrush, QCloseEvent, QColor, QCursor, QIcon, QKeyEvent, QPainter, QPen
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QPoint, QPointF, QEvent, QObject, QSize
+from PyQt6.QtGui import QBrush, QCloseEvent, QColor, QCursor, QIcon, QKeyEvent, QPainter, QPen, QPixmap
 import pyqtgraph as pg
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel, QToolButton, QSpacerItem,
-    QSizePolicy, QPushButton, QAbstractScrollArea, QListWidgetItem, QLayout, QFrame, QVBoxLayout, QCheckBox
+    QSizePolicy, QPushButton, QAbstractScrollArea, QListWidgetItem, QLayout, QFrame, QVBoxLayout, QCheckBox,
+    QButtonGroup
 )
 
 from GameController import GameController, PlayerScoreSnapshot
@@ -26,6 +27,7 @@ from game.Vertex import Vertex
 from view.board_display_source import BoardDisplaySource
 from view.SquareCanvas import SquareCanvas
 from config.view_constants import (
+    APP_ICON,
     CROWN_SYM,
     ENDGAME_PLOT_BACKGROUND_COLOR,
     TUTOR_FEEDBACK_FADE_STEPS,
@@ -34,9 +36,33 @@ from config.view_constants import (
     endgame_rank_card_stylesheet,
     HOME_ICON,
     PLAYER_COLORS,
+    RULES_ICON,
+    SETTINGS_ICON,
     TOOLTIP_BACKGROUND_COLOR,
     TOOLTIP_BORDER_COLOR,
     TOOLTIP_TEXT_COLOR,
+)
+from config.settings import (load_default_settings, load_effective_settings, save_applied_settings,
+                             reset_applied_settings)
+from view.rich_text import (
+    TROPHY_ICON_PATH,
+    concise_explanation_html,
+    player_breakdown_html,
+    strip_html_to_plain_text,
+    tutor_focus_html,
+    tutor_window_title_html,
+    winner_title_html,
+)
+from view.styles import (
+    endgame_badge_stylesheet,
+    endgame_feedback_body_stylesheet,
+    endgame_feedback_card_stylesheet,
+    endgame_feedback_empty_stylesheet,
+    endgame_feedback_score_stylesheet,
+    endgame_feedback_title_stylesheet,
+    player_badge_stylesheet,
+    tutor_feedback_action_stylesheet,
+    tutor_feedback_explanation_stylesheet,
 )
 from view.View import GameMode
 from view.display_utils import format_counter_offer, get_player_lead_status
@@ -117,7 +143,7 @@ class HoverTooltip(QFrame):
 
 
 class MainWindow(QMainWindow):
-    SIDE_PANEL_WIDTH = 320
+    SIDE_PANEL_WIDTH = 360
     LABEL_LINE_LENGTH = 38
     startGame = pyqtSignal(object)
     turnMade = pyqtSignal(object)
@@ -129,7 +155,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Settlers of Catan")
-        self.setWindowIcon(QIcon("assets/logo.png"))
+        self.setWindowIcon(QIcon(APP_ICON))
 
         # Central widget
         central = QWidget(self)
@@ -174,6 +200,12 @@ class MainWindow(QMainWindow):
         self.results_menu = uic.loadUi("view/ui/results_menu.ui")
         self.endgame_review_menu = uic.loadUi("view/ui/endgame_review.ui")
         self.start_menu = uic.loadUi("view/ui/start_menu.ui")
+        self.endgame_winner_trophy_label = QLabel(self.endgame_review_menu)
+        self.endgame_winner_trophy_label.setObjectName("winnerTrophyLabel")
+        self.endgame_winner_trophy_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.endgame_winner_trophy_label.setFixedSize(QSize(80, 80))
+        self.endgame_winner_trophy_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.endgame_review_menu.globalHeaderLayout.insertWidget(0, self.endgame_winner_trophy_label)
         self.endgame_replay_canvas = SquareCanvas()
         self.endgame_replay_canvas.setMinimumSize(0, 0)
         self.endgame_replay_canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -225,20 +257,37 @@ class MainWindow(QMainWindow):
             scene.sigMouseMoved.connect(self._handle_endgame_plot_hover)
 
         self.rule_window = uic.loadUi("view/ui/rules_window.ui")
+        self.rule_window.setWindowIcon(QIcon(APP_ICON))
+        self.settings_window = uic.loadUi("view/ui/settings_window.ui")
+        self.settings_window.setWindowIcon(QIcon(APP_ICON))
+        self.settings_difficulty_group = QButtonGroup(self.settings_window)
+        self.settings_difficulty_group.setExclusive(True)
+        self.settings_difficulty_group.addButton(self.settings_window.easy_difficulty_radio)
+        self.settings_difficulty_group.addButton(self.settings_window.medium_difficulty_radio)
+        self.settings_difficulty_group.addButton(self.settings_window.hard_difficulty_radio)
         self.safe_connect(self.start_menu.help_btn, self.show_rules)
+        self.safe_connect(self.start_menu.settings_btn, self.show_settings)
         self.safe_connect(self.main_menu.help_btn, self.show_rules)
-        self.tutor_menu.title_label.setText(
-            (
-                "<html><head/><body><p>"
-                "<img src=\"assets/tutor.png\" width=\"30\" height=\"30\"/> "
-                "<span style=\"font-weight:700;\">Tutor Window</span>"
-                "</p></body></html>"
-            )
-        )
+        self.tutor_menu.title_label.setText(tutor_window_title_html())
+        button_icon_size = QSize(18, 18)
+        self.start_menu.help_btn.setIcon(QIcon(RULES_ICON))
+        self.start_menu.help_btn.setIconSize(button_icon_size)
+        self.start_menu.settings_btn.setIcon(QIcon(SETTINGS_ICON))
+        self.start_menu.settings_btn.setIconSize(button_icon_size)
+        self.main_menu.help_btn.setText("")
+        self.main_menu.help_btn.setIcon(QIcon(RULES_ICON))
+        self.main_menu.help_btn.setIconSize(self.main_menu.help_btn.size())
         self.main_menu.home_btn.setText("")
         self.main_menu.home_btn.setIcon(QIcon(HOME_ICON))
         self.main_menu.home_btn.setIconSize(self.main_menu.home_btn.size())
+        self._apply_player_colour_indicators()
         self._configure_endgame_feedback_filters()
+        self._capture_font_baselines()
+        self._load_settings_into_ui()
+        self.safe_connect(self.settings_window.apply_btn, self.save_settings)
+        self.safe_connect(self.settings_window.reset_defaults_btn, self.reset_settings_to_default)
+        self.safe_connect(self.settings_window.close_btn, self.close_settings_window)
+        self.settings_window.font_size_spinbox.valueChanged.connect(self.preview_font_size)
 
         self.history_nav_widget = QWidget(self.tutor_menu)
         self.history_nav_layout = QHBoxLayout(self.history_nav_widget)
@@ -280,6 +329,7 @@ class MainWindow(QMainWindow):
         self.restore_tutor_menu_callback: Optional[Callable[[], None]] = None
         self.dismiss_tutor_hint_callback: Optional[Callable[[], None]] = None
         self.restore_board_state_callback: Optional[Callable[[], None]] = None
+        self.return_home_requested = False
         self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(Action(ActionType.END_TURN)))
         self.safe_connect(self.main_menu.home_btn, self.return_to_start_screen)
         self.safe_connect(self.tutor_menu.previous_feedback_btn, self.show_previous_feedback_history)
@@ -403,6 +453,7 @@ class MainWindow(QMainWindow):
 
     def return_to_start_screen(self):
         self._stop_auto_tutor_feedback()
+        self.return_home_requested = True
         home_action = Action(ActionType.RETURN_HOME)
         self.turnMade.emit(home_action)
         self.canvas.selectionMade.emit(home_action)
@@ -410,11 +461,258 @@ class MainWindow(QMainWindow):
         self.tradeSelected.emit(home_action)
         self.resourcesPicked.emit(home_action)
 
+    def consume_return_home_request(self) -> bool:
+        requested = self.return_home_requested
+        self.return_home_requested = False
+        return requested
+
     def show_rules(self):
         # Show the rule window
         self.rule_window.show()
         self.rule_window.raise_()  # Bring it to the front
         self.rule_window.activateWindow()  # Focus it
+
+    def show_settings(self):
+        self._load_settings_into_ui()
+        self.settings_window.show()
+        self.settings_window.raise_()
+        self.settings_window.activateWindow()
+
+    def _current_settings_from_ui(self) -> Dict[str, Any]:
+        difficulty = "medium"
+        if self.settings_window.easy_difficulty_radio.isChecked():
+            difficulty = "easy"
+        elif self.settings_window.hard_difficulty_radio.isChecked():
+            difficulty = "hard"
+
+        return {
+            "font_size": self.settings_window.font_size_spinbox.value(),
+            "ai_difficulty": difficulty,
+        }
+
+    def _load_settings_into_ui(self) -> None:
+        settings = load_effective_settings()
+        self.settings_window.font_size_spinbox.blockSignals(True)
+        self.settings_window.font_size_spinbox.setValue(int(settings["font_size"]))
+        self.settings_window.font_size_spinbox.blockSignals(False)
+        self._update_font_size_label()
+        self._preview_font_size_label(int(settings["font_size"]))
+        self._apply_font_size(int(settings["font_size"]))
+
+        difficulty_buttons = {
+            "easy": self.settings_window.easy_difficulty_radio,
+            "medium": self.settings_window.medium_difficulty_radio,
+            "hard": self.settings_window.hard_difficulty_radio,
+        }
+        difficulty_buttons.get(settings["ai_difficulty"], self.settings_window.medium_difficulty_radio).setChecked(True)
+
+    def save_settings(self) -> None:
+        settings = self._current_settings_from_ui()
+        save_applied_settings(settings)
+        self._apply_font_size(int(settings["font_size"]))
+
+    def reset_settings_to_default(self) -> None:
+        reset_applied_settings()
+        defaults = load_default_settings()
+        self.settings_window.font_size_spinbox.setValue(int(defaults["font_size"]))
+        difficulty_buttons = {
+            "easy": self.settings_window.easy_difficulty_radio,
+            "medium": self.settings_window.medium_difficulty_radio,
+            "hard": self.settings_window.hard_difficulty_radio,
+        }
+        difficulty_buttons.get(defaults["ai_difficulty"], self.settings_window.medium_difficulty_radio).setChecked(True)
+        self._update_font_size_label()
+        self._preview_font_size_label(int(defaults["font_size"]))
+        self._apply_font_size(int(defaults["font_size"]))
+
+    def preview_font_size(self, value: int) -> None:
+        self._update_font_size_label()
+        self._preview_font_size_label(value)
+
+    def close_settings_window(self) -> None:
+        self.settings_window.close()
+
+    def _capture_font_baselines(self) -> None:
+        roots = [
+            self,
+            self.main_menu,
+            self.tutor_menu,
+            self.resource_selector_widget,
+            self.trade_designer_widget,
+            self.select_trade_widget,
+            self.trade_manager_widget,
+            self.development_manager_widget,
+            self.results_menu,
+            self.endgame_review_menu,
+            self.start_menu,
+            self.rule_window,
+            self.settings_window,
+        ]
+        for root in roots:
+            for widget in [root, *root.findChildren(QWidget)]:
+                font = widget.font()
+                point_size = font.pointSize()
+                if point_size > 0 and widget.property("basePointSize") is None:
+                    widget.setProperty("basePointSize", point_size)
+                if widget.property("baseMinimumHeight") is None:
+                    widget.setProperty("baseMinimumHeight", widget.minimumHeight())
+                if widget.property("baseMaximumHeight") is None:
+                    widget.setProperty("baseMaximumHeight", widget.maximumHeight())
+        self._capture_static_rich_text_baselines()
+
+    def _capture_static_rich_text_baselines(self) -> None:
+        for widget in (self.start_menu.textEdit, self.rule_window.textEdit):
+            if widget.property("baseHtml") is None:
+                widget.setProperty("baseHtml", widget.toHtml())
+
+    def _apply_font_size(self, value: int) -> None:
+        delta = value - 10
+        roots = [
+            self,
+            self.main_menu,
+            self.tutor_menu,
+            self.resource_selector_widget,
+            self.trade_designer_widget,
+            self.select_trade_widget,
+            self.trade_manager_widget,
+            self.development_manager_widget,
+            self.results_menu,
+            self.endgame_review_menu,
+            self.start_menu,
+            self.rule_window,
+            self.settings_window,
+        ]
+        for root in roots:
+            for widget in [root, *root.findChildren(QWidget)]:
+                base_point_size = widget.property("basePointSize")
+                if base_point_size is None:
+                    continue
+                font = widget.font()
+                font.setPointSize(max(1, int(base_point_size) + delta))
+                widget.setFont(font)
+        self._adjust_widget_heights()
+        self._apply_static_rich_text_font_size(delta)
+
+    def _apply_static_rich_text_font_size(self, delta: int) -> None:
+        for widget in (self.start_menu.textEdit, self.rule_window.textEdit):
+            base_html = widget.property("baseHtml")
+            if not base_html:
+                continue
+            adjusted_html = re.sub(
+                r"font-size:([0-9]+)pt",
+                lambda match: f"font-size:{max(1, int(match.group(1)) + delta)}pt",
+                str(base_html),
+            )
+            cursor = widget.textCursor()
+            widget.setHtml(adjusted_html)
+            widget.setTextCursor(cursor)
+
+    def _adjust_widget_heights(self) -> None:
+        roots = [
+            self,
+            self.main_menu,
+            self.tutor_menu,
+            self.resource_selector_widget,
+            self.trade_designer_widget,
+            self.select_trade_widget,
+            self.trade_manager_widget,
+            self.development_manager_widget,
+            self.results_menu,
+            self.endgame_review_menu,
+            self.start_menu,
+            self.rule_window,
+            self.settings_window,
+        ]
+        unrestricted_max_height = 16777215
+        for root in roots:
+            for widget in [root, *root.findChildren(QWidget)]:
+                base_min_height = widget.property("baseMinimumHeight")
+                if base_min_height is not None and int(base_min_height) > 0:
+                    widget.setMinimumHeight(max(int(base_min_height), widget.sizeHint().height()))
+
+                base_max_height = widget.property("baseMaximumHeight")
+                if (
+                    base_max_height is not None
+                    and 0 < int(base_max_height) < unrestricted_max_height
+                ):
+                    widget.setMaximumHeight(max(int(base_max_height), widget.sizeHint().height()))
+
+    def _update_font_size_label(self) -> None:
+        self.settings_window.font_size_label.setText("Font Size")
+
+    def _preview_font_size_label(self, value: int) -> None:
+        base_point_size = self.settings_window.font_size_label.property("basePointSize")
+        if base_point_size is None:
+            return
+        font = self.settings_window.font_size_label.font()
+        font.setPointSize(max(1, int(base_point_size) + (value - 10)))
+        self.settings_window.font_size_label.setFont(font)
+
+    def _apply_player_colour_indicators(self) -> None:
+        player_label_map = {
+            PlayerNumber.P2: self.main_menu.p2_label,
+            PlayerNumber.P3: self.main_menu.p3_label,
+            PlayerNumber.P4: self.main_menu.p4_label,
+        }
+        for player_number, label in player_label_map.items():
+            self._set_player_badge(
+                label,
+                label.text(),
+                player_number,
+                vertical_padding_px=3,
+                horizontal_padding_px=8,
+                font_size_px=12,
+            )
+
+    def _set_turn_label(self, player: Player) -> None:
+        self._set_player_badge(
+            self.main_menu.turn_label,
+            f"{player.name}'s turn",
+            player.player_number,
+            vertical_padding_px=4,
+            horizontal_padding_px=8,
+        )
+
+    def _resolve_turn_label_player(self, player: Player, explanation: ActionExplanation | None = None) -> Player:
+        if explanation is None:
+            return player
+
+        if not isinstance(self.live_board_source, GameController):
+            return player
+
+        metadata_sources = []
+        if explanation.metadata:
+            metadata_sources.append(explanation.metadata)
+        if explanation.chosen_candidate.metadata:
+            metadata_sources.append(explanation.chosen_candidate.metadata)
+
+        for metadata in metadata_sources:
+            turn_player_number = metadata.get("turn_player_number")
+            if turn_player_number is None:
+                continue
+            for candidate_player in self.live_board_source.get_all_players():
+                if candidate_player.player_number == turn_player_number:
+                    return candidate_player
+
+        return player
+
+    def _set_player_badge(
+            self,
+            label: QLabel,
+            text: str,
+            player_number: PlayerNumber,
+            vertical_padding_px: int,
+            horizontal_padding_px: int,
+            font_size_px: int | None = None,
+    ) -> None:
+        colour = PLAYER_COLORS[player_number].lighter(150).name()
+        label.setStyleSheet(player_badge_stylesheet(
+            colour,
+            vertical_padding_px,
+            horizontal_padding_px,
+            font_size_px=font_size_px,
+        ))
+        label.setText(text)
 
     def find_last_vertical_spacer(self) -> QSpacerItem | None:
         last_spacer = None
@@ -656,21 +954,7 @@ class MainWindow(QMainWindow):
     @classmethod
     def _format_player_breakdown_html(cls, player: Player) -> str:
         breakdown = cls._get_player_victory_breakdown(player)
-        breakdown_text = (
-            f"Cities: {breakdown['cities']} pts<br />"
-            f"Settlements: {breakdown['settlements']} pts<br />"
-            f"Longest Road: {breakdown['longest_road']} pts<br />"
-            f"Largest Army: {breakdown['largest_army']} pts<br />"
-            f"Victory Card Points: {breakdown['victory_cards']} pts"
-        )
-        return (
-            "<html><head/><body>"
-            f"<p style=\"margin: 0;\"><span style=\"font-weight: 600;\">"
-            f"Selected: {escape(player.name)} breakdown ▼"
-            "</span><br />"
-            f"{breakdown_text}"
-            "</p></body></html>"
-        )
+        return player_breakdown_html(player.name, breakdown)
 
     @classmethod
     def _format_player_ranking_summary(cls, player: Player) -> str:
@@ -697,6 +981,22 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _endgame_rank_card_stylesheet(selected: bool) -> str:
         return endgame_rank_card_stylesheet(selected)
+
+    def _set_endgame_winner_header(self, winner_name: str, winner_total_vp: int) -> None:
+        trophy_pixmap = QPixmap(TROPHY_ICON_PATH)
+        if trophy_pixmap.isNull():
+            self.endgame_winner_trophy_label.hide()
+        else:
+            scaled_trophy = trophy_pixmap.scaled(
+                self.endgame_winner_trophy_label.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self.endgame_winner_trophy_label.setPixmap(scaled_trophy)
+            self.endgame_winner_trophy_label.show()
+        self.endgame_review_menu.titleWinnerLabel.setText(
+            winner_title_html(winner_name, winner_total_vp)
+        )
 
     def _select_endgame_rank_card(self, card_btn: QPushButton, player: Player):
         if self.selected_endgame_rank_card is not None:
@@ -758,45 +1058,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _strip_html(text: str) -> str:
-        import re
-
-        cleaned = unescape(text or "")
-        cleaned = cleaned.replace("<br/>", "\n").replace("<br />", "\n").replace("<br>", "\n")
-        cleaned = cleaned.replace("</p>", "\n").replace("</li>", "\n")
-        cleaned = cleaned.replace("<li>", "- ")
-        cleaned = cleaned.replace("<ul>", "").replace("</ul>", "")
-        cleaned = re.sub(r"<[^>]+>", "", cleaned)
-        lines = [line.strip() for line in cleaned.splitlines()]
-        return "\n".join(line for line in lines if line)
-
-    @staticmethod
-    def _endgame_badge_styles(label: str) -> str:
-        styles = {
-            "Poor": "background: #fee2e2; color: #991b1b; border-radius: 9px; padding: 3px 8px; font-weight: 700;",
-            "Okay": "background: #fef3c7; color: #92400e; border-radius: 9px; padding: 3px 8px; font-weight: 700;",
-            "Good": "background: #dcfce7; color: #166534; border-radius: 9px; padding: 3px 8px; font-weight: 700;",
-            "Excellent": "background: #dbeafe; color: #1d4ed8; border-radius: 9px; padding: 3px 8px; font-weight: 700;",
-        }
-        return styles.get(
-            label,
-            "background: #e5e7eb; color: #374151; border-radius: 9px; padding: 3px 8px; font-weight: 700;",
-        )
-
-    @staticmethod
-    def _endgame_feedback_card_stylesheet() -> str:
-        return (
-            "QPushButton#endgameFeedbackCard {"
-            "background: #e5e7eb;"
-            "border: 1px solid #d1d5db;"
-            "border-radius: 8px;"
-            "padding: 10px 12px;"
-            "text-align: left;"
-            "}"
-            "QPushButton#endgameFeedbackCard:hover {"
-            "background: #ffffff;"
-            "border: 1px solid #9ca3af;"
-            "}"
-        )
+        return strip_html_to_plain_text(text)
 
     @staticmethod
     def _compact_feedback_action(action_text: str) -> str:
@@ -860,7 +1122,7 @@ class MainWindow(QMainWindow):
         card_btn = QPushButton()
         card_btn.setObjectName("endgameFeedbackCard")
         card_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        card_btn.setStyleSheet(self._endgame_feedback_card_stylesheet())
+        card_btn.setStyleSheet(endgame_feedback_card_stylesheet())
         card_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         layout = QVBoxLayout(card_btn)
@@ -868,7 +1130,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(8)
 
         title_label = QLabel(self._feedback_card_title(feedback), card_btn)
-        title_label.setStyleSheet("font-weight: 600; color: #111827;")
+        title_label.setStyleSheet(endgame_feedback_title_stylesheet())
         title_label.setWordWrap(True)
         layout.addWidget(title_label)
 
@@ -876,17 +1138,17 @@ class MainWindow(QMainWindow):
             f"Score: {feedback.assessment.internal_score:.2f} . Gap: +{feedback.assessment.score_gap:.2f}",
             card_btn,
         )
-        score_label.setStyleSheet("color: #374151;")
+        score_label.setStyleSheet(endgame_feedback_score_stylesheet())
         score_label.setWordWrap(True)
         layout.addWidget(score_label)
 
         body_label = QLabel(feedback.assessment.judgment_sentence.strip(), card_btn)
-        body_label.setStyleSheet("color: #111827;")
+        body_label.setStyleSheet(endgame_feedback_body_stylesheet())
         body_label.setWordWrap(True)
         layout.addWidget(body_label)
 
         badge_label = QLabel(feedback.label, card_btn)
-        badge_label.setStyleSheet(self._endgame_badge_styles(feedback.label))
+        badge_label.setStyleSheet(endgame_badge_stylesheet(feedback.label))
         badge_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         layout.addWidget(badge_label, alignment=Qt.AlignmentFlag.AlignLeft)
 
@@ -907,7 +1169,7 @@ class MainWindow(QMainWindow):
 
         if not visible_feedback:
             empty_label = QLabel("No feedback items match the selected filters.")
-            empty_label.setStyleSheet("color: #6b7280;")
+            empty_label.setStyleSheet(endgame_feedback_empty_stylesheet())
             empty_label.setWordWrap(True)
             layout.addWidget(empty_label)
         else:
@@ -1036,12 +1298,11 @@ class MainWindow(QMainWindow):
             weaknesses = [outcome_weakness, *weaknesses][:2]
 
         score_text = f"Overall: {overall_label} ({overall_score:.2f})"
-        if vp_score is not None and win_bonus is not None:
+        if final_snapshot is not None:
             score_text = (
                 f"Overall: {overall_label} ({overall_score:.2f})"
                 f" | Moves {weighted_quality:.2f}"
-                f" | VP {vp_score:.2f}"
-                f" | Win {win_bonus:.2f}"
+                f" | VP {final_snapshot.total_vp}"
             )
 
         return {
@@ -1172,7 +1433,7 @@ class MainWindow(QMainWindow):
         self.endgame_review_menu.turnAndPlayer.setText(details["turn_and_player"])
         self.endgame_review_menu.actionLabel.setText(details["action"])
         self.endgame_review_menu.selectedMomentBadge.setText(details["badge"])
-        self.endgame_review_menu.selectedMomentBadge.setStyleSheet(self._endgame_badge_styles(details["badge"]))
+        self.endgame_review_menu.selectedMomentBadge.setStyleSheet(endgame_badge_stylesheet(details["badge"]))
         self.endgame_review_menu.scoreLabel.setText(details["score"])
         self.endgame_review_menu.tutorFeedback.setText(details["tutor_feedback"])
         self.endgame_review_menu.adviceLabel.setText(details["advice"])
@@ -1567,15 +1828,7 @@ class MainWindow(QMainWindow):
         winner = sorted_players[0]
         winner_total_vp = winner.calc_victory_points()[1]
 
-        self.endgame_review_menu.titleWinnerLabel.setText(
-            (
-                "<html><head/><body><p>"
-                "<img src=\"assets/trophy.png\" width=\"24\" height=\"24\"/> "
-                f"<span style=\"font-weight:700;\">Winner: {winner.name}</span><br/>"
-                f"{winner_total_vp} victory points"
-                "</p></body></html>"
-            )
-        )
+        self._set_endgame_winner_header(winner.name, winner_total_vp)
 
         ranking_layout = self.endgame_review_menu.rankingCardsLayout
         self._clear_layout(ranking_layout)
@@ -1605,7 +1858,7 @@ class MainWindow(QMainWindow):
         if self.endgame_rank_cards:
             self._select_endgame_rank_card(self.endgame_rank_cards[0], winner)
         self._populate_tutor_endgame_performance(controller)
-        self.endgame_replay_feedback = list(self.tutor_feedback_replay_history)
+        self.endgame_replay_feedback = list(controller.get_tutor_feedback_history())
         self._refresh_endgame_feedback_list()
         self.endgame_final_board_source = controller
         self.endgame_human_final_snapshot = None
@@ -1640,7 +1893,7 @@ class MainWindow(QMainWindow):
             self.endgame_review_menu.turnAndPlayer.setText("No replay moments recorded")
             self.endgame_review_menu.actionLabel.setText("Action: None")
             self.endgame_review_menu.selectedMomentBadge.setText("N/A")
-            self.endgame_review_menu.selectedMomentBadge.setStyleSheet(self._endgame_badge_styles(""))
+            self.endgame_review_menu.selectedMomentBadge.setStyleSheet(endgame_badge_stylesheet(""))
             self.endgame_review_menu.scoreLabel.setText("Score: N/A")
             self.endgame_review_menu.tutorFeedback.setText("Tutor feedback: No tutor feedback history was recorded.")
             self.endgame_review_menu.adviceLabel.setText("No advice available.")
@@ -1731,11 +1984,19 @@ class MainWindow(QMainWindow):
                 labels = opponent_labels[num]
                 status = get_player_lead_status(player)
                 if status:
-                    labels["name"].setText(f"{player.name} {status}")
+                    name_text = f"{player.name} {status}"
                     labels["name"].setToolTip(f"{player.name} is currently in the lead")
                 else:
-                    labels["name"].setText(player.name)
+                    name_text = player.name
                     labels["name"].setToolTip(None)
+                self._set_player_badge(
+                    labels["name"],
+                    name_text,
+                    player.player_number,
+                    vertical_padding_px=2,
+                    horizontal_padding_px=8,
+                    font_size_px=12,
+                )
                 labels["victory_points"].setText(str(player.calc_victory_points()[0]))
                 labels["num_resources"].setText(str(sum(player.resources.values())))
                 labels["development_cards"].setText(str(len(player.development_cards)))
@@ -1745,7 +2006,7 @@ class MainWindow(QMainWindow):
     def display_generic_info(self, player: Player, msg: str):
         self._clear_debug_tutor_shortcut_context()
         self.canvas.clear_planned_builds()
-        self.main_menu.turn_label.setText(f"{player.name}'s turn")
+        self._set_turn_label(player)
         self.main_menu.main_label.show()
         self.main_menu.main_label.setText(msg)
         self.main_menu.action_label.show()
@@ -1768,7 +2029,7 @@ class MainWindow(QMainWindow):
                 self.display_tutor_init(player, TutorStage.TURN_ACTION, explanation)
 
         d1, d2, total = dice_info
-        self.main_menu.turn_label.setText(f"{player.name}'s turn")
+        self._set_turn_label(player)
         self.main_menu.main_label.setText(f"Dice rolled: {d1} + {d2} = {total}\nWhat would you like to do?")
 
         # Actions
@@ -1807,13 +2068,11 @@ class MainWindow(QMainWindow):
             self.tutor_feedback_advance_timer = None
 
     def _reset_tutor_feedback_styles(self):
-        self.tutor_menu.action_label.setStyleSheet("font-weight: bold; color: rgba(0, 0, 0, 255);")
+        self.tutor_menu.action_label.setStyleSheet(
+            tutor_feedback_action_stylesheet("rgba(0, 0, 0, 255)")
+        )
         self.tutor_menu.explanation_edit.setStyleSheet(
-            "QTextEdit {"
-            "background: transparent;"
-            "border: none;"
-            "color: rgba(0, 0, 0, 255);"
-            "}"
+            tutor_feedback_explanation_stylesheet("rgba(0, 0, 0, 255)")
         )
 
     def _start_tutor_feedback_fade(self, duration_seconds: float):
@@ -1832,13 +2091,11 @@ class MainWindow(QMainWindow):
             remaining_ratio = max(0.0, 1.0 - math.pow(progress, 3))
             alpha = max(35, int(255 * remaining_ratio))
             faded_colour = f"rgba(0, 0, 0, {alpha})"
-            self.tutor_menu.action_label.setStyleSheet(f"font-weight: bold; color: {faded_colour};")
+            self.tutor_menu.action_label.setStyleSheet(
+                tutor_feedback_action_stylesheet(faded_colour)
+            )
             self.tutor_menu.explanation_edit.setStyleSheet(
-                "QTextEdit {"
-                "background: transparent;"
-                "border: none;"
-                f"color: {faded_colour};"
-                "}"
+                tutor_feedback_explanation_stylesheet(faded_colour)
             )
 
             if step_state["count"] >= TUTOR_FEEDBACK_FADE_STEPS:
@@ -1898,10 +2155,10 @@ class MainWindow(QMainWindow):
         concise_title, concise_explanation = explanation.generate_text_concise()
         quality_label = explanation.tutor_move_quality_label
         move_quality_colour_value = self._move_quality_colour(quality_label)
-        concise_html = (
-            f"{concise_explanation}"
-            f"<br><br><b>Move Quality:</b> "
-            f"<span style=\"color: {move_quality_colour_value};\"><b>{escape(quality_label)}</b></span>"
+        concise_html = concise_explanation_html(
+            concise_explanation,
+            quality_label,
+            move_quality_colour_value,
         )
         return concise_title, concise_html
 
@@ -1916,10 +2173,9 @@ class MainWindow(QMainWindow):
         self.clear_trade_preview()
         visual_plan = explanation.get_visual_build_plan()
 
-        focus_items = "".join(f"<li>{escape(point)}</li>" for point in focus)
-        default_text = f"<b>What matters here:</b><ul>{focus_items}</ul>"
+        default_text = tutor_focus_html(focus)
 
-        concise_title, concise_explanation_html = self._concise_explanation_html(explanation)
+        concise_title, concise_explanation = self._concise_explanation_html(explanation)
         detailed_explanation = explanation.generate_text_detail()
 
         def show_default():
@@ -1938,7 +2194,7 @@ class MainWindow(QMainWindow):
         def show_concise():
             self.canvas.render_planned_builds(visual_plan)
             self.tutor_menu.action_label.setText(concise_title)
-            self.tutor_menu.explanation_edit.setHtml(concise_explanation_html)
+            self.tutor_menu.explanation_edit.setHtml(concise_explanation)
             self.tutor_menu.explain_btn.show()
             self.tutor_menu.explain_btn.setEnabled(True)
             self.tutor_menu.explain_btn.setText("Explain Further")
@@ -1975,7 +2231,8 @@ class MainWindow(QMainWindow):
         self._set_dismiss_tutor_hint_callback(None)
         self.set_restore_board_state_callback(None)
         action, explanation_html = self._concise_explanation_html(explanation)
-        self.display_round_info_ai_start(player, dice_info, "")
+        turn_label_player = self._resolve_turn_label_player(player, explanation)
+        self.display_round_info_ai_start(turn_label_player, dice_info, "")
         self.toggle_main_action_btns(False)
 
         self.tutor_menu.action_label.setText(action)
@@ -2365,8 +2622,11 @@ class MainWindow(QMainWindow):
         select_trade = self.select_trade_widget
         select_trade.setParent(self.main_menu)
 
-        # Disable main action buttons and show the trade selector
+        # Replace the normal turn actions with the trade selector.
+        self.toggle_main_action_btns(False)
+        self.minimise_spacer()
         self.main_menu.action_btn_layout.addWidget(select_trade)
+        self.active_trade_preview_widget = select_trade
         select_trade.trade_list.clear()
         select_trade.trade_list.setEnabled(True)
 
@@ -2411,8 +2671,7 @@ class MainWindow(QMainWindow):
             if not deal:
                 return
 
-            self.main_menu.action_btn_layout.removeWidget(select_trade)
-            select_trade.setParent(None)
+            self.clear_trade_preview()
             self.set_debug_tutor_shortcut_finalizer(None)
             self.tradeSelected.emit(deal)
 
@@ -2424,14 +2683,12 @@ class MainWindow(QMainWindow):
 
         # Cancel and return to the previous action
         def cancel():
-            self.main_menu.action_btn_layout.removeWidget(select_trade)
-            select_trade.setParent(None)
+            self.clear_trade_preview()
             self.set_debug_tutor_shortcut_finalizer(None)
             self.tradeSelected.emit(None)
 
         def cleanup_select_trade() -> None:
-            self.main_menu.action_btn_layout.removeWidget(select_trade)
-            select_trade.setParent(None)
+            self.clear_trade_preview()
             self.set_debug_tutor_shortcut_finalizer(None)
 
         self.set_debug_tutor_shortcut_finalizer(cleanup_select_trade)
@@ -2456,7 +2713,7 @@ class MainWindow(QMainWindow):
         if msg == "":
             msg = f"{player.name} ended their turn without taking any further actions."
 
-        self.main_menu.turn_label.setText(f"{player.name}'s turn")
+        self._set_turn_label(player)
         self.main_menu.action_label.setText(msg)
         self.toggle_main_action_btns(False)
         self.tutor_menu.action_label.setText("Wait For Your Turn")
@@ -2484,7 +2741,7 @@ class MainWindow(QMainWindow):
         if resource_caps is None:
             resource_caps = {res: num_resources for res in Resource}
 
-        self.main_menu.turn_label.setText(f"{player.name}'s turn")
+        self._set_turn_label(player)
         self.main_menu.main_label.setText(title)
         self.main_menu.action_label.setText(
             f"You need to select {num_resources} more resource{'s' if num_resources != 1 else ''}."
@@ -2544,6 +2801,8 @@ class MainWindow(QMainWindow):
         self.toggle_main_action_btns(False)
         self.minimise_spacer()
         self.main_menu.action_btn_layout.addWidget(trade_manager)
+        self.active_trade_preview_widget = trade_manager
+        self._set_turn_label(selling_player)
         self.main_menu.main_label.setText(f"Trade Offer from {selling_player.name}")
         self.main_menu.action_label.setText(
             f"{selling_player.name} is buying {format_counter_offer(buying, buying)} for:"
@@ -2582,23 +2841,17 @@ class MainWindow(QMainWindow):
             trade_manager.accept_btn.setEnabled(False)
             trade_manager.decline_btn.setEnabled(False)
             modified = any(counter_offer[res] != selling.get(res, 0) for res in Resource)
-            self.main_menu.action_btn_layout.removeWidget(trade_manager)
-            trade_manager.setParent(None)
-            self.restore_spacer()
+            self.clear_trade_preview()
             self.set_debug_tutor_shortcut_finalizer(None)
             self.tradeDecisionMade.emit((True, counter_offer if modified else None))
 
         def decline():
-            self.main_menu.action_btn_layout.removeWidget(trade_manager)
-            trade_manager.setParent(None)
-            self.restore_spacer()
+            self.clear_trade_preview()
             self.set_debug_tutor_shortcut_finalizer(None)
             self.tradeDecisionMade.emit((False, None))
 
         def cleanup_trade_manager() -> None:
-            self.main_menu.action_btn_layout.removeWidget(trade_manager)
-            trade_manager.setParent(None)
-            self.restore_spacer()
+            self.clear_trade_preview()
             self.set_debug_tutor_shortcut_finalizer(None)
 
         self.set_debug_tutor_shortcut_finalizer(cleanup_trade_manager)
@@ -2619,7 +2872,7 @@ class MainWindow(QMainWindow):
         self.main_menu.action_label.setText(
             "You already played a card this turn." if played_dev_card else "Available Cards:"
         )
-        self.main_menu.turn_label.setText(f"{player.name}'s turn")
+        self._set_turn_label(player)
 
         def clean_up():
             self.main_menu.action_btn_layout.removeWidget(development_manager)
@@ -2733,7 +2986,7 @@ class MainWindow(QMainWindow):
 
     def display_results(self, controller: GameController):
         self._clear_debug_tutor_shortcut_context()
-        if controller.game_mode == GameMode.TUTOR:
+        if controller.game_mode in {GameMode.PLAY, GameMode.TUTOR}:
             self._display_tutor_endgame_review(controller)
             return
 
@@ -2844,6 +3097,7 @@ class MainWindow(QMainWindow):
         self.splitter_layout.setSizes([1000, self.SIDE_PANEL_WIDTH])
 
     def display_start_screen(self):
+        self.return_home_requested = False
         self._clear_debug_tutor_shortcut_context()
         self._stop_auto_tutor_feedback()
         self.history_enabled_on_turn = False

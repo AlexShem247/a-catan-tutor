@@ -2,10 +2,11 @@ import argparse
 import sys
 from random import randint
 
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication
 
 from GameController import GameController
-from config.player_policies import STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC
+from config.player_policies import STANDARD_SINGLEPLAYER, EVO_VS_RULE_BASED
 from view.MainWindow import MainWindow
 from view.QtView import QtView
 
@@ -18,9 +19,10 @@ def main():
     args.seed = randint(0, 2**31 - 1)
     args.seed = 5484206599
     print(f"Game seed: {args.seed}")
-    controller = GameController(STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC, game_seed=args.seed)
+    controller = GameController(STANDARD_SINGLEPLAYER, EVO_VS_RULE_BASED, game_seed=args.seed)
 
     app = QApplication(sys.argv)
+    app.setFont(QFont("Arial"))
     controller.view = QtView(MainWindow(), controller)
     controller.start_game()
     sys.exit(app.exec())

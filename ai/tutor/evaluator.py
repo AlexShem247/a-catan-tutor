@@ -1,5 +1,5 @@
 import re
-from typing import Any, List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple, TypeVar
 
 from ai.RuleBasedAI import RuleBasedAI
 from ai.actions import Action, ActionType, Phase
@@ -21,6 +21,9 @@ from game.Player import Player
 from game.PlayerAssets import Buildable
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
+
+
+T = TypeVar("T")
 
 
 class TutorEvaluator:
@@ -50,8 +53,22 @@ class TutorEvaluator:
         TutorDecisionType.MAIN_TURN: "Favour the move that advances your best near-term plan, not just a legal action.",
     }
 
-    def __init__(self, tutor_ai: RuleBasedAI):
+    def __init__(
+            self,
+            tutor_ai: RuleBasedAI,
+            live_rng_state_getter: Optional[Callable[[], Tuple[Any, ...]]] = None,
+    ):
         self.tutor_ai = tutor_ai
+        self.live_rng_state_getter = live_rng_state_getter
+
+    def _run_tutor_preview(self, callback: Callable[[], T]) -> T:
+        snapshot = self.tutor_ai.snapshot_state()
+        try:
+            if self.live_rng_state_getter is not None:
+                self.tutor_ai.rng.setstate(self.live_rng_state_getter())
+            return callback()
+        finally:
+            self.tutor_ai.restore_state(snapshot)
 
     def _best_explanation_without_mutating_trade_state(
             self,
@@ -60,17 +77,9 @@ class TutorEvaluator:
             phase: Phase,
             dev_played: bool,
     ) -> ActionExplanation:
-        last_trade_proposed = self.tutor_ai.etw_estimator._last_trade_proposed
-        last_trade_resources = (
-            None if self.tutor_ai.etw_estimator._last_trade_resources is None
-            else self.tutor_ai.etw_estimator._last_trade_resources.copy()
+        return self._run_tutor_preview(
+            lambda: self.tutor_ai.next_action_with_explanation(player, game, phase, dev_played)[1]
         )
-        try:
-            _, best_explanation = self.tutor_ai.next_action_with_explanation(player, game, phase, dev_played)
-        finally:
-            self.tutor_ai.etw_estimator._last_trade_proposed = last_trade_proposed
-            self.tutor_ai.etw_estimator._last_trade_resources = last_trade_resources
-        return best_explanation
 
     def evaluate_main_turn_action(
             self,
@@ -114,10 +123,12 @@ class TutorEvaluator:
         if chosen_vertex not in available_vertices:
             return None
 
-        best_vertex, best_explanation = self.tutor_ai.select_initial_settlement_location_with_explanation(
-            player,
-            game,
-            available_vertices,
+        best_vertex, best_explanation = self._run_tutor_preview(
+            lambda: self.tutor_ai.select_initial_settlement_location_with_explanation(
+                player,
+                game,
+                available_vertices,
+            )
         )
         if best_explanation is None or best_vertex is None:
             return None
@@ -157,10 +168,12 @@ class TutorEvaluator:
         if chosen_edge not in available_edges:
             return None
 
-        best_edge, best_explanation = self.tutor_ai.select_initial_road_location_with_explanation(
-            player,
-            game,
-            available_edges,
+        best_edge, best_explanation = self._run_tutor_preview(
+            lambda: self.tutor_ai.select_initial_road_location_with_explanation(
+                player,
+                game,
+                available_edges,
+            )
         )
         if best_edge is None or best_explanation is None:
             return None
@@ -188,12 +201,14 @@ class TutorEvaluator:
             counter: Optional[ResourceCount],
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
-        _, _, best_explanation = self.tutor_ai.respond_to_trade_with_explanation(
-            player,
-            game,
-            opponent,
-            selling,
-            buying,
+        _, _, best_explanation = self._run_tutor_preview(
+            lambda: self.tutor_ai.respond_to_trade_with_explanation(
+                player,
+                game,
+                opponent,
+                selling,
+                buying,
+            )
         )
         actual_explanation = self.tutor_ai.explain_trade_response_choice(
             player,
@@ -223,12 +238,14 @@ class TutorEvaluator:
             counter: Optional[ResourceCount],
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
-        _, best_explanation = self.tutor_ai.choose_trade_partner_with_explanation(
-            player,
-            game,
-            selling,
-            buying,
-            available_players,
+        _, best_explanation = self._run_tutor_preview(
+            lambda: self.tutor_ai.choose_trade_partner_with_explanation(
+                player,
+                game,
+                selling,
+                buying,
+                available_players,
+            )
         )
         actual_explanation = self.tutor_ai.explain_trade_partner_choice(
             player,
@@ -255,7 +272,9 @@ class TutorEvaluator:
             discard_count: int,
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
-        _, best_explanation = self.tutor_ai.select_discard_resources_with_explanation(player, game, discard_count)
+        _, best_explanation = self._run_tutor_preview(
+            lambda: self.tutor_ai.select_discard_resources_with_explanation(player, game, discard_count)
+        )
         actual_explanation = self.tutor_ai.explain_discard_choice(player, game, discard)
         return self._feedback_from_explanations(
             TutorDecisionType.DISCARD,
@@ -274,7 +293,9 @@ class TutorEvaluator:
             chosen_player: Optional[Player],
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
-        _, _, best_explanation = self.tutor_ai.select_robber_target_with_explanation(player, game, valid_hexes)
+        _, _, best_explanation = self._run_tutor_preview(
+            lambda: self.tutor_ai.select_robber_target_with_explanation(player, game, valid_hexes)
+        )
         actual_explanation = self.tutor_ai.explain_robber_choice(player, game, valid_hexes, chosen_hex, chosen_player)
         return self._feedback_from_explanations(
             TutorDecisionType.ROBBER,
@@ -291,7 +312,9 @@ class TutorEvaluator:
             selected: ResourceCount,
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
-        _, best_explanation = self.tutor_ai.select_year_of_plenty_resources_with_explanation(player, game)
+        _, best_explanation = self._run_tutor_preview(
+            lambda: self.tutor_ai.select_year_of_plenty_resources_with_explanation(player, game)
+        )
         actual_explanation = self.tutor_ai.explain_year_of_plenty_choice(player, game, selected)
         return self._feedback_from_explanations(
             TutorDecisionType.YEAR_OF_PLENTY,
@@ -308,7 +331,9 @@ class TutorEvaluator:
             resource: Resource,
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
-        _, best_explanation = self.tutor_ai.select_monopoly_resource_with_explanation(player, game)
+        _, best_explanation = self._run_tutor_preview(
+            lambda: self.tutor_ai.select_monopoly_resource_with_explanation(player, game)
+        )
         actual_explanation = self.tutor_ai.explain_monopoly_choice(player, game, resource)
         return self._feedback_from_explanations(
             TutorDecisionType.MONOPOLY,

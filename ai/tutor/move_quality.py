@@ -2,6 +2,11 @@ import math
 from typing import Any, Mapping, Optional
 
 
+def _stable_logistic(score: float) -> float:
+    clamped_score = max(-60.0, min(60.0, score))
+    return 1.0 / (1.0 + math.exp(-clamped_score))
+
+
 def clamp_move_quality(move_quality: Optional[float]) -> float:
     if move_quality is None:
         return 0.0
@@ -128,7 +133,7 @@ def trade_partner_move_quality(
         partner_is_leader: bool = False) -> float:
     adjusted_opponent_gain = max(0.0, opponent_gain) * (1.5 if partner_is_leader else 1.0)
     trade_score = (max(0.0, self_gain) - 0.7 * adjusted_opponent_gain) / max(max(0.0, self_gain), 1e-6)
-    q = 1.0 / (1.0 + math.exp(-5.0 * (trade_score - 0.2)))
+    q = _stable_logistic(5.0 * (trade_score - 0.2))
     return clamp_move_quality(q ** 1.2)
 
 

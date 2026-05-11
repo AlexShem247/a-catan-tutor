@@ -18,6 +18,7 @@ class AI(ABC):
 
     def __init__(self, rng: Random):
         self.rng = rng
+        self.policy_name = type(self).__name__
 
     @abstractmethod
     def choose_trade_partner(self, player: Player, game: "Game", selling: ResourceCount, buying: ResourceCount,

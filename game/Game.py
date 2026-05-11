@@ -1,6 +1,6 @@
 from collections import defaultdict
 from random import Random
-from typing import List, Optional, Dict, Tuple, Type
+from typing import Callable, Dict, List, Optional, Tuple
 
 from ai.AI import AI
 from game.Board import Board
@@ -11,7 +11,8 @@ from game.PlayerAssets import Buildable, DevelopmentDeck
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Building, Vertex, VertexDirection, Port
 
-PlayerConfig = Dict[PlayerNumber, Optional[Type[AI]]]
+PlayerPolicyFactory = Callable[[Random], AI]
+PlayerConfig = Dict[PlayerNumber, Optional[PlayerPolicyFactory]]
 
 
 class Game:
@@ -38,13 +39,13 @@ class Game:
 
         self.players = [
             Player(
-                is_human=policy_cls is None,
+                is_human=policy_factory is None,
                 player_number=num,
                 bank_resources=self.bank_resources,
                 rng=self.rng,
-                policy=None if policy_cls is None else policy_cls(self.rng)
+                policy=None if policy_factory is None else policy_factory(self.rng)
             )
-            for num, policy_cls in player_config.items()
+            for num, policy_factory in player_config.items()
             ]
 
         self._board = Board(self.rng)

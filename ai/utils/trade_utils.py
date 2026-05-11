@@ -13,6 +13,12 @@ if TYPE_CHECKING:
     from ai.simulation.EtwEstimator import EtwEstimator
 
 
+def _stable_logistic(score: float) -> float:
+    """Numerically stable logistic function."""
+    clamped_score = max(-60.0, min(60.0, score))
+    return 1.0 / (1.0 + math.exp(-clamped_score))
+
+
 def _sim_game_with_replaced_player(sim_game: SimGame, sim_player: SimPlayerState) -> SimGame:
     """Return a SimGame with the given player state replaced in the overlay."""
     ov2 = sim_game.overlay.copy()
@@ -132,8 +138,8 @@ def _predict_acceptance_prob(_: SimPlayerState, delta_etw: float, trade: Action)
             - StrategyWeights.ACCEPT_COST_WEIGHT * opp_cost
     )
 
-    # Squash into [0,1] via logistic function.
-    return 1.0 / (1.0 + math.exp(-score))
+    # Squash into [0,1] via a numerically stable logistic function.
+    return _stable_logistic(score)
 
 
 def _apply_trade_copy(player: SimPlayerState, trade: Action) -> SimPlayerState:
@@ -527,6 +533,9 @@ def select_best_trade_partner(
     selling_orig: ResourceCount,
     buying: ResourceCount,
     available_players: List[Tuple[SimPlayerState, Optional[ResourceCount]]],
+    lambda_leader: float = StrategyWeights.LAMBDA_RISK_LEADER,
+    lambda_base: float = StrategyWeights.LAMBDA_RISK_BASE,
+    leader_penalty: float = StrategyWeights.TRADE_LEADER_PENALTY,
 ) -> Optional[Tuple[SimPlayerState, Optional[ResourceCount]]]:
     """Return best partner (and optional counter) that yields lowest ETW-after subject to risk constraints."""
     if not available_players:
@@ -601,13 +610,13 @@ def select_best_trade_partner(
         vp_gap = opp_sim.victory_points() - player_sim.victory_points()
         is_close = (vp_gap >= -StrategyWeights.CLOSE_OPPONENT_VP_GAP)
 
-        lambda_risk = StrategyWeights.LAMBDA_RISK_LEADER if is_leader else StrategyWeights.LAMBDA_RISK_BASE
+        lambda_risk = lambda_leader if is_leader else lambda_base
         if (is_close or is_leader) and delta_opp >= lambda_risk * delta_ai:
             continue
 
         # Optional extra bias against trading with the leader even if it's "safe".
-        leader_penalty = StrategyWeights.TRADE_LEADER_PENALTY if is_leader else 0.0
-        score = etw_after + leader_penalty
+        leader_penalty_value = leader_penalty if is_leader else 0.0
+        score = etw_after + leader_penalty_value
 
         if score < best_score:
             best_score = score

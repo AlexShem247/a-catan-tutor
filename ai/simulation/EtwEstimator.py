@@ -1,4 +1,5 @@
 import math
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from ai.simulation.SimGame import SimGame
@@ -34,6 +35,12 @@ def _sim_game_with_replaced_player(sim_game: SimGame, sim_player: SimPlayerState
     return SimGame(game=sim_game.game, overlay=overlay2)
 
 
+@dataclass(frozen=True)
+class EtwTradeStateSnapshot:
+    last_trade_resources: Optional[ResourceCount]
+    last_trade_proposed: bool
+
+
 class EtwEstimator:
     def __init__(self):
         self._eval_stats = {"cache_hits": 0, "cache_misses": 0, "evaluations": 0}
@@ -44,6 +51,43 @@ class EtwEstimator:
         """Clear previous turn trade info."""
         self._last_trade_proposed = False
         self._last_trade_resources = None
+
+    def snapshot_trade_state(self) -> EtwTradeStateSnapshot:
+        last_trade_resources = self._last_trade_resources
+        return EtwTradeStateSnapshot(
+            last_trade_resources=None if last_trade_resources is None else last_trade_resources.copy(),
+            last_trade_proposed=self._last_trade_proposed,
+        )
+
+    def restore_trade_state(self, snapshot: EtwTradeStateSnapshot) -> None:
+        self._last_trade_proposed = snapshot.last_trade_proposed
+        self._last_trade_resources = (
+            None if snapshot.last_trade_resources is None else snapshot.last_trade_resources.copy()
+        )
+
+    def record_trade_proposal(self, resources: ResourceCount) -> None:
+        self._last_trade_proposed = True
+        self._last_trade_resources = resources.copy()
+
+    def clear_trade_proposal(self) -> None:
+        self._last_trade_proposed = False
+        self._last_trade_resources = None
+
+    @staticmethod
+    def _apply_time_discount(utility: float, etb: float, use_time_discount: bool) -> float:
+        if not use_time_discount:
+            return utility
+        discount_rate = StrategyWeights.TIME_DISCOUNT_RATE
+        return utility / ((1.0 + discount_rate) ** max(1.0, etb))
+
+    @staticmethod
+    def _immediate_vp_gain(action: Action) -> float:
+        if action.type != ActionType.BUILD:
+            return 0.0
+        buildable, _ = action.payload
+        if buildable in (Buildable.SETTLEMENT, Buildable.CITY):
+            return 1.0
+        return 0.0
 
     def estimated_time_to_build(
         self, player: SimPlayerState, sim_game: SimGame, R_target: ResourceCount,
@@ -210,12 +254,14 @@ class EtwEstimator:
     def estimated_time_to_win(
         self, player: SimPlayerState, sim_game: SimGame, dev_played: bool,
         include_player_trades: bool = True, max_depth_override: Optional[int] = None,
+        allow_development_cards: bool = True, use_planning: bool = True,
     ) -> float:
         """Estimate expected turns to reach 10 VP via a greedy forward rollout."""
 
         # Cache key includes depth override to avoid mixing fast vs full ETW estimates.
         cache_key = (
             player.player_number, dev_played, include_player_trades, max_depth_override,
+            allow_development_cards, use_planning,
             len(player.settlements), len(player.cities), len(player.roads),
             tuple((r.value, player.resources.get(r, 0)) for r in Resource),
         )
@@ -250,7 +296,12 @@ class EtwEstimator:
 
         while points < Game.VICTORY_POINTS_TO_WIN and iterations < max_depth:
             candidate_actions = self._get_candidate_actions(
-                sim_player, sim_game_local, dev_played, include_player_trades,
+                sim_player,
+                sim_game_local,
+                dev_played,
+                include_player_trades,
+                allow_development_cards=allow_development_cards,
+                use_planning=use_planning,
             )
 
             # No feasible progress → penalise and stop.
@@ -355,6 +406,10 @@ class EtwEstimator:
         sim_game: SimGame,
         etw_before: float,
         deferred_candidate: Optional[CandidateExplanation] = None,
+        include_player_trades: bool = True,
+        allow_development_cards: bool = True,
+        use_planning: bool = True,
+        use_time_discount: bool = True,
     ) -> CandidateExplanation:
         player_after_wait = player.copy()
         expected_resources = cast(Dict[Resource, float], player_after_wait.resources)
@@ -369,14 +424,18 @@ class EtwEstimator:
             sim_game_after_wait,
             False,
             max_depth_override=EVAL_UTIL_MAX_DEPTH,
+            include_player_trades=include_player_trades,
+            allow_development_cards=allow_development_cards,
+            use_planning=use_planning,
         )
         etw_delta = etw_before - etw_after_wait
         u_self = 0.0 if etw_before <= 0 else max(0.0, (etw_delta / etw_before) * 100.0)
 
-        discount_rate = StrategyWeights.TIME_DISCOUNT_RATE
-        utility_total = (
-            StrategyWeights.BUILD_SELF_UTILITY * u_self
-        ) / ((1.0 + discount_rate) ** 1.0)
+        utility_total = self._apply_time_discount(
+            StrategyWeights.BUILD_SELF_UTILITY * u_self,
+            1.0,
+            use_time_discount,
+        )
 
         next_plan: List[Action] = []
         waiting_resources: ResourceCount = {}
@@ -478,6 +537,10 @@ class EtwEstimator:
         vp_inc: float,
         etw_before: float,
         opponents_etw_before: Dict[PlayerNumber, float],
+        include_player_trades: bool = True,
+        allow_development_cards: bool = True,
+        use_planning: bool = True,
+        use_time_discount: bool = True,
     ) -> Optional[CandidateExplanation]:
         if etb > MAX_ETB_THRESHOLD or not actions:
             return None
@@ -502,7 +565,13 @@ class EtwEstimator:
                 break
 
         etw_after = self.estimated_time_to_win(
-            player_copy, sim_game_copy, dev_played, max_depth_override=EVAL_UTIL_MAX_DEPTH,
+            player_copy,
+            sim_game_copy,
+            dev_played,
+            max_depth_override=EVAL_UTIL_MAX_DEPTH,
+            include_player_trades=include_player_trades,
+            allow_development_cards=allow_development_cards,
+            use_planning=use_planning,
         )
 
         etw_delta = etw_before - etw_after
@@ -523,7 +592,13 @@ class EtwEstimator:
                 sim_game_opp = _sim_game_with_replaced_player(sim_game_copy, opp_state)
 
                 opp_etw_after = self.estimated_time_to_win(
-                    opp_state, sim_game_opp, False, max_depth_override=EVAL_UTIL_MAX_DEPTH,
+                    opp_state,
+                    sim_game_opp,
+                    False,
+                    max_depth_override=EVAL_UTIL_MAX_DEPTH,
+                    include_player_trades=include_player_trades,
+                    allow_development_cards=allow_development_cards,
+                    use_planning=use_planning,
                 )
 
                 delay_caused = (opp_etw_after - opp_etw_before) / opp_etw_before * 100.0
@@ -551,11 +626,13 @@ class EtwEstimator:
         if took_lr_now and vp_after < StrategyWeights.ATTENTION_LR_VP_THRESHOLD:
             u_attention -= StrategyWeights.ATTENTION_LR_EARLY_PENALTY
 
-        discount_rate = StrategyWeights.TIME_DISCOUNT_RATE
-        utility_total = (
-            (StrategyWeights.BUILD_SELF_UTILITY * u_self + StrategyWeights.BUILD_OPPONENT_UTILITY * u_opp
-             + StrategyWeights.BUILD_SPECIAL_UTILITY * u_special + u_attention)
-            / ((1.0 + discount_rate) ** max(1.0, etb))
+        utility_total = self._apply_time_discount(
+            StrategyWeights.BUILD_SELF_UTILITY * u_self
+            + StrategyWeights.BUILD_OPPONENT_UTILITY * u_opp
+            + StrategyWeights.BUILD_SPECIAL_UTILITY * u_special
+            + u_attention,
+            etb,
+            use_time_discount,
         )
 
         reasons_for: List[Reason] = []
@@ -638,13 +715,14 @@ class EtwEstimator:
 
     def _get_candidate_actions(
         self, player: SimPlayerState, sim_game: SimGame, dev_played: bool,
-        include_player_trades: bool = True,
+        include_player_trades: bool = True, allow_development_cards: bool = True, use_planning: bool = True,
     ) -> List[Tuple[List[Action], float, float]]:
         """Generate and prune candidates, returning (actions, etb, expected_vp_gain)."""
 
         # Cache so utility evaluation doesn't regenerate candidates repeatedly.
         cache_key = (
-            player.player_number, dev_played, len(player.settlements), len(player.cities),
+            player.player_number, dev_played, include_player_trades, allow_development_cards, use_planning,
+            len(player.settlements), len(player.cities),
             len(player.roads), tuple((r.value, player.resources.get(r, 0)) for r in Resource),
         )
 
@@ -673,11 +751,11 @@ class EtwEstimator:
 
         # Dev cards: mainly when close to winning or already investing in army pressure.
         points_needed = Game.VICTORY_POINTS_TO_WIN - player.victory_points()
-        if player.army_size >= 2 or points_needed <= 2:
+        if allow_development_cards and (player.army_size >= 2 or points_needed <= 2):
             candidate_actions.extend(purchase_development_card_action(player, sim_game, self))
 
         # Playing dev cards is free ETB-wise, only allow once per turn.
-        if not dev_played:
+        if allow_development_cards and not dev_played:
             candidate_actions.extend(play_development_card_action(player, sim_game))
 
         # If the candidate set is too small, add a cheap road option to avoid “dead-end” turns.
@@ -698,6 +776,29 @@ class EtwEstimator:
                         break
 
         # Sort by ETB so later stages can prune quickly.
+        if not use_planning:
+            collapsed_candidates: List[Tuple[List[Action], float, float]] = []
+            seen_actions: set[str] = set()
+            for actions, _, _ in candidate_actions:
+                if not actions:
+                    continue
+                next_action = actions[0]
+                action_key = repr(next_action)
+                if action_key in seen_actions:
+                    continue
+                seen_actions.add(action_key)
+                collapsed_candidates.append((
+                    [next_action],
+                    self._estimate_single_action_etb(
+                        player,
+                        sim_game,
+                        next_action,
+                        include_player_trades=include_player_trades,
+                    ),
+                    self._immediate_vp_gain(next_action),
+                ))
+            candidate_actions = collapsed_candidates
+
         candidate_actions.sort(key=lambda x: x[1])
         player.candidate_cache[cache_key] = candidate_actions
         return candidate_actions[:ETW_SIMULATION_MAX_CANDIDATES]
@@ -705,7 +806,8 @@ class EtwEstimator:
     def evaluate_utilities(
         self, player: SimPlayerState, sim_game: SimGame, dev_played: bool,
         candidates: List[Tuple[List[Action], float, float]], etw_before: float,
-        opponents_etw_before: Dict[PlayerNumber, float],
+        opponents_etw_before: Dict[PlayerNumber, float], include_player_trades: bool = True,
+        allow_development_cards: bool = True, use_planning: bool = True, use_time_discount: bool = True,
     ) -> List[Tuple[Action, float]]:
         """Evaluate utility for candidate actions."""
         self._eval_stats["evaluations"] += 1
@@ -743,7 +845,13 @@ class EtwEstimator:
 
             # Self utility: percent reduction in (approx) ETW after the rollout.
             etw_after = self.estimated_time_to_win(
-                player_copy, sim_game_copy, dev_played, max_depth_override=EVAL_UTIL_MAX_DEPTH,
+                player_copy,
+                sim_game_copy,
+                dev_played,
+                max_depth_override=EVAL_UTIL_MAX_DEPTH,
+                include_player_trades=include_player_trades,
+                allow_development_cards=allow_development_cards,
+                use_planning=use_planning,
             )
             u_self = 0.0 if etw_before <= 0 else max(0.0, (etw_before - etw_after) / etw_before * 100.0)
 
@@ -762,7 +870,13 @@ class EtwEstimator:
 
                 if opp_etw_before > 0:
                     opp_etw_after = self.estimated_time_to_win(
-                        opp_state, sim_game_opp, False, max_depth_override=EVAL_UTIL_MAX_DEPTH,
+                        opp_state,
+                        sim_game_opp,
+                        False,
+                        max_depth_override=EVAL_UTIL_MAX_DEPTH,
+                        include_player_trades=include_player_trades,
+                        allow_development_cards=allow_development_cards,
+                        use_planning=use_planning,
                     )
 
                     delay_caused = (opp_etw_after - opp_etw_before) / opp_etw_before * 100.0
@@ -789,16 +903,26 @@ class EtwEstimator:
                 u_attention -= StrategyWeights.ATTENTION_LR_EARLY_PENALTY
 
             # Discount by ETB so fast gains beat slow gains.
-            discount_rate = StrategyWeights.TIME_DISCOUNT_RATE
-            eu = (
-                (StrategyWeights.BUILD_SELF_UTILITY * u_self + StrategyWeights.BUILD_OPPONENT_UTILITY * u_opp
-                 + StrategyWeights.BUILD_SPECIAL_UTILITY * u_special + u_attention)
-                / ((1.0 + discount_rate) ** max(1.0, etb))
+            eu = self._apply_time_discount(
+                StrategyWeights.BUILD_SELF_UTILITY * u_self
+                + StrategyWeights.BUILD_OPPONENT_UTILITY * u_opp
+                + StrategyWeights.BUILD_SPECIAL_UTILITY * u_special
+                + u_attention,
+                etb,
+                use_time_discount,
             )
 
             utilities.append((next_step, eu))
 
-        end_turn_candidate = self._build_end_turn_candidate(player, sim_game, etw_before)
+        end_turn_candidate = self._build_end_turn_candidate(
+            player,
+            sim_game,
+            etw_before,
+            include_player_trades=include_player_trades,
+            allow_development_cards=allow_development_cards,
+            use_planning=use_planning,
+            use_time_discount=use_time_discount,
+        )
         utilities.append((end_turn_candidate.action, end_turn_candidate.utility_total))
 
         return utilities
@@ -877,7 +1001,7 @@ class EtwEstimator:
 
     def _choose_max_utility_action(
         self, player: SimPlayerState, sim_game: SimGame, utilities: List[Tuple[Action, float]],
-        ignore_affordability: bool = False,
+        ignore_affordability: bool = False, include_player_trades: bool = True,
     ) -> Action:
         """Select the max-utility action, optionally inserting bank/player trades."""
         best_action: Optional[Action] = None
@@ -900,7 +1024,7 @@ class EtwEstimator:
                 best_action = bank_trade_action
 
             # If player trades are allowed, propose one missing resource trade (but avoid spamming repeats).
-            if not self.last_trade_rejected(player):
+            if include_player_trades and not self.last_trade_rejected(player):
                 player_deficit, player_excesses = self._calculate_deficits_and_excesses(player.resources, cost)
                 missing = next((r for r, v in player_deficit.items() if v > 0), None)
                 if missing is not None:
@@ -915,7 +1039,7 @@ class EtwEstimator:
 
     def _choose_max_utility_action_with_candidate(
         self, player: SimPlayerState, sim_game: SimGame, candidates: List[CandidateExplanation],
-        ignore_affordability: bool = False,
+        ignore_affordability: bool = False, include_player_trades: bool = True, use_time_discount: bool = True,
     ) -> Tuple[Action, CandidateExplanation]:
         """Select the max-utility action, optionally inserting bank/player trades."""
         best_action: Optional[Action] = None
@@ -956,7 +1080,7 @@ class EtwEstimator:
                 )
 
             # If player trades are allowed, propose one missing resource trade (but avoid spamming repeats).
-            if not self.last_trade_rejected(player):
+            if include_player_trades and not self.last_trade_rejected(player):
                 player_deficit, player_excesses = self._calculate_deficits_and_excesses(player.resources, cost)
                 missing = next((r for r, v in player_deficit.items() if v > 0), None)
                 if missing is not None:
@@ -994,33 +1118,65 @@ class EtwEstimator:
             sim_game,
             max((candidate.etw_before for candidate in candidates), default=0.0),
             max(candidates, key=lambda c: c.utility_total, default=None),
+            use_time_discount=use_time_discount,
         )
         return fallback.action, fallback
 
     def calculate_best_game_action(
         self, sim_game: SimGame, player_number: PlayerNumber, dev_played: bool,
-        ignore_affordability: bool = False, ignore_opponents: bool = False,
+        ignore_affordability: bool = False, ignore_opponents: bool = False, include_player_trades: bool = True,
+        use_time_discount: bool = True, allow_development_cards: bool = True, use_planning: bool = True,
     ) -> Action:
         """Return the best next action for the given player number using the SimGame overlay."""
         sim_player = sim_game.overlay.get_sim_player(player_number)
 
         # Baseline ETW for scoring self-improvement.
-        etw_before = self.estimated_time_to_win(sim_player.copy(), sim_game, dev_played)
+        etw_before = self.estimated_time_to_win(
+            sim_player.copy(),
+            sim_game,
+            dev_played,
+            include_player_trades=include_player_trades,
+            allow_development_cards=allow_development_cards,
+            use_planning=use_planning,
+        )
 
         # Opponent ETWs are only needed when we want interference scoring.
         opponents_etw_before: Dict[PlayerNumber, float] = {}
         if not ignore_opponents:
             for opp in get_opponents(sim_game, player_number):
-                opponents_etw_before[opp.player_number] = self.estimated_time_to_win(opp.copy(), sim_game, False)
+                opponents_etw_before[opp.player_number] = self.estimated_time_to_win(
+                    opp.copy(),
+                    sim_game,
+                    False,
+                    include_player_trades=include_player_trades,
+                    allow_development_cards=allow_development_cards,
+                    use_planning=use_planning,
+                )
 
         # Generate a small, pruned action set to keep rollout evaluation tractable.
-        candidates = self._get_candidate_actions(sim_player, sim_game, dev_played)
+        candidates = self._get_candidate_actions(
+            sim_player,
+            sim_game,
+            dev_played,
+            include_player_trades=include_player_trades,
+            allow_development_cards=allow_development_cards,
+            use_planning=use_planning,
+        )
         if not candidates:
             return Action(ActionType.END_TURN)
 
         # Convert candidate plans into (next-step, utility) scores via rollouts + ETW deltas.
         utilities = self.evaluate_utilities(
-            sim_player, sim_game, dev_played, candidates, etw_before, opponents_etw_before,
+            sim_player,
+            sim_game,
+            dev_played,
+            candidates,
+            etw_before,
+            opponents_etw_before,
+            include_player_trades=include_player_trades,
+            allow_development_cards=allow_development_cards,
+            use_planning=use_planning,
+            use_time_discount=use_time_discount,
         )
         if not utilities:
             return Action(ActionType.END_TURN)
@@ -1031,19 +1187,24 @@ class EtwEstimator:
         )
         best_dev = max((u for u in utilities if u[0].type == ActionType.BUY_DEV_CARD), default=None, key=lambda x: x[1])
 
-        if (not ignore_affordability) and best_build is not None and best_dev is not None:
+        if allow_development_cards and (not ignore_affordability) and best_build is not None and best_dev is not None:
             if best_dev[1] >= best_build[1] * (1.0 - StrategyWeights.DEV_CLOSE_THRESHOLD):
                 utilities = [best_dev]
 
         # Final selection can insert a trade step if the top action isn't currently affordable.
         return self._choose_max_utility_action(
-            sim_player, sim_game, utilities, ignore_affordability=ignore_affordability,
+            sim_player,
+            sim_game,
+            utilities,
+            ignore_affordability=ignore_affordability,
+            include_player_trades=include_player_trades,
         )
 
     def evaluate_candidates_with_explanations(
         self, player: SimPlayerState, sim_game: SimGame, dev_played: bool,
         candidates: List[Tuple[List[Action], float, float]], etw_before: float,
-        opponents_etw_before: Dict[PlayerNumber, float],
+        opponents_etw_before: Dict[PlayerNumber, float], include_player_trades: bool = True,
+        allow_development_cards: bool = True, use_planning: bool = True, use_time_discount: bool = True,
     ) -> List[CandidateExplanation]:
         """Evaluate candidates and return structured explanations."""
         explained: List[CandidateExplanation] = []
@@ -1053,13 +1214,33 @@ class EtwEstimator:
 
         for actions, etb, vp_inc in candidates[:max_eval]:
             candidate = self._evaluate_action_plan(
-                player, sim_game, dev_played, actions, etb, vp_inc, etw_before, opponents_etw_before,
+                player,
+                sim_game,
+                dev_played,
+                actions,
+                etb,
+                vp_inc,
+                etw_before,
+                opponents_etw_before,
+                include_player_trades=include_player_trades,
+                allow_development_cards=allow_development_cards,
+                use_planning=use_planning,
+                use_time_discount=use_time_discount,
             )
             if candidate is not None:
                 explained.append(candidate)
 
         deferred_candidate = max(explained, key=lambda c: c.utility_total, default=None)
-        explained.append(self._build_end_turn_candidate(player, sim_game, etw_before, deferred_candidate))
+        explained.append(self._build_end_turn_candidate(
+            player,
+            sim_game,
+            etw_before,
+            deferred_candidate,
+            include_player_trades=include_player_trades,
+            allow_development_cards=allow_development_cards,
+            use_planning=use_planning,
+            use_time_discount=use_time_discount,
+        ))
         explained.sort(key=lambda c: c.utility_total, reverse=True)
         return explained
 
@@ -1070,18 +1251,52 @@ class EtwEstimator:
         dev_played: bool,
         action: Action,
         ignore_opponents: bool = False,
+        include_player_trades: bool = True,
+        use_time_discount: bool = True,
+        allow_development_cards: bool = True,
+        use_planning: bool = True,
     ) -> ActionExplanation:
         sim_player = sim_game.overlay.get_sim_player(player_number)
-        etw_before = self.estimated_time_to_win(sim_player.copy(), sim_game, dev_played)
+        etw_before = self.estimated_time_to_win(
+            sim_player.copy(),
+            sim_game,
+            dev_played,
+            include_player_trades=include_player_trades,
+            allow_development_cards=allow_development_cards,
+            use_planning=use_planning,
+        )
 
         opponents_etw_before: Dict[PlayerNumber, float] = {}
         if not ignore_opponents:
             for opp in get_opponents(sim_game, player_number):
-                opponents_etw_before[opp.player_number] = self.estimated_time_to_win(opp.copy(), sim_game, False)
+                opponents_etw_before[opp.player_number] = self.estimated_time_to_win(
+                    opp.copy(),
+                    sim_game,
+                    False,
+                    include_player_trades=include_player_trades,
+                    allow_development_cards=allow_development_cards,
+                    use_planning=use_planning,
+                )
 
-        candidates = self._get_candidate_actions(sim_player, sim_game, dev_played)
+        candidates = self._get_candidate_actions(
+            sim_player,
+            sim_game,
+            dev_played,
+            include_player_trades=include_player_trades,
+            allow_development_cards=allow_development_cards,
+            use_planning=use_planning,
+        )
         explained_candidates = self.evaluate_candidates_with_explanations(
-            sim_player, sim_game, dev_played, candidates, etw_before, opponents_etw_before,
+            sim_player,
+            sim_game,
+            dev_played,
+            candidates,
+            etw_before,
+            opponents_etw_before,
+            include_player_trades=include_player_trades,
+            allow_development_cards=allow_development_cards,
+            use_planning=use_planning,
+            use_time_discount=use_time_discount,
         ) if candidates else []
 
         chosen_candidate = next((candidate for candidate in explained_candidates if candidate.action == action), None)
@@ -1091,10 +1306,19 @@ class EtwEstimator:
                 sim_game,
                 dev_played,
                 [action],
-                self._estimate_single_action_etb(sim_player, sim_game, action),
+                self._estimate_single_action_etb(
+                    sim_player,
+                    sim_game,
+                    action,
+                    include_player_trades=include_player_trades,
+                ),
                 0.0,
                 etw_before,
                 opponents_etw_before,
+                include_player_trades=include_player_trades,
+                allow_development_cards=allow_development_cards,
+                use_planning=use_planning,
+                use_time_discount=use_time_discount,
             )
 
         if chosen_candidate is None:
@@ -1133,18 +1357,40 @@ class EtwEstimator:
 
     def calculate_best_game_action_with_explanation(
         self, sim_game: SimGame, player_number: PlayerNumber, dev_played: bool,
-        ignore_affordability: bool = False, ignore_opponents: bool = False,
+        ignore_affordability: bool = False, ignore_opponents: bool = False, include_player_trades: bool = True,
+        use_time_discount: bool = True, allow_development_cards: bool = True, use_planning: bool = True,
     ) -> ActionExplanation:
         sim_player = sim_game.overlay.get_sim_player(player_number)
 
-        etw_before = self.estimated_time_to_win(sim_player.copy(), sim_game, dev_played)
+        etw_before = self.estimated_time_to_win(
+            sim_player.copy(),
+            sim_game,
+            dev_played,
+            include_player_trades=include_player_trades,
+            allow_development_cards=allow_development_cards,
+            use_planning=use_planning,
+        )
 
         opponents_etw_before: Dict[PlayerNumber, float] = {}
         if not ignore_opponents:
             for opp in get_opponents(sim_game, player_number):
-                opponents_etw_before[opp.player_number] = self.estimated_time_to_win(opp.copy(), sim_game, False)
+                opponents_etw_before[opp.player_number] = self.estimated_time_to_win(
+                    opp.copy(),
+                    sim_game,
+                    False,
+                    include_player_trades=include_player_trades,
+                    allow_development_cards=allow_development_cards,
+                    use_planning=use_planning,
+                )
 
-        candidates = self._get_candidate_actions(sim_player, sim_game, dev_played)
+        candidates = self._get_candidate_actions(
+            sim_player,
+            sim_game,
+            dev_played,
+            include_player_trades=include_player_trades,
+            allow_development_cards=allow_development_cards,
+            use_planning=use_planning,
+        )
         if not candidates:
             chosen = CandidateExplanation(
                 action=Action(ActionType.END_TURN), full_plan=[Action(ActionType.END_TURN)],
@@ -1160,7 +1406,16 @@ class EtwEstimator:
             )
 
         explained_candidates = self.evaluate_candidates_with_explanations(
-            sim_player, sim_game, dev_played, candidates, etw_before, opponents_etw_before,
+            sim_player,
+            sim_game,
+            dev_played,
+            candidates,
+            etw_before,
+            opponents_etw_before,
+            include_player_trades=include_player_trades,
+            allow_development_cards=allow_development_cards,
+            use_planning=use_planning,
+            use_time_discount=use_time_discount,
         )
 
         if not explained_candidates:
@@ -1181,7 +1436,12 @@ class EtwEstimator:
             )
 
         chosen_action, chosen_candidate = self._choose_max_utility_action_with_candidate(
-            sim_player, sim_game, explained_candidates, ignore_affordability=ignore_affordability,
+            sim_player,
+            sim_game,
+            explained_candidates,
+            ignore_affordability=ignore_affordability,
+            include_player_trades=include_player_trades,
+            use_time_discount=use_time_discount,
         )
 
         alternatives = [c for c in explained_candidates if c.full_plan != chosen_candidate.full_plan][:3]

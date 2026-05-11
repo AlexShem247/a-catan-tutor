@@ -30,6 +30,9 @@ class QtView(View):
     def set_debug_tutor_shortcut_handler(self, handler: Optional[Callable[[], Any]]) -> None:
         self.window.set_debug_tutor_shortcut_handler(handler)
 
+    def consume_return_home_request(self) -> bool:
+        return self.window.consume_return_home_request()
+
     def display_board(self, player: Optional[Player] = None, msg: Optional[str] = None):
         """Hook to display the board in the Qt window."""
         self.canvas.display_board(self.controller)

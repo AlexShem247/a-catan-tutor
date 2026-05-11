@@ -21,8 +21,12 @@ class GameMode(Enum):
 
 
 class View(Protocol):
+    ai_decision_animation_delay: float
 
     def set_debug_tutor_shortcut_handler(self, handler: Optional[Callable[[], Any]]) -> None:
+        ...
+
+    def consume_return_home_request(self) -> bool:
         ...
 
     def display_board(self, player: Optional[Player] = None, msg: Optional[str] = None) -> None:

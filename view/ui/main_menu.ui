@@ -83,7 +83,7 @@
                 <string>View Catan Rules</string>
                </property>
                <property name="text">
-                <string>?</string>
+                <string/>
                </property>
               </widget>
              </item>
@@ -110,7 +110,7 @@
                 <string>Go Back to Main Menu</string>
                </property>
                <property name="text">
-                <string>🏠</string>
+                <string/>
                </property>
               </widget>
              </item>
@@ -1159,7 +1159,7 @@ Building costs:
             </property>
             <property name="font">
              <font>
-              <pointsize>9</pointsize>
+              <pointsize>10</pointsize>
              </font>
             </property>
             <property name="toolTip">
