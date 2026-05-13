@@ -33,26 +33,23 @@ from config.view_constants import (
     TUTOR_FEEDBACK_FADE_STEPS,
     TUTOR_FEEDBACK_MAX_DISPLAY_SECONDS,
     TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS,
-    endgame_rank_card_stylesheet,
     HOME_ICON,
     PLAYER_COLORS,
     RULES_ICON,
     SETTINGS_ICON,
     TOOLTIP_BACKGROUND_COLOR,
     TOOLTIP_BORDER_COLOR,
-    TOOLTIP_TEXT_COLOR,
+    TOOLTIP_TEXT_COLOR, TROPHY_ICON,
 )
 from config.settings import (load_default_settings, load_effective_settings, save_applied_settings,
                              reset_applied_settings)
 from view.rich_text import (
-    TROPHY_ICON_PATH,
     concise_explanation_html,
     player_breakdown_html,
     strip_html_to_plain_text,
     tutor_focus_html,
     tutor_window_title_html,
-    winner_title_html,
-)
+    winner_title_html, )
 from view.styles import (
     endgame_badge_stylesheet,
     endgame_feedback_body_stylesheet,
@@ -62,7 +59,7 @@ from view.styles import (
     endgame_feedback_title_stylesheet,
     player_badge_stylesheet,
     tutor_feedback_action_stylesheet,
-    tutor_feedback_explanation_stylesheet,
+    tutor_feedback_explanation_stylesheet, endgame_rank_card_stylesheet,
 )
 from view.View import GameMode
 from view.display_utils import format_counter_offer, get_player_lead_status
@@ -983,7 +980,7 @@ class MainWindow(QMainWindow):
         return endgame_rank_card_stylesheet(selected)
 
     def _set_endgame_winner_header(self, winner_name: str, winner_total_vp: int) -> None:
-        trophy_pixmap = QPixmap(TROPHY_ICON_PATH)
+        trophy_pixmap = QPixmap(TROPHY_ICON)
         if trophy_pixmap.isNull():
             self.endgame_winner_trophy_label.hide()
         else:

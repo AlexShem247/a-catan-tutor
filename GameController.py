@@ -17,6 +17,7 @@ from game.Player import Player, PlayerNumber
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import ResourceCount, Resource
 from game.Vertex import Vertex, Port, VertexDirection
+from view.board_display_source import BoardDisplaySource
 from view.View import View, GameMode
 from view.display_utils import resource_dict_to_str
 
@@ -54,7 +55,7 @@ class PlayerScoreSnapshot:
     has_largest_army: bool
 
 
-class GameController:
+class GameController(BoardDisplaySource):
     """Controls the flow of a Catan game using a pure Game model."""
     _game: Game
     game_mode = GameMode.PLAY

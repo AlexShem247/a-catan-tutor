@@ -2,12 +2,10 @@ from html import escape, unescape
 import re
 from typing import Iterable, Mapping
 
-
-TUTOR_ICON_PATH = "assets/tutor.png"
-TROPHY_ICON_PATH = "assets/trophy.png"
+from config.view_constants import TUTOR_ICON
 
 
-def tutor_window_title_html(icon_path: str = TUTOR_ICON_PATH) -> str:
+def tutor_window_title_html(icon_path: str = TUTOR_ICON) -> str:
     return (
         "<html><body><table cellpadding='0' cellspacing='0'><tr>"
         f"<td valign='middle'><img src='{icon_path}' width='48' height='48'></td>"

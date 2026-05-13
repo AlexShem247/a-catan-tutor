@@ -75,6 +75,8 @@ SEA_BACKGROUND = "assets/sea_background.png"
 SETTLEMENT_OUTLINE = "assets/settlement_outline.png"
 SETTLEMENT_OUTLINE_SOLID = "assets/settlement_outline_solid.png"
 CITY_OUTLINE = "assets/city_outline.png"
+TUTOR_ICON = "assets/tutor.png"
+TROPHY_ICON = "assets/trophy.png"
 
 PORT_ICONS: Dict[Port, str] = {
     Port.THREE_TO_ONE: "assets/port_generic.png",
@@ -122,31 +124,3 @@ def hex_to_filepath(hex_type: HexType) -> str:
 
 def qcolor_hex(colour: QColor) -> str:
     return colour.name()
-
-
-def endgame_rank_card_stylesheet(selected: bool) -> str:
-    background = (
-        ENDGAME_RANK_CARD_SELECTED_BACKGROUND_COLOR
-        if selected
-        else ENDGAME_RANK_CARD_DEFAULT_BACKGROUND_COLOR
-    )
-    border_colour = (
-        ENDGAME_RANK_CARD_SELECTED_BORDER_COLOR
-        if selected
-        else ENDGAME_RANK_CARD_DEFAULT_BORDER_COLOR
-    )
-    border_width = (
-        ENDGAME_RANK_CARD_SELECTED_BORDER_WIDTH_PX
-        if selected
-        else ENDGAME_RANK_CARD_DEFAULT_BORDER_WIDTH_PX
-    )
-    return (
-        "QPushButton#rankCard {"
-        f"background: {qcolor_hex(background)};"
-        f"border: {border_width}px solid {qcolor_hex(border_colour)};"
-        f"border-radius: {ENDGAME_RANK_CARD_BORDER_RADIUS_PX}px;"
-        f"padding: {ENDGAME_RANK_CARD_PADDING};"
-        "text-align: left;"
-        f"font-weight: {ENDGAME_RANK_CARD_FONT_WEIGHT};"
-        "}"
-    )

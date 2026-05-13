@@ -97,7 +97,7 @@ class Renderable(ABC):
     @abstractmethod
     def render(self) -> str:
         """Return a string representation suitable for display."""
-        pass
+        ...
 
 
 class Empty(Renderable):

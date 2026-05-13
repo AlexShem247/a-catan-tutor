@@ -1,3 +1,10 @@
+from config.view_constants import ENDGAME_RANK_CARD_SELECTED_BACKGROUND_COLOR, \
+    ENDGAME_RANK_CARD_DEFAULT_BACKGROUND_COLOR, ENDGAME_RANK_CARD_SELECTED_BORDER_COLOR, \
+    ENDGAME_RANK_CARD_DEFAULT_BORDER_COLOR, ENDGAME_RANK_CARD_SELECTED_BORDER_WIDTH_PX, \
+    ENDGAME_RANK_CARD_DEFAULT_BORDER_WIDTH_PX, qcolor_hex, ENDGAME_RANK_CARD_BORDER_RADIUS_PX, \
+    ENDGAME_RANK_CARD_PADDING, ENDGAME_RANK_CARD_FONT_WEIGHT
+
+
 def player_badge_stylesheet(
         colour: str,
         vertical_padding_px: int,
@@ -70,5 +77,33 @@ def tutor_feedback_explanation_stylesheet(colour: str) -> str:
         "background: transparent;"
         "border: none;"
         f"color: {colour};"
+        "}"
+    )
+
+
+def endgame_rank_card_stylesheet(selected: bool) -> str:
+    background = (
+        ENDGAME_RANK_CARD_SELECTED_BACKGROUND_COLOR
+        if selected
+        else ENDGAME_RANK_CARD_DEFAULT_BACKGROUND_COLOR
+    )
+    border_colour = (
+        ENDGAME_RANK_CARD_SELECTED_BORDER_COLOR
+        if selected
+        else ENDGAME_RANK_CARD_DEFAULT_BORDER_COLOR
+    )
+    border_width = (
+        ENDGAME_RANK_CARD_SELECTED_BORDER_WIDTH_PX
+        if selected
+        else ENDGAME_RANK_CARD_DEFAULT_BORDER_WIDTH_PX
+    )
+    return (
+        "QPushButton#rankCard {"
+        f"background: {qcolor_hex(background)};"
+        f"border: {border_width}px solid {qcolor_hex(border_colour)};"
+        f"border-radius: {ENDGAME_RANK_CARD_BORDER_RADIUS_PX}px;"
+        f"padding: {ENDGAME_RANK_CARD_PADDING};"
+        "text-align: left;"
+        f"font-weight: {ENDGAME_RANK_CARD_FONT_WEIGHT};"
         "}"
     )

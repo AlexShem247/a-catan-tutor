@@ -16,15 +16,20 @@ def main():
     parser.add_argument("--seed", type=int, default=None, help="Optional seed for deterministic games")
     args = parser.parse_args()
 
-    args.seed = randint(0, 2**31 - 1)
-    args.seed = 5484206599
-    print(f"Game seed: {args.seed}")
-    controller = GameController(STANDARD_SINGLEPLAYER, EVO_VS_RULE_BASED, game_seed=args.seed)
+    seed = args.seed if args.seed is not None else randint(0, 2**31 - 1)
+
+    controller = GameController(
+        STANDARD_SINGLEPLAYER,
+        EVO_VS_RULE_BASED,
+        game_seed=seed,
+    )
 
     app = QApplication(sys.argv)
     app.setFont(QFont("Arial"))
+
     controller.view = QtView(MainWindow(), controller)
     controller.start_game()
+
     sys.exit(app.exec())
 
 
