@@ -2,7 +2,7 @@ from typing import List, Dict, Optional, Tuple, Any
 from typing import Optional, List, Tuple, Dict, Any, Callable
 from PyQt6.QtCore import QEventLoop, QTimer, pyqtBoundSignal
 
-from GameController import GameController
+from controllers.GameController import GameController
 from ai.actions import Action
 from ai.tutor.explanations import ActionExplanation
 from ai.tutor.feedback import TutorFeedbackExplanation
@@ -125,8 +125,16 @@ class QtView(View):
 
     def pre_roll(self, player: Player) -> DevelopmentCardType | bool:
         """Allows user to play development card before rolling dice"""
-        return select_blocking(self, self.window.turnMade, self.window.show_development_menu, self.controller,
-                               player, False, lambda card: self.window.turnMade.emit(card), pre_roll_mode=True)
+        return select_blocking(
+            self,
+            self.window.turnMade,
+            self.window.development_panel.show_development_menu,
+            self.controller,
+            player,
+            False,
+            lambda card: self.window.turnMade.emit(card),
+            pre_roll_mode=True,
+        )
 
     def display_results(self):
         """Display game results"""

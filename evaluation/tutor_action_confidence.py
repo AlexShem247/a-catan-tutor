@@ -7,8 +7,8 @@ from typing import Dict, List, Optional, Tuple
 
 from tqdm import tqdm
 
-from GameController import GameController
-from ai.RuleBasedAI import RuleBasedAI
+from controllers.GameController import GameController
+from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.actions import Action, ActionType, Phase
 from ai.simulation.SimGame import make_sim_game_for_player
 from ai.simulation.board_sim_utils import (

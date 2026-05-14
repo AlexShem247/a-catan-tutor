@@ -8,8 +8,8 @@ from typing import Dict, List
 
 from tqdm import tqdm
 
-from GameController import GameController
-from ai.RuleBasedAI import RuleBasedAIDecisionConfig
+from controllers.GameController import GameController
+from ai.rule_based_ai.RuleBasedAI import RuleBasedAIDecisionConfig
 from config.StrategyWeights import EVO_STRATEGY_WEIGHTS, ORIGINAL_STRATEGY_WEIGHTS
 from config.player_policies import make_rule_based_policy
 from game.Player import PlayerNumber

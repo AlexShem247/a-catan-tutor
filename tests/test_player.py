@@ -151,7 +151,7 @@ class PlayerTests(unittest.TestCase):
     def test_deck_composition(self):
         """Check that the deck has the correct number of each card type."""
         counts = {card_type: 0 for card_type in DevelopmentCardType}
-        for card in self.deck._deck:
+        for card in self.deck.cards():
             counts[card.card_type] += 1
 
         self.assertEqual(counts[DevelopmentCardType.KNIGHT], 14)
@@ -162,12 +162,12 @@ class PlayerTests(unittest.TestCase):
 
     def test_draw_and_empty_behavior(self):
         """Test draw() reduces deck size, empty() detects when deck is empty, and drawing empty deck raises."""
-        initial_size = len(self.deck._deck)
+        initial_size = len(self.deck.cards())
 
         # Draw a single card and check size decreases
         card = self.deck.draw()
         self.assertIsNotNone(card)
-        self.assertEqual(len(self.deck._deck), initial_size - 1)
+        self.assertEqual(len(self.deck.cards()), initial_size - 1)
 
         # Draw all remaining cards
         while not self.deck.empty():

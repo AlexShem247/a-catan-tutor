@@ -4,7 +4,7 @@ from math import ceil
 from typing import Optional, List, Tuple, Dict
 
 from ai.AI import AI
-from ai.RuleBasedAI import RuleBasedAI
+from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.actions import Phase, Action, ActionType
 from game.Game import Game
 from game.PlayerAssets import Buildable, DevelopmentCardType

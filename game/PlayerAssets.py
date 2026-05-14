@@ -80,6 +80,15 @@ class DevelopmentDeck:
         """Returns the number of remaining cards in the deck."""
         return len(self._deck)
 
+    def cards(self) -> list[DevelopmentCard]:
+        return list(self._deck)
+
+    def played_counts(self) -> Dict[DevelopmentCardType, int]:
+        return dict(self._played)
+
+    def set_cards(self, cards: list[DevelopmentCard]) -> None:
+        self._deck = list(cards)
+
     def play(self, ctype: DevelopmentCardType):
         """Called when a dev card is revealed/used."""
         if ctype == DevelopmentCardType.VICTORY_POINT:

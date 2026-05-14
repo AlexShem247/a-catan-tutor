@@ -1,7 +1,7 @@
 import re
 from typing import Any, Callable, List, Optional, Tuple, TypeVar
 
-from ai.RuleBasedAI import RuleBasedAI
+from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.actions import Action, ActionType, Phase
 from ai.simulation.SimGame import make_sim_game_for_player
 from ai.simulation.board_sim_utils import find_edge_toward_vertex, get_legal_settlement_vertices, moves_toward_vertex
@@ -471,8 +471,8 @@ class TutorEvaluator:
             best_score: float,
             max_score: float,
     ) -> ActionExplanation:
-        build_explanation = getattr(self.tutor_ai, "_build_initial_settlement_explanation")
-        return build_explanation(player, vertex, best_score, max_score)
+        return self.tutor_ai.opening_policy.build_initial_settlement_explanation(
+            player, vertex, best_score, max_score)
 
     def _build_initial_road_explanation(
             self,
@@ -481,8 +481,8 @@ class TutorEvaluator:
             explanation_kind: RoadExplanationKind,
             move_quality: float,
     ) -> ActionExplanation:
-        build_explanation = getattr(self.tutor_ai, "_build_initial_road_explanation")
-        return build_explanation(edge, target_vertex, explanation_kind, move_quality)
+        return self.tutor_ai.opening_policy.build_initial_road_explanation(
+            edge, target_vertex, explanation_kind, move_quality)
 
     def _build_initial_road_choice_explanation(
             self,

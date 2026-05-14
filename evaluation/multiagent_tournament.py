@@ -7,7 +7,7 @@ from random import Random
 from typing import Dict, List
 from tqdm import tqdm
 
-from GameController import GameController
+from controllers.GameController import GameController
 from config.player_policies import POLICY_EVALUATION_EXPERIMENT
 from game.Player import PlayerNumber
 from view.HeadlessView import HeadlessView

@@ -3,7 +3,7 @@ from typing import Any, Optional
 
 from ai.BasicAI import BasicAI
 from ai.RandomAI import RandomAI
-from ai.RuleBasedAI import RuleBasedAI, RuleBasedAIDecisionConfig
+from ai.rule_based_ai.RuleBasedAI import RuleBasedAI, RuleBasedAIDecisionConfig
 from config.StrategyWeights import EVO_STRATEGY_WEIGHTS, ORIGINAL_STRATEGY_WEIGHTS, StrategyWeights
 from game.Game import PlayerConfig
 from game.Player import PlayerNumber

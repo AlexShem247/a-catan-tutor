@@ -9,8 +9,8 @@ from typing import Dict, List, Optional, Tuple
 
 from tqdm import tqdm
 
-from GameController import GameController
-from ai.RuleBasedAI import RuleBasedAI
+from controllers.GameController import GameController
+from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.actions import ActionType, Phase
 from ai.tutor.explanations import ActionExplanation
 from config.StrategyWeights import EVO_STRATEGY_WEIGHTS, ORIGINAL_STRATEGY_WEIGHTS

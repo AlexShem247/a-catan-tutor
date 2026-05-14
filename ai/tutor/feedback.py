@@ -6,6 +6,7 @@ import re
 from typing import Any, List, Optional, Tuple
 
 from game.PlayerAssets import Buildable
+from view.canvas.board_display_source import BoardDisplaySource
 
 
 def move_quality_colour(label: str) -> str:
@@ -31,7 +32,7 @@ class TutorDecisionType(Enum):
 
 
 @dataclass
-class BoardStateSnapshot:
+class BoardStateSnapshot(BoardDisplaySource):
     game_state: Any
 
     @classmethod

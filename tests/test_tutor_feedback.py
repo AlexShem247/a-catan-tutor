@@ -2,7 +2,7 @@ import unittest
 from random import Random
 from types import SimpleNamespace
 
-from ai.RuleBasedAI import RuleBasedAI
+from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.actions import Action, ActionType
 from ai.tutor.evaluator import TutorEvaluator
 from ai.tutor.explanations import ActionExplanation, CandidateExplanation, Reason, ReasonLabel, ReasonType
