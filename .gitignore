@@ -3,7 +3,6 @@ __pycache__/
 .idea/
 .pytest_cache/
 Coordinates.png
-Ref.png
 Screenshot.png
 *.txt
 *.csv

@@ -76,6 +76,8 @@ class TurnController(ControllerSupport):
                         success, _ = self.try_build_settlement(player, location)
                     elif buildable == Buildable.CITY:
                         success, _ = self.try_build_city(player, location)
+                    elif buildable == Buildable.DEVELOPMENT_CARD:
+                        success, _ = self.try_buy_development_card(player)
                     else:
                         success = False
                     if success:

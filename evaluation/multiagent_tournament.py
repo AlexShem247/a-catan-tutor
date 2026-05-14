@@ -8,18 +8,34 @@ from typing import Dict, List
 from tqdm import tqdm
 
 from controllers.GameController import GameController
-from config.player_policies import POLICY_EVALUATION_EXPERIMENT
+from config.StrategyWeights import EVO_STRATEGY_WEIGHTS, ORIGINAL_STRATEGY_WEIGHTS
+from config.player_policies import PolicyFactory, make_rule_based_policy
+from ai.BasicAI import BasicAI
+from ai.RandomAI import RandomAI
 from game.Player import PlayerNumber
 from view.HeadlessView import HeadlessView
 
-NUM_SIMULATIONS = 220
-DEFAULT_SEED = 20260504
+NUM_SIMULATIONS = 120
+DEFAULT_SEED = 20260505
 SHUFFLE_ORDER = True
 NUM_PROCESSES = mp.cpu_count()
 SHOW_PROGRESS_BAR = True
 MAX_EVALUATION_ROUNDS = 200
 MAX_ATTEMPTS_MULTIPLIER = 5
 PRINT_EVERY_N_GAMES = 20
+
+RANDOM_AGENT_NAME = "Random"
+MYOPIC_AGENT_NAME = "Myopic"
+BASELINE_AGENT_NAME = "Rule-based (baseline)"
+EVOLVED_AGENT_NAME = "Rule-based (evolved)"
+EVOLVED_POSITION_AGENT_NAME = "Evolved Agent"
+
+DISPLAY_ORDER = [
+    RANDOM_AGENT_NAME,
+    MYOPIC_AGENT_NAME,
+    BASELINE_AGENT_NAME,
+    EVOLVED_AGENT_NAME,
+]
 
 
 @dataclass(frozen=True)
@@ -33,6 +49,22 @@ class PlayerResult:
 
 def _policy_name(policy) -> str:
     return getattr(policy, "policy_name", type(policy).__name__)
+
+
+TOURNAMENT_PLAYER_POLICIES = {
+    PlayerNumber.P1: make_rule_based_policy(
+        EVOLVED_AGENT_NAME,
+        EVO_STRATEGY_WEIGHTS,
+        use_difficulty_randomness=False,
+    ),
+    PlayerNumber.P2: make_rule_based_policy(
+        BASELINE_AGENT_NAME,
+        ORIGINAL_STRATEGY_WEIGHTS,
+        use_difficulty_randomness=True,
+    ),
+    PlayerNumber.P3: PolicyFactory(ai_cls=BasicAI, name=MYOPIC_AGENT_NAME),
+    PlayerNumber.P4: PolicyFactory(ai_cls=RandomAI, name=RANDOM_AGENT_NAME),
+}
 
 
 def _build_shuffled_config(player_policies, seed: int):
@@ -97,16 +129,16 @@ def run_single_game(job_args):
 
 
 def _format_results_table(summary: Dict[str, Dict[str, float]]) -> str:
-    headers = ["Policy", "Win Rate (%)", "Avg VP", "VP Gap to 2nd", "Avg Turns"]
+    headers = ["Agent", "Win Rate (%)", "Avg VP", "VP Gap to 2nd (Wins)", "Avg Turns (Wins)"]
     rows = [
         [
-            policy_name,
-            f"{metrics['win_rate']:.2f}",
-            f"{metrics['avg_vp']:.2f}",
-            f"{metrics['avg_gap']:.2f}",
-            f"{metrics['avg_turns']:.2f}",
+            agent_name,
+            f"{metrics['win_rate']:.1f}",
+            f"{metrics['avg_vp']:.1f}",
+            _format_optional_signed_value(metrics["avg_gap_wins"]),
+            _format_optional_value(metrics["avg_turns_wins"]),
         ]
-        for policy_name, metrics in summary.items()
+        for agent_name, metrics in summary.items()
     ]
 
     widths = [
@@ -122,15 +154,14 @@ def _format_results_table(summary: Dict[str, Dict[str, float]]) -> str:
 
 
 def _format_position_win_rate_table(position_summary: Dict[str, Dict[str, float]]) -> str:
-    headers = ["Starting Position", "Win Rate (%)", "Wins / Games"]
-    rows = [
-        [
-            position_name,
-            f"{metrics['win_rate']:.2f}",
-            f"{metrics['wins']} / {metrics['games']}",
-        ]
-        for position_name, metrics in position_summary.items()
-    ]
+    headers = ["Agent", "P1 Win (%)", "P2 Win (%)", "P3 Win (%)", "P4 Win (%)"]
+    rows = [[
+        EVOLVED_POSITION_AGENT_NAME,
+        f"{position_summary[PlayerNumber.P1.name]['win_rate']:.1f}",
+        f"{position_summary[PlayerNumber.P2.name]['win_rate']:.1f}",
+        f"{position_summary[PlayerNumber.P3.name]['win_rate']:.1f}",
+        f"{position_summary[PlayerNumber.P4.name]['win_rate']:.1f}",
+    ]]
 
     widths = [
         max(len(header), *(len(row[column_index]) for row in rows))
@@ -149,7 +180,7 @@ def _summarise_results(results):
         "games": 0,
         "wins": 0,
         "vp_total": 0,
-        "gap_total": 0,
+        "gap_wins_total": 0,
         "win_turn_total": 0,
     })
 
@@ -160,19 +191,26 @@ def _summarise_results(results):
             totals["games"] += 1
             totals["wins"] += int(player_result.won)
             totals["vp_total"] += player_result.victory_points
-            totals["gap_total"] += player_result.vp_gap_to_second
             if player_result.won:
+                totals["gap_wins_total"] += player_result.vp_gap_to_second
                 totals["win_turn_total"] += turns
 
-    return {
-        policy_name: {
+    ordered_summary = {}
+    for policy_name in DISPLAY_ORDER:
+        totals = policy_totals[policy_name]
+        ordered_summary[policy_name] = {
             "win_rate": totals["wins"] / totals["games"] * 100.0,
             "avg_vp": totals["vp_total"] / totals["games"],
-            "avg_gap": totals["gap_total"] / totals["games"],
-            "avg_turns": (totals["win_turn_total"] / totals["wins"]) if totals["wins"] else 0.0,
+            "avg_gap_wins": (
+                totals["gap_wins_total"] / totals["wins"]
+                if totals["wins"] else None
+            ),
+            "avg_turns_wins": (
+                totals["win_turn_total"] / totals["wins"]
+                if totals["wins"] else None
+            ),
         }
-        for policy_name, totals in sorted(policy_totals.items())
-    }
+    return ordered_summary
 
 
 def _summarise_position_win_rates(results):
@@ -187,26 +225,30 @@ def _summarise_position_win_rates(results):
             totals["games"] += 1
             totals["wins"] += int(player_result.won)
 
-    summary = {}
-    for policy_name, positions in sorted(position_totals.items()):
-        summary[policy_name] = {
-            player_number.name: {
-                "games": positions[player_number.name]["games"],
-                "wins": positions[player_number.name]["wins"],
-                "win_rate": (
-                    positions[player_number.name]["wins"] / positions[player_number.name]["games"] * 100.0
-                    if positions[player_number.name]["games"] else 0.0
-                ),
-            }
-            for player_number in PlayerNumber
+    positions = position_totals[EVOLVED_AGENT_NAME]
+    return {
+        player_number.name: {
+            "games": positions[player_number.name]["games"],
+            "wins": positions[player_number.name]["wins"],
+            "win_rate": (
+                positions[player_number.name]["wins"] / positions[player_number.name]["games"] * 100.0
+                if positions[player_number.name]["games"] else 0.0
+            ),
         }
+        for player_number in PlayerNumber
+    }
 
-    return summary
+
+def _format_optional_value(value) -> str:
+    return "N/A" if value is None else f"{value:.1f}"
 
 
-def _print_progress_table(results, progress=None):
+def _format_optional_signed_value(value) -> str:
+    return "N/A" if value is None else f"{value:+.1f}"
+
+
+def _print_progress_table(results, progress=None, show_position_sensitivity: bool = False):
     partial_summary = _summarise_results(results)
-    partial_position_summary = _summarise_position_win_rates(results)
 
     lines = [
         "",
@@ -215,10 +257,10 @@ def _print_progress_table(results, progress=None):
         "",
     ]
 
-    for policy_name, policy_position_summary in partial_position_summary.items():
+    if show_position_sensitivity:
+        partial_position_summary = _summarise_position_win_rates(results)
         lines.extend([
-            f"{policy_name} win rate by starting position:",
-            _format_position_win_rate_table(policy_position_summary),
+            _format_position_win_rate_table(partial_position_summary),
             "",
         ])
 
@@ -229,7 +271,11 @@ def _print_progress_table(results, progress=None):
         print("\n".join(lines))
 
 
-def run_simulations_parallel(player_policies, num_runs: int = NUM_SIMULATIONS, seed: int = DEFAULT_SEED):
+def run_simulations_parallel(
+        player_policies,
+        num_runs: int = NUM_SIMULATIONS,
+        seed: int = DEFAULT_SEED,
+        show_position_sensitivity: bool = False):
     start = time.time()
 
     print(f"Running {num_runs} games using {NUM_PROCESSES} CPU cores...")
@@ -275,7 +321,11 @@ def run_simulations_parallel(player_policies, num_runs: int = NUM_SIMULATIONS, s
                         progress.update(1)
 
                     if len(results) % PRINT_EVERY_N_GAMES == 0:
-                        _print_progress_table(results, progress)
+                        _print_progress_table(
+                            results,
+                            progress,
+                            show_position_sensitivity=show_position_sensitivity,
+                        )
                 else:
                     aborted_games += 1
 
@@ -294,9 +344,8 @@ def run_simulations_parallel(player_policies, num_runs: int = NUM_SIMULATIONS, s
     print()
     print(_format_results_table(summary))
     print()
-    for policy_name, policy_position_summary in position_summary.items():
-        print(f"{policy_name} win rate by starting position:")
-        print(_format_position_win_rate_table(policy_position_summary))
+    if show_position_sensitivity:
+        print(_format_position_win_rate_table(position_summary))
         print()
 
     if aborted_games:
@@ -317,6 +366,11 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run policy evaluation experiments for Catan AIs.")
     parser.add_argument("--runs", type=int, default=NUM_SIMULATIONS, help="Number of games to simulate.")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED, help="Base seed for deterministic reruns.")
+    parser.add_argument(
+        "--position-sensitivity",
+        action="store_true",
+        help="Print P1-P4 win-rate breakdown for the evolved agent.",
+    )
     return parser.parse_args()
 
 
@@ -324,8 +378,12 @@ if __name__ == "__main__":
     cli_args = parse_args()
     print(f"Running {cli_args.runs} Catan simulations...")
     print(f"CPU cores available: {NUM_PROCESSES}")
-    print("Experiment: RandomAI vs BasicAI vs RuleBasedAI Original vs RuleBasedAI Evo")
-    run_simulations_parallel(POLICY_EVALUATION_EXPERIMENT, num_runs=cli_args.runs, seed=cli_args.seed)
+    print("Experiment: one evolved rule-based AI, one baseline rule-based AI, one basic AI, one random AI")
+    run_simulations_parallel(
+        TOURNAMENT_PLAYER_POLICIES,
+        num_runs=cli_args.runs,
+        seed=cli_args.seed,
+        show_position_sensitivity=cli_args.position_sensitivity,
+    )
 
-    if SHOW_PROGRESS_BAR:
-        input("Press enter to terminate")
+    input("Press enter to terminate")

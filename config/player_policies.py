@@ -25,20 +25,29 @@ class PolicyFactory:
 def make_rule_based_policy(
         name: str,
         weights: StrategyWeights,
-        decision_config: Optional[RuleBasedAIDecisionConfig] = None) -> PolicyFactory:
+        decision_config: Optional[RuleBasedAIDecisionConfig] = None,
+        use_difficulty_randomness: bool = False) -> PolicyFactory:
     return PolicyFactory(
         ai_cls=RuleBasedAI,
         name=name,
         kwargs={
             "strategy_weights": weights,
             "decision_config": decision_config,
-            "use_difficulty_randomness": True,
+            "use_difficulty_randomness": use_difficulty_randomness,
         },
     )
 
 
-RULE_BASED_AI_EVO = make_rule_based_policy("RuleBasedAI Evo", EVO_STRATEGY_WEIGHTS)
-RULE_BASED_AI_ORIGINAL = make_rule_based_policy("RuleBasedAI Original", ORIGINAL_STRATEGY_WEIGHTS)
+RULE_BASED_AI_EVO = make_rule_based_policy(
+    "RuleBasedAI Evo",
+    EVO_STRATEGY_WEIGHTS,
+    use_difficulty_randomness=False,
+)
+RULE_BASED_AI_ORIGINAL = make_rule_based_policy(
+    "RuleBasedAI Original",
+    ORIGINAL_STRATEGY_WEIGHTS,
+    use_difficulty_randomness=True,
+)
 
 STANDARD_SINGLEPLAYER: PlayerConfig = {
     PlayerNumber.P1: None,

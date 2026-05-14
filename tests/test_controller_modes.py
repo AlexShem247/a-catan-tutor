@@ -2,11 +2,13 @@ import unittest
 
 import controllers.GameController as GameControllerModule
 
+from ai.actions import Action, ActionType
 from ai.BasicAI import BasicAI
 from config.player_policies import EVO_VS_RULE_BASED, RULE_BASED_VS_BASIC, STANDARD_SINGLEPLAYER
 from controllers.GameController import GameController, PlayerScoreSnapshot
 from game.Player import PlayerNumber
-from game.PlayerAssets import DevelopmentCard, DevelopmentCardType
+from game.PlayerAssets import Buildable, DevelopmentCard, DevelopmentCardType
+from game.Resources import Resource
 from game.Vertex import Vertex, VertexDirection
 from view.HeadlessView import HeadlessView
 from view.View import GameMode
@@ -20,6 +22,16 @@ from test_helpers import (
 
 
 class TestControllerModes(GameTestMixin, unittest.TestCase):
+    class _DevBuyView(HeadlessView):
+        def __init__(self):
+            self._actions = [
+                Action(ActionType.BUILD, (Buildable.DEVELOPMENT_CARD, True)),
+                Action(ActionType.END_TURN),
+            ]
+
+        def display_board_turn(self, player, dice_info, played_dev_card: bool = False):
+            return self._actions.pop(0)
+
     def test_tutor_mode_uses_simulation_opponent_policies(self):
         controller = GameController(STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC, game_seed=0)
         controller.game_mode = GameMode.TUTOR
@@ -162,6 +174,23 @@ class TestControllerModes(GameTestMixin, unittest.TestCase):
             self.controller_state_snapshot(simulation, include_roles=False),
             self.controller_state_snapshot(play_mode, include_roles=False),
         )
+
+    def test_human_turn_executes_recommended_development_card_purchase(self):
+        controller = GameController(STANDARD_SINGLEPLAYER, EVO_VS_RULE_BASED, game_seed=0)
+        controller.view = self._DevBuyView()
+        controller.game_mode = GameMode.TUTOR
+        controller.reset_game()
+
+        player = controller.get_all_players()[0]
+        player.resources = {resource: 0 for resource in Resource}
+        player.resources[Resource.ORE] = 1
+        player.resources[Resource.SHEEP] = 1
+        player.resources[Resource.WHEAT] = 1
+
+        controller.make_round_move(player)
+
+        self.assertEqual(len(player.development_cards), 1)
+        self.assertEqual(sum(player.resources.values()), 0)
 
     def test_victory_point_history_records_true_points(self):
         controller = GameController(STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC, game_seed=0)
