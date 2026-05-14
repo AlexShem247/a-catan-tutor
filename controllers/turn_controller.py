@@ -18,7 +18,7 @@ class TurnController(ControllerSupport):
         playable_cards = [card for card in player.development_cards if card.playable]
         played_dev_card = False
         if not playable_cards:
-            if self.game_mode == self.GameMode.TUTOR:
+            if self.game_mode in {self.GameMode.PLAY, self.GameMode.TUTOR}:
                 self._run_tutor_decision(lambda: self.tutor_ai.next_action(player, self._game, Phase.PRE_ROLL, False))
         else:
             def select_tutor_pre_roll_card() -> DevelopmentCardType | bool:

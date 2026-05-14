@@ -29,7 +29,11 @@ def make_rule_based_policy(
     return PolicyFactory(
         ai_cls=RuleBasedAI,
         name=name,
-        kwargs={"strategy_weights": weights, "decision_config": decision_config},
+        kwargs={
+            "strategy_weights": weights,
+            "decision_config": decision_config,
+            "use_difficulty_randomness": True,
+        },
     )
 
 

@@ -415,7 +415,15 @@ class Game:
 
     def get_players_on_hex(self, hex_tile: HexTile) -> List[Player]:
         """Return a list of players who own a settlement or city on the given hex tile."""
-        return list(set([v.owner for v in hex_tile.vertices if v.owner is not None]))
+        players_on_hex: List[Player] = []
+        seen_player_numbers = set()
+        for vertex in hex_tile.vertices:
+            owner = vertex.owner
+            if owner is None or owner.player_number in seen_player_numbers:
+                continue
+            seen_player_numbers.add(owner.player_number)
+            players_on_hex.append(owner)
+        return players_on_hex
 
     def get_all_hexes(self) -> List[HexTile]:
         """Return a list of all hex tiles on the board."""

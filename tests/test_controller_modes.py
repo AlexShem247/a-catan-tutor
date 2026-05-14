@@ -106,6 +106,63 @@ class TestControllerModes(GameTestMixin, unittest.TestCase):
             self.controller_state_snapshot(tutor, include_roles=False),
         )
 
+    def test_quick_simulation_repeats_identically_with_fixed_seed(self):
+        snapshots = []
+
+        for _ in range(4):
+            controller = GameController(STANDARD_SINGLEPLAYER, EVO_VS_RULE_BASED, game_seed=0)
+            controller.view = HeadlessView()
+            controller.game_mode = GameMode.SIMULATION
+            controller.reset_game()
+            controller.run_initial_placement()
+
+            for _ in range(5):
+                for player in controller.get_all_players():
+                    controller.make_round_move_ai(player)
+                    if controller.get_game_state().game_over:
+                        break
+                if controller.get_game_state().game_over:
+                    break
+                controller.get_game_state().round_num += 1
+
+            snapshots.append(self.controller_state_snapshot(controller, include_roles=False))
+
+        for snapshot in snapshots[1:]:
+            self.assertEqual(snapshot, snapshots[0])
+
+    def test_play_mode_tutor_following_matches_quick_simulation(self):
+        simulation = GameController(STANDARD_SINGLEPLAYER, EVO_VS_RULE_BASED, game_seed=0)
+        simulation.view = HeadlessView()
+        simulation.game_mode = GameMode.SIMULATION
+        simulation.reset_game()
+
+        play_mode = GameController(STANDARD_SINGLEPLAYER, EVO_VS_RULE_BASED, game_seed=0)
+        play_mode.game_mode = GameMode.PLAY
+        play_mode.view = TutorFollowingView(play_mode)
+        play_mode.reset_game()
+
+        simulation.run_initial_placement()
+        play_mode.run_initial_placement()
+
+        for _ in range(3):
+            for simulation_player, play_player in zip(simulation.get_all_players(), play_mode.get_all_players()):
+                simulation.make_round_move_ai(simulation_player)
+                if play_player.is_human:
+                    play_mode.make_round_move(play_player)
+                else:
+                    play_mode.make_round_move_ai(play_player)
+                if simulation.get_game_state().game_over or play_mode.get_game_state().game_over:
+                    break
+            if simulation.get_game_state().game_over or play_mode.get_game_state().game_over:
+                break
+            simulation.get_game_state().round_num += 1
+            play_mode.get_game_state().round_num += 1
+
+        self.assertEqual(
+            self.controller_state_snapshot(simulation, include_roles=False),
+            self.controller_state_snapshot(play_mode, include_roles=False),
+        )
+
     def test_victory_point_history_records_true_points(self):
         controller = GameController(STANDARD_SINGLEPLAYER, RULE_BASED_VS_BASIC, game_seed=0)
         player = controller.get_all_players()[0]

@@ -83,10 +83,12 @@ class RuleBasedAI(AI):
             self,
             rng: Random,
             strategy_weights: Optional[StrategyWeights] = None,
-            decision_config: Optional[RuleBasedAIDecisionConfig] = None):
+            decision_config: Optional[RuleBasedAIDecisionConfig] = None,
+            use_difficulty_randomness: bool = False):
         super().__init__(rng)
         self.strategy_weights = strategy_weights or StrategyWeights()
         self.decision_config = decision_config or RuleBasedAIDecisionConfig()
+        self.use_difficulty_randomness = use_difficulty_randomness
         self.etw_estimator = EtwEstimator()
         self.random_ai = RandomAI(rng)
         self.opening_policy = OpeningPolicy(
@@ -142,6 +144,8 @@ class RuleBasedAI(AI):
         self.etw_estimator.restore_trade_state(snapshot.trade_state)
 
     def _use_strategic_move(self) -> bool:
+        if not self.use_difficulty_randomness:
+            return True
         settings = load_effective_settings()
         difficulty = str(settings.get("ai_difficulty", "medium")).lower()
         strategic_move_probability = AI_DIFFICULTY_STRATEGIC_MOVE_PROBABILITIES.get(
