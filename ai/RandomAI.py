@@ -19,10 +19,11 @@ class RandomAI(AI):
         super().__init__(rng)
 
     def new_turn(self):
+        """Reset turn-specific state for a new turn."""
         pass
 
     def _choose_resources(self, player: Player, num_resources: int) -> ResourceCount:
-        """Randomly select a number of resources from available ones."""
+        """Choose a bundle of resources from the player's hand."""
         # Flatten all available resources into a pool
         pool = [r for r, count in player.resources.items() for _ in range(count)]
 
@@ -40,7 +41,7 @@ class RandomAI(AI):
     def choose_trade_partner(self, player: Player, game: "Game", selling: ResourceCount, buying: ResourceCount,
                              available_players: List[Tuple[Player, Optional[ResourceCount]]],
                              ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
-        """Randomly select a trade partner from offers the AI can afford."""
+        """Choose the trade partner and offer to pursue."""
         if not available_players:
             return None
 
@@ -49,11 +50,11 @@ class RandomAI(AI):
 
     def select_initial_settlement_location(self, player: Player, game: Game, available_vertices: List[Vertex]) \
             -> Optional[Vertex]:
-        """Randomly select a settlement location from available vertices."""
+        """Select the opening settlement location."""
         return self.rng.choice(available_vertices) if available_vertices else None
 
     def select_initial_road_location(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
-        """Randomly select a road location from available edges."""
+        """Select the opening road location."""
         return self.rng.choice(available_edges) if available_edges else None
 
     def select_robber_target(self,
@@ -61,7 +62,7 @@ class RandomAI(AI):
                              game: Game,
                              valid_hexes: List[HexTile],
                              ) -> Tuple[HexTile, Optional[Player]]:
-        """Randomly select a hex for the robber and a victim player, if any."""
+        """Select the robber placement and steal target."""
         hex_tile = self.rng.choice(valid_hexes)
 
         players = [
@@ -73,27 +74,24 @@ class RandomAI(AI):
         return hex_tile, target
 
     def select_discard_resources(self, player: Player, game: Game, num_resources: int) -> ResourceCount:
-        """Randomly choose resources to discard when required."""
+        """Select the resources to discard."""
         return self._choose_resources(player, num_resources)
 
     def select_year_of_plenty_resources(self, player: Player, game: Game) -> ResourceCount:
-        """Randomly pick two resources for a Year of Plenty card."""
+        """Select the resources to take from Year of Plenty."""
         return self._choose_resources(player, 2)
 
     def select_monopoly_resource(self, player: Player, game: Game) -> Resource:
-        """Randomly pick a resource to monopolise."""
+        """Select the resource to claim with Monopoly."""
         return self.rng.choice(list(Resource))
 
     def respond_to_trade(self, player: Player, game: "Game", opponent: Player, selling: ResourceCount,
                          buying: ResourceCount) -> Tuple[bool, Optional[ResourceCount]]:
-        """Randomly accept or reject a trade, assuming AI can afford it."""
+        """Decide how to respond to a trade offer."""
         return self.rng.choice([True, False]), None
 
     def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:
-        """
-        Return the next action for this AI.
-        Can be called repeatedly until the AI returns END_TURN or None.
-        """
+        """Choose the next action for the current turn state."""
 
         if phase == Phase.PRE_ROLL:
             if not dev_played:
@@ -131,7 +129,7 @@ class RandomAI(AI):
         return Action(ActionType.END_TURN)
 
     def random_trade_action(self, player: Player, game: Game) -> Optional[Action]:
-        """Generate a random trade action (bank or player) if the AI has resources."""
+        """Choose a random legal trade action."""
         # Flatten available resources
         tradable_resources = [r for r, count in player.resources.items() if count > 0]
         if not tradable_resources:

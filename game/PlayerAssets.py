@@ -20,7 +20,7 @@ class Building(Enum):
     CITY = Buildable.CITY
 
     def get_resource_yield(self) -> int:
-        """Return how many resources this building produces per turn."""
+        """Return how many resources this building yields."""
         if self == Building.CITY:
             return 2
 
@@ -62,35 +62,39 @@ class DevelopmentDeck:
         self.rng.shuffle(self._deck)
 
     def _add_cards(self, card_type: DevelopmentCardType, count: int):
+        """Add development cards of the given type to the deck."""
         for _ in range(count):
             self._deck.append(DevelopmentCard(card_type))
 
     def empty(self) -> bool:
-        """Checks to see if the deck is empty."""
+        """Check whether the development deck is empty."""
         return len(self._deck) == 0
 
     def draw(self) -> DevelopmentCard:
-        """Draws a card, assuming the deck is not empty."""
+        """Draw the top development card from the deck."""
         if self.empty():
             raise RuntimeError("Development deck is empty")
 
         return self._deck.pop()
 
     def size(self) -> int:
-        """Returns the number of remaining cards in the deck."""
+        """Return the number of cards remaining in the deck."""
         return len(self._deck)
 
     def cards(self) -> list[DevelopmentCard]:
+        """Return a copy of the current development deck cards."""
         return list(self._deck)
 
     def played_counts(self) -> Dict[DevelopmentCardType, int]:
+        """Return how many development cards of each type were played."""
         return dict(self._played)
 
     def set_cards(self, cards: list[DevelopmentCard]) -> None:
+        """Replace the current development deck cards."""
         self._deck = list(cards)
 
     def play(self, ctype: DevelopmentCardType):
-        """Called when a dev card is revealed/used."""
+        """Record that a development card of the given type was played."""
         if ctype == DevelopmentCardType.VICTORY_POINT:
             # VP is never played
             return
@@ -102,7 +106,7 @@ class DevelopmentDeck:
             ctype: DevelopmentCardType,
             private_cards: Dict[DevelopmentCardType, int] | None = None
     ) -> float:
-        """Returns the probability of drawing a card, optionally accounting for known private cards."""
+        """Return the probability of drawing a card of the given type."""
 
         # Unknown = initial - publicly played
         unknown = max(

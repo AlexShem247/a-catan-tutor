@@ -35,7 +35,7 @@ class Color(Enum):
     RESET = "reset"
 
     def apply(self, text: str) -> str:
-        """Return the text wrapped in this RGB colour."""
+        """Apply ANSI styling to the given text."""
         if self is Color.RESET:
             return text
 
@@ -44,7 +44,7 @@ class Color(Enum):
         return f"{ansi}{text}\033[0m"
 
     def ansi(self) -> str:
-        """Return ANSI code for this colour."""
+        """Return the ANSI escape sequence for this style."""
         if self is Color.RESET:
             return "\033[0m"
         r, g, b = self.value
@@ -96,12 +96,13 @@ class Renderable(ABC):
 
     @abstractmethod
     def render(self) -> str:
-        """Return a string representation suitable for display."""
+        """Render this display element as text."""
         ...
 
 
 class Empty(Renderable):
     def render(self) -> str:
+        """Render this display element as text."""
         if self.robber:
             return "  " + ROBBER_SYM + "  "
         return "     "
@@ -129,6 +130,7 @@ class DisplayHexTile(Renderable):
         self.hex_tile = hex_tile
 
     def render(self) -> str:
+        """Render this display element as text."""
         length = 4 - len(str(self.hex_tile.production_number))
         label = "DESRT" if self.hex_tile.type == HexType.DESERT \
             else f"{self.HEX_LABEL[self.hex_tile.type][:length]}-{self.hex_tile.production_number}"
@@ -143,6 +145,7 @@ class DisplayCoordinate(Renderable):
         self.hex_tile = hex_tile
 
     def render(self) -> str:
+        """Render this display element as text."""
         label = f"{self.hex_tile.q:2},{self.hex_tile.r:2}"
         color = self.COLOR_MAP.get(self.hex_tile.type)
         return colorise(label, color) if color else label
@@ -162,6 +165,7 @@ class DisplayVertex(Renderable):
         self.vertex = vertex
 
     def render(self) -> str:
+        """Render this display element as text."""
         if not self.vertex.owner:
             if self.vertex.port is not None:
                 if self.vertex.port == Port.THREE_TO_ONE:
@@ -183,6 +187,7 @@ class DisplayEdge(Renderable):
         self.edge = edge
 
     def render(self) -> str:
+        """Render this display element as text."""
         text = "  |  "
         if self.edge.owner:
             return colorise(text, get_player_color(self.edge.owner))
@@ -197,6 +202,7 @@ class DiagonalEdges(Renderable):
         self.flipped = flipped
 
     def render(self) -> str:
+        """Render this display element as text."""
         left_symbol, right_symbol = ("╱", "╲") if self.flipped else ("╲", "╱")
 
         def render_edge(edge_owner, symbol):

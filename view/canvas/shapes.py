@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import math
 import time
 from collections import Counter
@@ -12,9 +13,11 @@ from game.HexTile import HexTile
 from game.Vertex import Vertex
 
 
-class Shape:
+class Shape(ABC):
+    @abstractmethod
     def draw(self, painter, scale, offset):
-        raise NotImplementedError
+        """Draw this shape using the current painter state."""
+        ...
 
 
 class Circle(Shape):
@@ -26,6 +29,7 @@ class Circle(Shape):
         self.outline_color = outline_color
 
     def draw(self, painter, scale, offset):
+        """Draw this shape using the current painter state."""
         # Brush = fill color
         painter.setBrush(self.color)
 
@@ -58,6 +62,7 @@ class LineShape(Shape):
         self.color = color
 
     def draw(self, painter, scale, offset):
+        """Draw this shape using the current painter state."""
         pen = QPen(self.color)
         pen.setWidthF(self.thickness * scale)
         painter.setPen(pen)
@@ -80,6 +85,7 @@ class Rectangle(Shape):
         self.color = color
 
     def draw(self, painter, scale, offset):
+        """Draw this shape using the current painter state."""
         painter.setBrush(self.color)
         painter.setPen(Qt.PenStyle.NoPen)
         px = self.x * scale + offset.x()
@@ -102,6 +108,7 @@ class TextShape(Shape):
         self.bold = bold
 
     def draw(self, painter, scale, offset):
+        """Draw this shape using the current painter state."""
         font = painter.font()
         font.setPointSizeF(self.font_size * scale)
         font.setBold(self.bold)
@@ -148,6 +155,7 @@ class Hexagon(Shape):
         self.color = color
 
     def draw(self, painter, scale, offset):
+        """Draw this shape using the current painter state."""
         painter.setBrush(self.color)
         painter.setPen(Qt.PenStyle.NoPen)
 
@@ -183,6 +191,7 @@ class PixmapShape(Shape):
         self.pixmap = pixmap
 
     def draw(self, painter, scale, offset):
+        """Draw this shape using the current painter state."""
         # Scale width and height
         w = self.width * scale
         h = self.height * scale
@@ -218,6 +227,7 @@ class PulsingPixmapShape(Shape):
         self._start_time = time.time()
 
     def current_alpha(self):
+        """Return the current alpha value for the animation."""
         if not HIGHLIGHT_ANIMATION:
             return self.max_alpha
         t = time.time() - self._start_time
@@ -225,6 +235,7 @@ class PulsingPixmapShape(Shape):
         return int(self.min_alpha + pulse * (self.max_alpha - self.min_alpha))
 
     def draw(self, painter, scale, offset):
+        """Draw this shape using the current painter state."""
         w = self.width * scale
         h = self.height * scale
         px = self.x * scale + offset.x() - w / 2
@@ -260,6 +271,7 @@ class PulsingLineShape(Shape):
         self._start_time = time.time()
 
     def current_alpha(self):
+        """Return the current alpha value for the animation."""
         if not HIGHLIGHT_ANIMATION:
             return self.max_alpha
         t = time.time() - self._start_time
@@ -267,6 +279,7 @@ class PulsingLineShape(Shape):
         return int(self.min_alpha + pulse * (self.max_alpha - self.min_alpha))
 
     def draw(self, painter, scale, offset):
+        """Draw this shape using the current painter state."""
         color = QColor(self.color)
         color.setAlpha(self.current_alpha())
         pen = QPen(color)
@@ -336,6 +349,7 @@ class HexTileShape(Shape):
                         self.shapes.append(Circle(dx, dy, dot_radius, colour))
 
     def draw(self, painter, scale, offset):
+        """Draw this shape using the current painter state."""
         for shape in self.shapes:
             shape.draw(painter, scale, offset)
 
@@ -357,20 +371,23 @@ class VertexShape(Shape):
             self.shapes.append(Circle(x, y, radius, color))
 
     def draw(self, painter, scale, offset):
+        """Draw this shape using the current painter state."""
         for shape in self.shapes:
             shape.draw(painter, scale, offset)
 
 
-class InteractiveShape(Shape):
+class InteractiveShape(Shape, ABC):
     def __init__(self, payload=None):
         self.payload = payload
         self.hovered = False
 
+    @abstractmethod
     def contains(self, wx: float, wy: float) -> bool:
-        """World-space hit test"""
-        raise NotImplementedError
+        """Check whether the given world position hits this shape."""
+        ...
 
     def set_hover(self, hovered: bool):
+        """Update the hover state for this shape."""
         self.hovered = hovered
 
 
@@ -399,7 +416,7 @@ class InteractiveCircle(InteractiveShape):
         self._start_time = time.time()
 
     def current_radius(self):
-        """Compute animated radius based on elapsed time."""
+        """Return the current animated radius."""
         if not HIGHLIGHT_ANIMATION:
             return self.base_r
 
@@ -408,17 +425,20 @@ class InteractiveCircle(InteractiveShape):
         return self.base_r * (1 + pulse)
 
     def contains(self, wx: float, wy: float) -> bool:
+        """Check whether the given world position hits this shape."""
         dx = wx - self.x
 
         dy = wy - self.y
         return dx * dx + dy * dy <= self.r * self.r
 
     def set_hover(self, hovered: bool):
+        """Update the hover state for this shape."""
         super().set_hover(hovered)
 
         self.color.setAlpha(self.hover_alpha if hovered else self.normal_alpha)
 
     def draw(self, painter, scale, offset):
+        """Draw this shape using the current painter state."""
         painter.setBrush(self.color)
 
         if self.outline_color:
@@ -449,21 +469,25 @@ class InteractivePixmap(InteractiveShape):
         self.alpha_amplitude, self.alpha_speed = 70, 0.9
 
     def current_scale_factor(self):
+        """Return the current animated scale factor."""
         if not HIGHLIGHT_ANIMATION:
             return 1.0
         t = time.time() - self._start_time
         return 1.0 + math.sin(2 * math.pi * self.pulse_speed * t) * self.pulse_amplitude
 
     def contains(self, wx: float, wy: float) -> bool:
+        """Check whether the given world position hits this shape."""
         f = self.current_scale_factor()
         hw, hh = self.base_width * f / 2, self.base_height * f / 2
         return self.x - hw <= wx <= self.x + hw and self.y - hh <= wy <= self.y + hh
 
     def set_hover(self, hovered: bool):
+        """Update the hover state for this shape."""
         super().set_hover(hovered)
         self.alpha = self.hover_alpha if hovered else self.normal_alpha
 
     def current_alpha(self):
+        """Return the current alpha value for the animation."""
         if not HIGHLIGHT_ANIMATION:
             return self.hover_alpha if self.hovered else self.normal_alpha
         if self.hovered:
@@ -473,6 +497,7 @@ class InteractivePixmap(InteractiveShape):
         return int(max(20.0, min(255.0, self.normal_alpha + pulse * self.alpha_amplitude)))
 
     def draw(self, painter, scale, offset):
+        """Draw this shape using the current painter state."""
         f = self.current_scale_factor()
         w, h = self.base_width * f * scale, self.base_height * f * scale
         px, py = self.x * scale + offset.x() - w / 2, self.y * scale + offset.y() - h / 2
@@ -499,6 +524,7 @@ class InteractiveRoadOverlay(InteractiveShape):
         self.alpha_amplitude, self.alpha_speed = 55, 0.9
 
     def current_alpha(self):
+        """Return the current alpha value for the animation."""
         if not HIGHLIGHT_ANIMATION:
             return self.hover_alpha if self.hovered else self.normal_alpha
 
@@ -510,6 +536,7 @@ class InteractiveRoadOverlay(InteractiveShape):
         return int(self.normal_alpha + pulse * self.alpha_amplitude)
 
     def contains(self, wx: float, wy: float) -> bool:
+        """Check whether the given world position hits this shape."""
         dx, dy = self.x2 - self.x1, self.y2 - self.y1
         seg_len_sq = dx * dx + dy * dy
         if seg_len_sq == 0:
@@ -523,9 +550,11 @@ class InteractiveRoadOverlay(InteractiveShape):
         return (wx - px) ** 2 + (wy - py) ** 2 <= hit_r ** 2
 
     def set_hover(self, hovered: bool):
+        """Update the hover state for this shape."""
         super().set_hover(hovered)
 
     def draw(self, painter, scale, offset):
+        """Draw this shape using the current painter state."""
         px1, py1 = self.x1 * scale + offset.x(), self.y1 * scale + offset.y()
         px2, py2 = self.x2 * scale + offset.x(), self.y2 * scale + offset.y()
 
@@ -558,6 +587,7 @@ class InteractiveRoadVertexOverlay(InteractiveShape):
         self.alpha_amplitude, self.alpha_speed = 55, 0.9
 
     def current_alpha(self):
+        """Return the current alpha value for the animation."""
         if not HIGHLIGHT_ANIMATION:
             return self.hover_alpha if self.hovered else self.normal_alpha
         if self.hovered:
@@ -567,13 +597,16 @@ class InteractiveRoadVertexOverlay(InteractiveShape):
         return int(self.normal_alpha + pulse * self.alpha_amplitude)
 
     def contains(self, wx: float, wy: float) -> bool:
+        """Check whether the given world position hits this shape."""
         dx, dy = wx - self.x, wy - self.y
         return dx * dx + dy * dy <= self.r * self.r
 
     def set_hover(self, hovered: bool):
+        """Update the hover state for this shape."""
         super().set_hover(hovered)
 
     def draw(self, painter, scale, offset):
+        """Draw this shape using the current painter state."""
         color = QColor(self.base_color)
         color.setAlpha(self.current_alpha())
 

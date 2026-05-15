@@ -16,7 +16,7 @@ from game.Player import PlayerNumber
 from view.HeadlessView import HeadlessView
 
 NUM_SIMULATIONS = 120
-DEFAULT_SEED = 20260505
+DEFAULT_SEED = 20260507
 SHUFFLE_ORDER = True
 NUM_PROCESSES = mp.cpu_count()
 SHOW_PROGRESS_BAR = True

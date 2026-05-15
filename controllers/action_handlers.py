@@ -1,3 +1,4 @@
+from abc import ABC
 from typing import List, Optional, Tuple
 
 from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
@@ -11,8 +12,9 @@ from game.Vertex import Vertex
 from controllers.controller_support import ControllerSupport
 
 
-class ActionHandlers(ControllerSupport):
+class ActionHandlers(ControllerSupport, ABC):
     def trade_with_players(self, selling_player, selling, buying) -> List[Tuple[Player, Optional[ResourceCount]]]:
+        """Run the player-to-player trade flow."""
         results = []
         for player in self._game.players:
             if player != selling_player:
@@ -89,6 +91,7 @@ class ActionHandlers(ControllerSupport):
         return results
 
     def roll_dice(self, player: Player) -> Tuple[int, int, int, Optional[str]]:
+        """Roll the dice and handle any resulting events."""
         self.view.display_board()
         d1, d2, total = self._game.roll_dice()
         msg = None
@@ -149,6 +152,7 @@ class ActionHandlers(ControllerSupport):
         return d1, d2, total, msg
 
     def handle_robber_action(self, player) -> Optional[Tuple[Player, Resource]]:
+        """Handle the robber placement and theft flow."""
         self._pending_tutor_robber_choice = None
         if player.is_human:
             available_hexes = [tile for tile in self._game.get_all_hexes() if not tile.robber]
@@ -257,6 +261,7 @@ class ActionHandlers(ControllerSupport):
             return steal_from, next(iter(resource.keys()))
 
     def play_development_card(self, player: Player, card_type: DevelopmentCardType) -> str:
+        """Play the selected development card action."""
         msg = f"{player.name} played {card_type.name.replace('_', ' ').title()}."
         self._game.development_deck.play(card_type)
 
@@ -428,6 +433,7 @@ class ActionHandlers(ControllerSupport):
         return msg
 
     def ai_attempt_build(self, player: Player, action: Buildable, location):
+        """Try to execute the requested AI build action."""
         buildable = self._game.get_buildable_options(player)
         if action == Buildable.DEVELOPMENT_CARD:
             if buildable.get(Buildable.DEVELOPMENT_CARD, False):

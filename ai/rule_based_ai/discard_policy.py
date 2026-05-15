@@ -27,11 +27,13 @@ class DiscardPolicy:
         self._planner_kwargs = planner_kwargs
 
     def select_discard_resources(self, player: Player, game: Game, num_resources: int) -> ResourceCount:
+        """Select which resources to discard."""
         discard, _ = self.select_discard_resources_with_explanation(player, game, num_resources)
         return discard
 
     def select_discard_resources_with_explanation(
             self, player: Player, game: Game, num_resources: int) -> Tuple[ResourceCount, Optional[ActionExplanation]]:
+        """Select the discard resources with explanation."""
         if not self._use_strategic_move():
             discard = self.random_ai.select_discard_resources(player, game, num_resources)
             return discard, self.explain_discard_choice(player, game, discard)
@@ -57,6 +59,7 @@ class DiscardPolicy:
 
     def explain_discard_choice(
             self, player: Player, game: Game, discard: ResourceCount) -> ActionExplanation:
+        """Handle explain discard choice."""
         current_resources, needed, best_plan_explanation = self._discard_context(player, game)
         normalized_discard = {resource: int(discard.get(resource, 0)) for resource in Resource}
         return self._evaluate_discard_choice(
@@ -64,6 +67,7 @@ class DiscardPolicy:
 
     def _discard_context(
             self, player: Player, game: Game) -> Tuple[ResourceCount, ResourceCount, ActionExplanation]:
+        """Handle discard context."""
         current_resources = {resource: int(player.resources.get(resource, 0)) for resource in Resource}
         sim_game = make_sim_game_for_player(game, player)
         best_plan_explanation = self.etw_estimator.calculate_best_game_action_with_explanation(
@@ -81,11 +85,13 @@ class DiscardPolicy:
     def _evaluate_discard_choice(
             self, discard: ResourceCount, current_resources: ResourceCount, needed: ResourceCount,
             best_plan_explanation: ActionExplanation) -> ActionExplanation:
+        """Evaluate the discard choice."""
         return self._build_discard_explanation(discard, current_resources, needed, best_plan_explanation)
 
     @staticmethod
     def _legal_discard_candidates(
             current_resources: ResourceCount, num_resources: int) -> List[ResourceCount]:
+        """Handle legal discard candidates."""
         resources = list(Resource)
         candidates: List[ResourceCount] = []
 
@@ -107,6 +113,7 @@ class DiscardPolicy:
     def _build_discard_explanation(
             self, discard: ResourceCount, current_resources: ResourceCount, needed: ResourceCount,
             best_plan_explanation: ActionExplanation) -> ActionExplanation:
+        """Build the discard explanation."""
         protected_resources = sum(min(needed.get(resource, 0), amount) for resource, amount in discard.items())
         surplus_discarded = sum(discard.values()) - protected_resources
         plan_metadata = self._discard_plan_metadata(best_plan_explanation)
@@ -134,6 +141,7 @@ class DiscardPolicy:
 
     @staticmethod
     def _discard_plan_metadata(explanation: ActionExplanation) -> Dict[str, object]:
+        """Handle discard plan metadata."""
         action = explanation.chosen_action
         protected_action = DiscardPolicy._protected_follow_up_action_from_explanation(explanation)
         metadata: Dict[str, object] = {"protected_action": protected_action}
@@ -164,6 +172,7 @@ class DiscardPolicy:
 
     @staticmethod
     def _protected_follow_up_action_from_explanation(explanation: ActionExplanation) -> Action:
+        """Handle protected follow up action from explanation."""
         action = explanation.chosen_action
         if action.type == ActionType.END_TURN and explanation.chosen_candidate.next_plan:
             return explanation.chosen_candidate.next_plan[-1]
@@ -173,6 +182,7 @@ class DiscardPolicy:
 
     @staticmethod
     def _trade_follow_up_action_for_resources(resources: List[Resource]) -> Optional[Action]:
+        """Handle trade follow up action for resources."""
         resource_set = set(resources)
         if Resource.ORE in resource_set and Resource.WHEAT in resource_set:
             return Action(ActionType.BUILD, (Buildable.CITY, None))
@@ -186,6 +196,7 @@ class DiscardPolicy:
 
     @staticmethod
     def action_summary_text(action: Action) -> str:
+        """Handle action summary text."""
         if action.type == ActionType.BUILD and isinstance(action.payload, tuple) and len(action.payload) >= 1:
             buildable = action.payload[0]
             if hasattr(buildable, "name"):

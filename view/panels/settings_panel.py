@@ -19,6 +19,7 @@ class SettingsPanel:
         self.window = window
 
     def current_settings_from_ui(self) -> Dict[str, Any]:
+        """Read the currently selected settings from the UI."""
         difficulty = "medium"
         if self.window.settings_window.easy_difficulty_radio.isChecked():
             difficulty = "easy"
@@ -31,6 +32,7 @@ class SettingsPanel:
         }
 
     def load_settings_into_ui(self) -> None:
+        """Load persisted settings into the UI."""
         settings = load_effective_settings()
         self.window.settings_window.font_size_spinbox.blockSignals(True)
         self.window.settings_window.font_size_spinbox.setValue(int(settings["font_size"]))
@@ -50,11 +52,13 @@ class SettingsPanel:
         ).setChecked(True)
 
     def save_settings(self) -> None:
+        """Save the current settings and apply them."""
         settings = self.current_settings_from_ui()
         save_applied_settings(settings)
         self.apply_font_size(int(settings["font_size"]))
 
     def reset_settings_to_default(self) -> None:
+        """Reset settings to their default values."""
         reset_applied_settings()
         defaults = load_default_settings()
         self.window.settings_window.font_size_spinbox.setValue(int(defaults["font_size"]))
@@ -72,13 +76,16 @@ class SettingsPanel:
         self.apply_font_size(int(defaults["font_size"]))
 
     def preview_font_size(self, value: int) -> None:
+        """Preview the selected font size in the UI."""
         self.update_font_size_label()
         self.preview_font_size_label(value)
 
     def close_settings_window(self) -> None:
+        """Close the settings window."""
         self.window.settings_window.close()
 
     def capture_font_baselines(self) -> None:
+        """Capture baseline font and size values for rescaling."""
         roots = [
             self.window,
             self.window.main_menu,
@@ -107,11 +114,13 @@ class SettingsPanel:
         self.capture_static_rich_text_baselines()
 
     def capture_static_rich_text_baselines(self) -> None:
+        """Capture the baseline HTML for static rich text widgets."""
         for widget in (self.window.start_menu.textEdit, self.window.rule_window.textEdit):
             if widget.property("baseHtml") is None:
                 widget.setProperty("baseHtml", widget.toHtml())
 
     def apply_font_size(self, value: int) -> None:
+        """Apply the selected font size across the UI."""
         delta = value - 10
         roots = [
             self.window,
@@ -140,6 +149,7 @@ class SettingsPanel:
         self.apply_static_rich_text_font_size(delta)
 
     def apply_static_rich_text_font_size(self, delta: int) -> None:
+        """Apply the font-size adjustment to static rich text widgets."""
         for widget in (self.window.start_menu.textEdit, self.window.rule_window.textEdit):
             base_html = widget.property("baseHtml")
             if not base_html:
@@ -154,6 +164,7 @@ class SettingsPanel:
             widget.setTextCursor(cursor)
 
     def adjust_widget_heights(self) -> None:
+        """Adjust widget heights after font scaling changes."""
         roots = [
             self.window,
             self.window.main_menu,
@@ -181,9 +192,11 @@ class SettingsPanel:
                     widget.setMaximumHeight(max(int(base_max_height), widget.sizeHint().height()))
 
     def update_font_size_label(self) -> None:
+        """Reset the settings font-size label text."""
         self.window.settings_window.font_size_label.setText("Font Size")
 
     def preview_font_size_label(self, value: int) -> None:
+        """Preview the scaled font-size label styling."""
         base_point_size = self.window.settings_window.font_size_label.property("basePointSize")
         if base_point_size is None:
             return

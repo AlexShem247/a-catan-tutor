@@ -64,7 +64,7 @@ class SimPlayerState:
         self._production_cache: Dict[Resource, float] = {}
 
     def copy(self) -> "SimPlayerState":
-        """Create a fast deep copy of this simulation state with fresh caches."""
+        """Return a copy of this simulation state."""
         new = SimPlayerState.__new__(SimPlayerState)
         new.player_number = self.player_number
 
@@ -92,7 +92,7 @@ class SimPlayerState:
         return new
 
     def victory_points(self) -> float:
-        """Return total victory points"""
+        """Handle victory points."""
         points = 0.0
         points += len(self.settlements)
         points += 2 * len(self.cities)
@@ -110,32 +110,32 @@ class SimPlayerState:
         return points
 
     def can_afford(self, cost: ResourceCount) -> bool:
-        """Return True if the player can afford the given cost."""
+        """Check whether the afford."""
         return all(self.resources.get(r, 0) >= c for r, c in cost.items())
 
     def pay(self, cost: ResourceCount) -> None:
-        """Remove resources (no bank interaction)."""
+        """Handle pay."""
         for r, c in cost.items():
             self.resources[r] -= c
 
     def add_resources(self, resources: ResourceCount) -> None:
-        """Add resources (used for expected income)."""
+        """Handle add resources."""
         for r, c in resources.items():
             self.resources[r] = self.resources.get(r, 0) + c
 
     def remove_resources(self, resources: ResourceCount) -> None:
-        """Remove resources."""
+        """Handle remove resources."""
         for r, c in resources.items():
             self.resources[r] = max(0, self.resources.get(r, 0) - c)
 
     def build_settlement(self, vertex: Vertex) -> None:
-        """Add a settlement (no legality checking)."""
+        """Build the settlement."""
         self.settlements.append(vertex)
         # Clear production cache as settlements affect production
         self._production_cache.clear()
 
     def build_city(self, vertex: Vertex) -> None:
-        """Upgrade settlement to city."""
+        """Build the city."""
         if vertex in self.settlements:
             self.settlements.remove(vertex)
 
@@ -144,7 +144,7 @@ class SimPlayerState:
         self._production_cache.clear()
 
     def build_road(self, edge: Edge, opponent_road_length: List[int]) -> None:
-        """Add a road and update the longest road state."""
+        """Build the road."""
         self.roads.append(edge)
         self.longest_road_length = Board.calculate_longest_road_length(self.roads)
 
@@ -153,18 +153,18 @@ class SimPlayerState:
             self.has_longest_road = True
 
     def add_knight(self, opponent_army_size: List[int]) -> None:
-        """Simulate playing a knight and update the largest army state."""
+        """Handle add knight."""
         self.army_size += 1
         opp_best = max(opponent_army_size, default=0)
         if self.army_size >= 3 and self.army_size > opp_best:
             self.has_largest_army = True
 
     def remove_card(self, ctype: DevelopmentCardType) -> None:
-        """Remove one development card of the given type from the sim state."""
+        """Handle remove card."""
         self.dev_cards[ctype] = max(0, self.dev_cards[ctype] - 1)
 
     def get_production_rate(self, resource: Resource) -> float:
-        """Get cached production rate for a resource."""
+        """Return the production rate."""
         if resource not in self._production_cache:
             fr = 0.0
             for v in self.settlements:

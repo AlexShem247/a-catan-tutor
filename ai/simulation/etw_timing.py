@@ -18,7 +18,7 @@ class EtwTiming:
         target_resources: ResourceCount,
         include_player_trades: bool = True,
     ) -> float:
-        """Estimate ETB for a resource target with caching."""
+        """Handle estimated time to build."""
         target_key = tuple((resource.value, target_resources.get(resource, 0)) for resource in Resource)
         player_key = (
             player.player_number,
@@ -51,6 +51,7 @@ class EtwTiming:
 
     @staticmethod
     def _expected_rolls_for_resource(player: SimPlayerState, resource: Resource) -> float:
+        """Handle expected rolls for resource."""
         production_rate = player.get_production_rate(resource)
         if production_rate <= 0.0:
             return float("inf")
@@ -66,6 +67,7 @@ class EtwTiming:
         bank_trade_ratio_func,
         include_player_trades: bool,
     ) -> Dict[Resource, float]:
+        """Handle calculate trade adjusted rolls."""
         trade_adjusted: Dict[Resource, float] = {}
 
         for resource_i in Resource:
@@ -113,6 +115,7 @@ class EtwTiming:
         bank_trade_ratio_func,
         include_player_trades: bool,
     ) -> float:
+        """Handle future trade rolls for resource."""
         units_needed = deficits.get(resource_i, 0)
         if units_needed <= 0:
             return 0.0
@@ -149,6 +152,7 @@ class EtwTiming:
         opponents: List[SimPlayerState],
         rolls_per_unit: Dict[Resource, float],
     ) -> int:
+        """Handle player trade ratio."""
         give_rolls = rolls_per_unit.get(resource_give, float("inf"))
         need_rolls = rolls_per_unit.get(resource_need, float("inf"))
 
@@ -171,6 +175,7 @@ class EtwTiming:
         current: ResourceCount,
         target: ResourceCount,
     ) -> Tuple[Dict[Resource, int], Dict[Resource, int]]:
+        """Handle calculate deficits and excesses."""
         deficits: Dict[Resource, int] = {}
         excesses: Dict[Resource, int] = {}
         for resource in Resource:
@@ -189,9 +194,11 @@ class EtwTiming:
         current: ResourceCount,
         target: ResourceCount,
     ) -> Tuple[Dict[Resource, int], Dict[Resource, int]]:
+        """Handle calculate deficits and excesses."""
         return self._calculate_deficits_and_excesses(current, target)
 
     def calc_etb_actions(self, player: SimPlayerState, sim_game: SimGame, total_actions: List[Action]) -> float:
+        """Handle calc etb actions."""
         total_resources: ResourceCount = {resource: 0 for resource in Resource}
         for action in total_actions:
             step_resources = calc_step_resources(action)

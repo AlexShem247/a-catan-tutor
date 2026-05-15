@@ -60,12 +60,15 @@ class GameController(
         self.reset_game()
 
     def run_tutor_decision(self, callback: Callable[[], object]) -> object:
+        """Run a decision inside the tutor decision wrapper."""
         return self._run_tutor_decision(callback)
 
     def get_tutor_recommended_robber_choice(self, player: Player, valid_hexes: list[HexTile]):
+        """Return the tutor-recommended robber placement choice."""
         return self._get_tutor_recommended_robber_choice(player, valid_hexes)
 
     def _resolve_player_config(self) -> PlayerConfig:
+        """Resolve the active player configuration for the game mode."""
         if self.game_mode == GameMode.PLAY:
             return self.game_players
         if self.game_mode == GameMode.TUTOR:
@@ -79,18 +82,21 @@ class GameController(
         return self.game_players
 
     def _raise_if_view_requested_home(self) -> None:
+        """Raise when the view has requested a return home."""
         if self.view is None:
             return
         if self.view.consume_return_home_request():
             raise ReturnToStart
 
     def _raise_if_return_home(self, value: object) -> None:
+        """Raise when a return-home action is received."""
         from ai.actions import Action, ActionType
 
         if isinstance(value, Action) and value.type == ActionType.RETURN_HOME:
             raise ReturnToStart
 
     def reset_game(self):
+        """Reset the game state and supporting controllers."""
         uses_interactive_delay = self.game_mode in {GameMode.PLAY, GameMode.TUTOR}
         is_tutor_mode = self.game_mode in {GameMode.GUIDED, GameMode.TUTOR}
 
@@ -114,6 +120,7 @@ class GameController(
             self.view.open_tutor_menu(is_tutor_mode)
 
     def start_game(self, max_rounds: Optional[int] = None):
+        """Start and run the full game loop."""
         while True:
             self.game_mode = self.view.display_start_screen()
             self.reset_game()
@@ -151,6 +158,7 @@ class GameController(
             return
 
     def _record_victory_point_snapshot(self) -> None:
+        """Record the current victory-point snapshot."""
         review_snapshot = {
             player.player_number: self._build_player_score_snapshot(player)
             for player in self._game.players
@@ -167,6 +175,7 @@ class GameController(
 
     @staticmethod
     def _build_player_score_snapshot(player: Player) -> PlayerScoreSnapshot:
+        """Build a score snapshot for the given player."""
         visible_vp, total_vp = player.calc_victory_points()
         return PlayerScoreSnapshot(
             total_vp=total_vp,
@@ -181,12 +190,15 @@ class GameController(
         )
 
     def get_game_state(self):
+        """Return the current game state object."""
         return self._game
 
     def get_ports(self) -> List[Tuple[Port, Vertex, Vertex]]:
+        """Return the board ports from the active game."""
         return self._game.get_ports()
 
     def get_vertex(self, q: int, r: int, corner_index: VertexDirection) -> Optional[Vertex]:
+        """Return the vertex from the active game."""
         return self._game.get_vertex(q, r, corner_index)
 
     def try_build_settlement(
@@ -197,6 +209,7 @@ class GameController(
             use_resources: bool = True,
             road_restriction: bool = True,
     ) -> tuple[bool, str]:
+        """Try to build a settlement through the controller workflow."""
         result = self._game.try_build_settlement(player, vertex, build, use_resources, road_restriction)
         success, _ = result
         if success and build:
@@ -204,6 +217,7 @@ class GameController(
         return result
 
     def get_edge(self, q: int, r: int, edge_index: EdgeDirection) -> Optional[Edge]:
+        """Return the edge from the active game."""
         return self._game.get_edge(q, r, edge_index)
 
     def try_build_road(
@@ -214,6 +228,7 @@ class GameController(
             build: bool = True,
             use_resources: bool = True,
     ) -> tuple[bool, str]:
+        """Try to build a road through the controller workflow."""
         result = self._game.try_build_road(player, edge, on_vertex, build, use_resources)
         success, _ = result
         if success and build:
@@ -221,6 +236,7 @@ class GameController(
         return result
 
     def get_buildable_options(self, player: Player) -> Dict:
+        """Return the buildable options from the active game."""
         return self._game.get_buildable_options(player)
 
     def try_build_city(
@@ -230,6 +246,7 @@ class GameController(
             build: bool = True,
             use_resources: bool = True,
     ) -> tuple[bool, str]:
+        """Try to build a city through the controller workflow."""
         result = self._game.try_build_city(player, vertex, build, use_resources)
         success, _ = result
         if success and build:
@@ -239,6 +256,7 @@ class GameController(
     def try_trade_with_bank(
             self, player: Player, selling: ResourceCount, buying: ResourceCount, use_resources: bool = True
     ) -> bool:
+        """Try to perform a bank trade through the controller workflow."""
         success = self._game.try_trade_with_bank(player, selling, buying, use_resources)
         if success and use_resources:
             self._refresh_tutor_turn_explanation(player)
@@ -251,33 +269,42 @@ class GameController(
             buying_player: Player,
             buying: ResourceCount,
     ):
+        """Run the trade flow between two players."""
         result = self._game.trade_between_players(player, selling, buying_player, buying)
         self._refresh_tutor_turn_explanation(player)
         return result
 
     def get_available_vertices(
             self, player: Player, building_type: Buildable, road_restriction: bool = True) -> List[Vertex]:
+        """Return the currently available build vertices."""
         return self._game.get_available_vertices(player, building_type, road_restriction)
 
     def get_buildable_edges_for_vertex(self, vertex: Vertex) -> List[Edge]:
+        """Return buildable edges connected to the vertex."""
         return self._game.get_buildable_edges_for_vertex(vertex)
 
     def get_trade_rate(self, player: Player, resource: Resource) -> int:
+        """Return the trade rate for the given player and resource."""
         return self._game.get_trade_rate(player, resource)
 
     def get_hex_tile(self, q: int, r: int) -> Optional[HexTile]:
+        """Return the hex tile from the active game."""
         return self._game.get_hex_tile(q, r)
 
     def get_players_on_hex(self, hex_tile):
+        """Return the players with buildings on the given hex."""
         return self._game.get_players_on_hex(hex_tile)
 
     def get_all_hexes(self) -> List[HexTile]:
+        """Return all hexes from the active game."""
         return self._game.get_all_hexes()
 
     def get_hex_tiles_with_players(self):
+        """Return hexes that currently contain player buildings."""
         return self._game.get_hex_tiles_with_players()
 
     def try_buy_development_card(self, player) -> Tuple[bool, str]:
+        """Try to buy a development card through the controller workflow."""
         result = self._game.try_buy_development_card(player)
         success, _ = result
         if success:
@@ -285,28 +312,37 @@ class GameController(
         return result
 
     def get_available_edges(self, player: Player) -> List[Edge]:
+        """Return the currently available build edges."""
         return self._game.get_available_edges(player)
 
     def get_bank_resources(self) -> ResourceCount:
+        """Return the bank resources from the active game."""
         return self._game.bank_resources
 
     def get_all_edges(self):
+        """Return all edges from the active game."""
         return self._game.get_all_edges()
 
     def get_all_vertices(self):
+        """Return all vertices from the active game."""
         return self._game.get_all_vertices()
 
     def get_development_deck(self):
+        """Return the development deck from the active game."""
         return self._game.development_deck
 
     def get_all_players(self):
+        """Return all players from the active game."""
         return self._game.players
 
     def get_victory_point_history(self) -> List[Tuple[int, Dict[PlayerNumber, int]]]:
+        """Return the recorded victory-point history."""
         return list(self.victory_point_history)
 
     def get_endgame_review_history(self) -> List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]]:
+        """Return the recorded endgame review history."""
         return list(self.endgame_review_history)
 
     def get_tutor_feedback_history(self) -> List[TutorFeedbackExplanation]:
+        """Return the recorded tutor feedback history."""
         return list(self.tutor_feedback_history)

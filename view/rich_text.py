@@ -2,14 +2,16 @@ from html import escape, unescape
 import re
 from typing import Iterable, Mapping
 
-from config.view_constants import TUTOR_ICON
+from config.view_constants import TUTOR_ICON, TUTOR_WINDOW_ICON_SIZE_PX, TUTOR_WINDOW_TITLE_ICON_PADDING_LEFT_PX
 
 
 def tutor_window_title_html(icon_path: str = TUTOR_ICON) -> str:
     return (
         "<html><body><table cellpadding='0' cellspacing='0'><tr>"
-        f"<td valign='middle'><img src='{icon_path}' width='48' height='48'></td>"
-        "<td valign='middle' style='padding-left:8px;'><span style='font-weight:700;'>Tutor Window</span></td>"
+        f"<td valign='middle'><img src='{icon_path}' width='{TUTOR_WINDOW_ICON_SIZE_PX}' "
+        f"height='{TUTOR_WINDOW_ICON_SIZE_PX}'></td>"
+        f"<td valign='middle' style='padding-left:{TUTOR_WINDOW_TITLE_ICON_PADDING_LEFT_PX}px;'>"
+        "<span style='font-weight:700;'>Tutor Window</span></td>"
         "</tr></table></body></html>"
     )
 

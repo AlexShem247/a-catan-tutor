@@ -10,7 +10,10 @@ from ai.tutor.tutor import TutorStage, TUTOR_STAGE_CONTENT
 from config.view_constants import (
     TUTOR_FEEDBACK_FADE_STEPS,
     TUTOR_FEEDBACK_MAX_DISPLAY_SECONDS,
+    TUTOR_FEEDBACK_HISTORY_LIMIT,
     TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS,
+    TUTOR_HISTORY_ACTION_HEIGHT_PX,
+    TUTOR_HISTORY_NAV_BUTTON_SIZE_PX,
 )
 from view.View import GameMode
 from view.canvas.display_utils import format_counter_offer
@@ -36,14 +39,14 @@ class TutorPanel:
         self.history_prev_btn = QPushButton("<")
         self.history_detail_btn = QPushButton("Show Detailed")
         self.history_next_btn = QPushButton(">")
-        self.history_prev_btn.setFixedSize(40, 40)
-        self.history_next_btn.setFixedSize(40, 40)
-        self.history_detail_btn.setFixedHeight(40)
+        self.history_prev_btn.setFixedSize(TUTOR_HISTORY_NAV_BUTTON_SIZE_PX, TUTOR_HISTORY_NAV_BUTTON_SIZE_PX)
+        self.history_next_btn.setFixedSize(TUTOR_HISTORY_NAV_BUTTON_SIZE_PX, TUTOR_HISTORY_NAV_BUTTON_SIZE_PX)
+        self.history_detail_btn.setFixedHeight(TUTOR_HISTORY_ACTION_HEIGHT_PX)
         self.history_nav_layout.addWidget(self.history_prev_btn)
         self.history_nav_layout.addWidget(self.history_detail_btn)
         self.history_nav_layout.addWidget(self.history_next_btn)
         self.history_exit_btn = QPushButton("Close History")
-        self.history_exit_btn.setFixedHeight(40)
+        self.history_exit_btn.setFixedHeight(TUTOR_HISTORY_ACTION_HEIGHT_PX)
         self.widget.verticalLayout_3.addWidget(self.history_nav_widget)
         self.widget.verticalLayout_3.addWidget(self.history_exit_btn)
         self.history_nav_widget.hide()
@@ -65,18 +68,21 @@ class TutorPanel:
 
     @staticmethod
     def append_feedback_history_state(owner, feedback: TutorFeedbackExplanation) -> None:
+        """Append tutor feedback to the shared history state."""
         owner.tutor_feedback_replay_history.append(feedback)
         owner.tutor_feedback_history.append(feedback)
-        if len(owner.tutor_feedback_history) > 100:
-            owner.tutor_feedback_history = owner.tutor_feedback_history[-100:]
+        if len(owner.tutor_feedback_history) > TUTOR_FEEDBACK_HISTORY_LIMIT:
+            owner.tutor_feedback_history = owner.tutor_feedback_history[-TUTOR_FEEDBACK_HISTORY_LIMIT:]
         owner._update_previous_feedback_button()
 
     def hide_history_controls(self) -> None:
+        """Hide the tutor feedback history controls."""
         self.history_nav_widget.hide()
         self.history_exit_btn.hide()
         self.update_previous_feedback_button()
 
     def update_previous_feedback_button(self) -> None:
+        """Update the visibility of the previous-feedback button."""
         visible = (
             self.history_available_in_mode
             and self.history_enabled_on_turn
@@ -87,26 +93,31 @@ class TutorPanel:
         self.widget.previous_feedback_btn.setEnabled(visible)
 
     def set_history_enabled(self, enabled: bool) -> None:
+        """Enable or disable tutor feedback history for the turn."""
         self.history_enabled_on_turn = enabled
         self.update_previous_feedback_button()
 
     def set_restore_tutor_menu_callback(
         self, callback: Optional[Callable[[], None]], allow_history: bool
     ) -> None:
+        """Store the callback used to restore the tutor menu."""
         self.restore_tutor_menu_callback = callback
         self.set_history_enabled(allow_history)
 
     def set_dismiss_tutor_hint_callback(self, callback: Optional[Callable[[], None]]) -> None:
+        """Store the callback used to dismiss the active tutor hint."""
         self.dismiss_tutor_hint_callback = callback
 
     def append_tutor_feedback_history(self, feedback: TutorFeedbackExplanation) -> None:
+        """Append a tutor feedback item to the history."""
         self.tutor_feedback_replay_history.append(feedback)
         self.tutor_feedback_history.append(feedback)
-        if len(self.tutor_feedback_history) > 100:
-            self.tutor_feedback_history = self.tutor_feedback_history[-100:]
+        if len(self.tutor_feedback_history) > TUTOR_FEEDBACK_HISTORY_LIMIT:
+            self.tutor_feedback_history = self.tutor_feedback_history[-TUTOR_FEEDBACK_HISTORY_LIMIT:]
         self.update_previous_feedback_button()
 
     def render_feedback_history_item(self) -> None:
+        """Render the currently selected tutor feedback history item."""
         if self.history_feedback_index is None:
             return
 
@@ -126,6 +137,7 @@ class TutorPanel:
         self.history_detail_btn.setText("Show Concise" if self.history_feedback_detailed else "Show Detailed")
 
     def show_previous_feedback_history(self) -> None:
+        """Open the tutor feedback history viewer."""
         if not self.history_enabled_on_turn or not self.tutor_feedback_history:
             return
 
@@ -150,22 +162,26 @@ class TutorPanel:
         self.render_feedback_history_item()
 
     def show_older_feedback(self) -> None:
+        """Move to the previous tutor feedback history item."""
         if self.history_feedback_index is None or self.history_feedback_index <= 0:
             return
         self.history_feedback_index -= 1
         self.render_feedback_history_item()
 
     def show_newer_feedback(self) -> None:
+        """Move to the next tutor feedback history item."""
         if self.history_feedback_index is None or self.history_feedback_index >= len(self.tutor_feedback_history) - 1:
             return
         self.history_feedback_index += 1
         self.render_feedback_history_item()
 
     def toggle_feedback_detail(self) -> None:
+        """Toggle between concise and detailed feedback history views."""
         self.history_feedback_detailed = not self.history_feedback_detailed
         self.render_feedback_history_item()
 
     def exit_feedback_history(self) -> None:
+        """Exit the tutor feedback history viewer."""
         self.history_mode_active = False
         self.hide_history_controls()
         self.window.canvas.clear_feedback_builds()
@@ -181,11 +197,13 @@ class TutorPanel:
         self.history_feedback_detailed = False
 
     def configure_for_game_mode(self, game_mode: GameMode) -> None:
+        """Configure tutor history availability for the game mode."""
         self.history_available_in_mode = game_mode == GameMode.TUTOR
         self.update_previous_feedback_button()
         self.hide_history_controls()
 
     def stop_feedback_timers(self) -> None:
+        """Stop and clear the tutor feedback timers."""
         if self.tutor_feedback_fade_timer is not None:
             self.tutor_feedback_fade_timer.stop()
             self.tutor_feedback_fade_timer.deleteLater()
@@ -196,10 +214,12 @@ class TutorPanel:
             self.tutor_feedback_advance_timer = None
 
     def reset_feedback_styles(self) -> None:
+        """Reset the tutor feedback text styling."""
         self.widget.action_label.setStyleSheet(tutor_feedback_action_stylesheet("rgba(0, 0, 0, 255)"))
         self.widget.explanation_edit.setStyleSheet(tutor_feedback_explanation_stylesheet("rgba(0, 0, 0, 255)"))
 
     def start_feedback_fade(self, duration_seconds: float) -> None:
+        """Start fading tutor feedback over the given duration."""
         self.stop_feedback_timers()
         self.reset_feedback_styles()
 
@@ -230,10 +250,12 @@ class TutorPanel:
         self.tutor_feedback_advance_timer = advance_timer
 
     def stop_auto_feedback(self) -> None:
+        """Stop tutor feedback timers and reset their styling."""
         self.stop_feedback_timers()
         self.reset_feedback_styles()
 
     def continue_after_tutor_feedback(self) -> None:
+        """Continue the turn flow after tutor feedback finishes."""
         self.stop_auto_feedback()
         self.window.canvas.clear_planned_builds()
         self.widget.action_label.setText("Wait For Your Turn")
@@ -244,16 +266,19 @@ class TutorPanel:
 
     @staticmethod
     def move_quality_colour_value(label: str) -> str:
+        """Return the colour for a move-quality label."""
         return move_quality_colour(label)
 
     @staticmethod
     def tutor_feedback_display_seconds(feedback: TutorFeedbackExplanation) -> float:
+        """Return how long tutor feedback should stay visible."""
         gap = max(0.0, min(1.0, feedback.assessment.score_gap))
         return TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS + (
             (TUTOR_FEEDBACK_MAX_DISPLAY_SECONDS - TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS) * gap
         )
 
     def concise_explanation_html(self, explanation: ActionExplanation) -> Tuple[str, str]:
+        """Build the concise tutor explanation HTML."""
         concise_title, concise_explanation = explanation.generate_text_concise()
         quality_label = explanation.tutor_move_quality_label
         concise_html = concise_explanation_html(
@@ -264,6 +289,7 @@ class TutorPanel:
         return concise_title, concise_html
 
     def reset_for_turn(self) -> None:
+        """Reset tutor panel state for a new turn."""
         self.history_mode_active = False
         self.stop_feedback_timers()
         self.reset_feedback_styles()
@@ -271,6 +297,7 @@ class TutorPanel:
         self.window.canvas.clear_feedback_builds()
 
     def display_tutor_init(self, player, stage: TutorStage, explanation: ActionExplanation) -> None:
+        """Display the tutor introduction for the current stage."""
         self.reset_for_turn()
         title, focus = TUTOR_STAGE_CONTENT[stage]["title"], TUTOR_STAGE_CONTENT[stage]["focus"]
         self.widget.action_label.setText(title)
@@ -323,6 +350,7 @@ class TutorPanel:
         show_default()
 
     def display_explanation(self, player, dice_info, explanation: ActionExplanation) -> None:
+        """Display the tutor explanation for the current move."""
         self.reset_for_turn()
         self.set_restore_tutor_menu_callback(None, False)
         self.set_dismiss_tutor_hint_callback(None)
@@ -362,6 +390,7 @@ class TutorPanel:
         self.window.trade_panel.display_trade_preview(explanation)
 
     def display_tutor_action_feedback(self, feedback: TutorFeedbackExplanation) -> None:
+        """Display tutor feedback for the player action."""
         self.history_mode_active = False
         self.window.canvas.clear_planned_builds()
         self.window.canvas.clear_feedback_builds()
@@ -396,6 +425,7 @@ class TutorPanel:
         self.start_feedback_fade(self.tutor_feedback_display_seconds(feedback))
 
     def prepare_ai_wait_state(self) -> None:
+        """Prepare the tutor panel for an AI wait state."""
         self.history_mode_active = False
         self.stop_feedback_timers()
         self.reset_feedback_styles()
@@ -405,6 +435,7 @@ class TutorPanel:
         self.set_dismiss_tutor_hint_callback(None)
 
     def reset_for_start_screen(self) -> None:
+        """Reset tutor panel state for the start screen."""
         self.stop_auto_feedback()
         self.history_enabled_on_turn = False
         self.tutor_feedback_history = []

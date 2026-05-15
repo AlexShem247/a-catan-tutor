@@ -14,6 +14,8 @@ from ai.tutor.move_quality import (
     initial_road_flexible_move_quality,
     move_quality_label,
 )
+from config.move_quality_constants import MOVE_QUALITY_GOOD_THRESHOLD, MOVE_QUALITY_OKAY_THRESHOLD
+from config.performance_constants import EPSILON
 from game.Edge import Edge
 from game.Game import Game
 from game.HexTile import HexTile
@@ -62,6 +64,7 @@ class TutorEvaluator:
         self.live_rng_state_getter = live_rng_state_getter
 
     def _run_tutor_preview(self, callback: Callable[[], T]) -> T:
+        """Run a tutor preview without mutating tutor state."""
         snapshot = self.tutor_ai.snapshot_state()
         try:
             if self.live_rng_state_getter is not None:
@@ -77,6 +80,7 @@ class TutorEvaluator:
             phase: Phase,
             dev_played: bool,
     ) -> ActionExplanation:
+        """Get the tutor's preferred explanation without mutating trade state."""
         return self._run_tutor_preview(
             lambda: self.tutor_ai.next_action_with_explanation(player, game, phase, dev_played)[1]
         )
@@ -90,6 +94,7 @@ class TutorEvaluator:
             action: Action,
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
+        """Evaluate a main-turn action against the tutor's recommendation."""
         if phase == Phase.PRE_ROLL and action.type == ActionType.PLAY_DEV_CARD:
             actual_explanation = self.tutor_ai.explain_pre_roll_dev_choice(player, game, action.payload)
         else:
@@ -120,6 +125,7 @@ class TutorEvaluator:
             chosen_vertex: Vertex,
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
+        """Evaluate an opening settlement choice against the tutor's recommendation."""
         if chosen_vertex not in available_vertices:
             return None
 
@@ -165,6 +171,7 @@ class TutorEvaluator:
             chosen_edge: Edge,
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
+        """Evaluate an opening road choice against the tutor's recommendation."""
         if chosen_edge not in available_edges:
             return None
 
@@ -201,6 +208,7 @@ class TutorEvaluator:
             counter: Optional[ResourceCount],
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
+        """Evaluate a trade-response choice against the tutor's recommendation."""
         _, _, best_explanation = self._run_tutor_preview(
             lambda: self.tutor_ai.respond_to_trade_with_explanation(
                 player,
@@ -238,6 +246,7 @@ class TutorEvaluator:
             counter: Optional[ResourceCount],
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
+        """Evaluate a trade-partner choice against the tutor's recommendation."""
         _, best_explanation = self._run_tutor_preview(
             lambda: self.tutor_ai.choose_trade_partner_with_explanation(
                 player,
@@ -272,6 +281,7 @@ class TutorEvaluator:
             discard_count: int,
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
+        """Evaluate a discard choice against the tutor's recommendation."""
         _, best_explanation = self._run_tutor_preview(
             lambda: self.tutor_ai.select_discard_resources_with_explanation(player, game, discard_count)
         )
@@ -293,6 +303,7 @@ class TutorEvaluator:
             chosen_player: Optional[Player],
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
+        """Evaluate a robber choice against the tutor's recommendation."""
         _, _, best_explanation = self._run_tutor_preview(
             lambda: self.tutor_ai.select_robber_target_with_explanation(player, game, valid_hexes)
         )
@@ -312,6 +323,7 @@ class TutorEvaluator:
             selected: ResourceCount,
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
+        """Evaluate a Year of Plenty choice against the tutor's recommendation."""
         _, best_explanation = self._run_tutor_preview(
             lambda: self.tutor_ai.select_year_of_plenty_resources_with_explanation(player, game)
         )
@@ -331,6 +343,7 @@ class TutorEvaluator:
             resource: Resource,
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
+        """Evaluate a Monopoly choice against the tutor's recommendation."""
         _, best_explanation = self._run_tutor_preview(
             lambda: self.tutor_ai.select_monopoly_resource_with_explanation(player, game)
         )
@@ -351,6 +364,7 @@ class TutorEvaluator:
             game: Any,
             title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
+        """Build tutor feedback from the actual and recommended explanations."""
         if actual_explanation is None or best_explanation is None:
             return None
 
@@ -372,6 +386,7 @@ class TutorEvaluator:
             actual_explanation: ActionExplanation,
             best_explanation: ActionExplanation,
     ) -> TutorAssessment:
+        """Build a tutor assessment from the compared explanations."""
         same_choice = actual_explanation.chosen_action == best_explanation.chosen_action
         display_score, display_best_score = self._display_scores_for_feedback(
             actual_explanation,
@@ -425,6 +440,7 @@ class TutorEvaluator:
             best_explanation: ActionExplanation,
             same_choice: bool,
     ) -> Tuple[float, float]:
+        """Prepare display scores for tutor feedback."""
         actual_score = actual_explanation.move_quality
         best_score = best_explanation.move_quality
 
@@ -436,11 +452,11 @@ class TutorEvaluator:
 
         if (
             chosen_action.type == ActionType.END_TURN
-            and float(getattr(chosen_candidate, "etw_before", 0.0) or 0.0) <= 1e-6
+            and float(getattr(chosen_candidate, "etw_before", 0.0) or 0.0) <= EPSILON
         ):
             return 1.0, 1.0
 
-        floor_score = 0.38
+        floor_score = MOVE_QUALITY_OKAY_THRESHOLD
         if chosen_action.type == ActionType.BUILD:
             payload = chosen_action.payload
             buildable = payload[0] if isinstance(payload, tuple) and payload else None
@@ -450,11 +466,12 @@ class TutorEvaluator:
         adjusted_score = clamp_move_quality(max(actual_score, floor_score))
         adjusted_best_score = clamp_move_quality(max(best_score, adjusted_score))
         if chosen_action.type == ActionType.END_TURN:
-            adjusted_score = min(adjusted_score, 0.62)
-            adjusted_best_score = min(max(adjusted_best_score, adjusted_score), 0.62)
+            adjusted_score = min(adjusted_score, MOVE_QUALITY_GOOD_THRESHOLD)
+            adjusted_best_score = min(max(adjusted_best_score, adjusted_score), MOVE_QUALITY_GOOD_THRESHOLD)
         return adjusted_score, adjusted_best_score
 
     def _distinct_reasons_from_seed(self, candidates: List[str], existing: List[str], limit: int) -> List[str]:
+        """Collect distinct reasons while preserving the starting selection."""
         selected: List[str] = []
         for candidate in candidates:
             if self._contains_equivalent_reason([*existing, *selected], candidate):
@@ -471,6 +488,7 @@ class TutorEvaluator:
             best_score: float,
             max_score: float,
     ) -> ActionExplanation:
+        """Build an explanation for an opening settlement choice."""
         return self.tutor_ai.opening_policy.build_initial_settlement_explanation(
             player, vertex, best_score, max_score)
 
@@ -481,6 +499,7 @@ class TutorEvaluator:
             explanation_kind: RoadExplanationKind,
             move_quality: float,
     ) -> ActionExplanation:
+        """Build an explanation for an opening road option."""
         return self.tutor_ai.opening_policy.build_initial_road_explanation(
             edge, target_vertex, explanation_kind, move_quality)
 
@@ -491,6 +510,7 @@ class TutorEvaluator:
             available_edges: List[Edge],
             chosen_edge: Edge,
     ) -> ActionExplanation:
+        """Build an explanation for the chosen opening road."""
         if len(player.settlements) + len(player.cities) >= 2:
             return self._build_initial_road_explanation(
                 chosen_edge,
@@ -571,6 +591,7 @@ class TutorEvaluator:
             reasons,
             limit: int,
     ) -> List[str]:
+        """Build the positive reason sentences for an explanation."""
         texts: List[str] = []
         seen = set()
         for reason in reasons:
@@ -592,6 +613,7 @@ class TutorEvaluator:
             best_explanation: ActionExplanation,
             limit: int,
     ) -> List[str]:
+        """Build the weakness sentences for an explanation."""
         weaknesses = self._reason_sentences(
             actual_explanation,
             actual_explanation.sorted_reasons_against(),
@@ -614,6 +636,7 @@ class TutorEvaluator:
             best_explanation: ActionExplanation,
             limit: int,
     ) -> List[str]:
+        """Build the better-move reason sentences for an explanation."""
         actual_labels = {reason.label for reason in actual_explanation.sorted_reasons_for()}
         reasons = []
         for reason in best_explanation.sorted_reasons_for():
@@ -629,6 +652,7 @@ class TutorEvaluator:
         return reasons[:limit]
 
     def _move_sentence(self, explanation: ActionExplanation) -> str:
+        """Describe the move referenced by an explanation."""
         template = explanation.metadata.get("template") or explanation.chosen_candidate.metadata.get("template")
         _, sentence = explanation.generate_text_concise()
         if template is not None and sentence:
@@ -636,6 +660,7 @@ class TutorEvaluator:
         return self._sentence(explanation.describe_action(short=False))
 
     def _move_context(self, explanation: ActionExplanation) -> str:
+        """Describe the resource context for an explained move."""
         template = explanation.metadata.get("template") or explanation.chosen_candidate.metadata.get("template")
         metadata = explanation.chosen_candidate.metadata
         action = explanation.chosen_action
@@ -678,9 +703,11 @@ class TutorEvaluator:
 
     @staticmethod
     def _resource_name(resource: Any) -> str:
+        """Return the display name for a resource."""
         return getattr(resource, "name", str(resource)).replace("_", " ").title()
 
     def _resource_count_text(self, resources: Any) -> str:
+        """Format a resource bundle for display."""
         if not resources:
             return ""
         parts: List[str] = []
@@ -697,6 +724,7 @@ class TutorEvaluator:
         return ", ".join(parts[:-1]) + f", and {parts[-1]}"
 
     def _trade_exchange_text(self, payment: Any, buying: Any) -> str:
+        """Format a trade exchange for display."""
         pay_text = self._resource_count_text(payment)
         receive_text = self._resource_count_text(buying)
         if pay_text and receive_text:
@@ -709,6 +737,7 @@ class TutorEvaluator:
 
     @staticmethod
     def _recommended_build_visual_plan(explanation: ActionExplanation) -> List[Tuple[Buildable, object]]:
+        """Build the recommended visual plan for an explanation."""
         visual_plan = explanation.get_visual_build_plan()
         allowed_buildables = {Buildable.ROAD, Buildable.SETTLEMENT, Buildable.CITY}
         return [
@@ -718,6 +747,7 @@ class TutorEvaluator:
         ]
 
     def _missed_reason_sentence(self, explanation: ActionExplanation, reason) -> str:
+        """Build a sentence describing a missed reason."""
         if getattr(reason, "type", None) == ReasonType.HEURISTIC_CHOICE:
             plan_phrase = explanation.strongest_plan_focus_phrase()
             if plan_phrase:
@@ -732,6 +762,7 @@ class TutorEvaluator:
 
     @classmethod
     def _contains_equivalent_reason(cls, existing_reasons: List[str], candidate: str) -> bool:
+        """Check whether an equivalent reason is already present."""
         candidate_key = cls._reason_core_text(candidate)
         if not candidate_key:
             return False
@@ -739,6 +770,7 @@ class TutorEvaluator:
 
     @classmethod
     def _reason_core_text(cls, text: str) -> str:
+        """Extract the canonical comparison text for a reason."""
         if not text:
             return ""
         text = re.sub(r"<[^>]+>", "", text)
@@ -758,6 +790,7 @@ class TutorEvaluator:
 
     @staticmethod
     def _sentence(text: str) -> str:
+        """Normalise text into a display sentence."""
         text = re.sub(r"<[^>]+>", "", text)
         text = " ".join(text.split()).strip()
         if not text:
@@ -768,10 +801,12 @@ class TutorEvaluator:
 
     @staticmethod
     def _strip_period(text: str) -> str:
+        """Strip trailing sentence punctuation from text."""
         return text.rstrip().rstrip(".!?")
 
     @staticmethod
     def _lowercase_first(text: str) -> str:
+        """Lowercase the first character of the text."""
         if not text:
             return ""
         return text[0].lower() + text[1:]

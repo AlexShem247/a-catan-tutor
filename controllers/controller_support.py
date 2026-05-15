@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from random import Random
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
@@ -50,7 +51,7 @@ class PlayerScoreSnapshot:
     has_largest_army: bool
 
 
-class ControllerSupport:
+class ControllerSupport(ABC):
     _game: Game
     view: View | None
     game_mode: GameMode
@@ -66,86 +67,131 @@ class ControllerSupport:
     _pending_tutor_robber_choice: Any
     SHOW_AI_BUILT_LOCATIONS: bool
 
+    @abstractmethod
     def _preview_tutor_explanation(self, callback: Callable[[], tuple[Any, ...]]) -> Optional[ActionExplanation]:
-        raise NotImplementedError
+        """Preview the tutor explanation for a pending decision."""
+        ...
 
+    @abstractmethod
     def _show_tutor_init(
             self,
             player: Player,
             stage: TutorStage,
             explanation: Optional[ActionExplanation],
     ) -> None:
-        raise NotImplementedError
+        """Show the tutor introduction for the current decision stage."""
+        ...
 
+    @abstractmethod
     def _run_tutor_decision(self, callback: Callable[[], T]) -> T:
-        raise NotImplementedError
+        """Run a decision while keeping tutor state in sync."""
+        ...
 
+    @abstractmethod
     def _set_tutor_shortcut_handlers(self, recommended_handler: Optional[Callable[[], Any]]) -> None:
-        raise NotImplementedError
+        """Set the tutor shortcut handlers for the current decision."""
+        ...
 
+    @abstractmethod
     def _raise_if_return_home(self, value: object) -> None:
-        raise NotImplementedError
+        """Raise when a return-home action is received."""
+        ...
 
+    @abstractmethod
     def _raise_if_view_requested_home(self) -> None:
-        raise NotImplementedError
+        """Raise when the view has requested a return home."""
+        ...
 
+    @abstractmethod
     def _should_collect_tutor_feedback(self, player: Player) -> bool:
-        raise NotImplementedError
+        """Check whether tutor feedback should be collected."""
+        ...
 
+    @abstractmethod
     def _show_tutor_action_feedback(self, player: Player, feedback: Optional[TutorFeedbackExplanation]) -> None:
-        raise NotImplementedError
+        """Show tutor feedback for the completed player action."""
+        ...
 
+    @abstractmethod
     def _refresh_tutor_turn_explanation(self, player: Player) -> None:
-        raise NotImplementedError
+        """Refresh the cached tutor turn explanation."""
+        ...
 
+    @abstractmethod
     def _get_tutor_recommended_robber_choice(
             self,
             player: Player,
             valid_hexes: list[HexTile],
     ):
-        raise NotImplementedError
+        """Return the tutor-recommended robber choice."""
+        ...
 
+    @abstractmethod
     def get_road_choice(
             self,
             player: Player,
             settlement: Optional[Vertex] = None,
             selector: Optional[Callable[[list[Edge]], Optional[Edge]]] = None,
     ) -> Edge:
-        raise NotImplementedError
+        """Return the selected road choice for the current flow."""
+        ...
 
+    @abstractmethod
     def get_road_choice_ai(self, player: Player, settlement: Optional[Vertex] = None) -> Optional[Edge]:
-        raise NotImplementedError
+        """Return the AI-selected road choice."""
+        ...
 
+    @abstractmethod
     def get_tutor_recommended_main_action(self, player: Player, played_dev_card: bool):
-        raise NotImplementedError
+        """Return the tutor-recommended main action."""
+        ...
 
+    @abstractmethod
     def _prepare_tutor_main_action_comparison(self, player: Player, action, played_dev_card: bool):
-        raise NotImplementedError
+        """Prepare tutor comparison data for a main action."""
+        ...
 
+    @abstractmethod
     def play_development_card(self, player: Player, card_type) -> str:
-        raise NotImplementedError
+        """Play the selected development card action."""
+        ...
 
+    @abstractmethod
     def roll_dice(self, player: Player):
-        raise NotImplementedError
+        """Roll the dice and handle any resulting events."""
+        ...
 
+    @abstractmethod
     def trade_with_players(self, selling_player, selling, buying):
-        raise NotImplementedError
+        """Run the player-to-player trade flow."""
+        ...
 
+    @abstractmethod
     def ai_attempt_build(self, player: Player, action: Buildable, location):
-        raise NotImplementedError
+        """Try to execute the requested AI build action."""
+        ...
 
+    @abstractmethod
     def try_build_road(self, player: Player, location):
-        raise NotImplementedError
+        """Try to build a road through the controller workflow."""
+        ...
 
+    @abstractmethod
     def try_build_settlement(self, player: Player, location):
-        raise NotImplementedError
+        """Try to build a settlement through the controller workflow."""
+        ...
 
+    @abstractmethod
     def try_build_city(self, player: Player, location):
-        raise NotImplementedError
+        """Try to build a city through the controller workflow."""
+        ...
 
+    @abstractmethod
     def try_trade_with_bank(self, player: Player, selling: ResourceCount, buying: ResourceCount):
-        raise NotImplementedError
+        """Try to perform a bank trade through the controller workflow."""
+        ...
 
+    @abstractmethod
     def trade_between_players(
             self,
             player: Player,
@@ -153,7 +199,10 @@ class ControllerSupport:
             buying_player: Player,
             buying: ResourceCount,
     ):
-        raise NotImplementedError
+        """Run the trade flow between two players."""
+        ...
 
+    @abstractmethod
     def try_buy_development_card(self, player: Player):
-        raise NotImplementedError
+        """Try to buy a development card through the controller workflow."""
+        ...

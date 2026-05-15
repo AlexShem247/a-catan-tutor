@@ -35,12 +35,14 @@ class RobberPolicy:
 
     def select_robber_target(
             self, player: Player, game: Game, valid_hexes: List[HexTile]) -> Tuple[HexTile, Optional[Player]]:
+        """Select the robber target hex and victim."""
         tile, steal_from, _ = self.select_robber_target_with_explanation(player, game, valid_hexes)
         return tile, steal_from
 
     def select_robber_target_with_explanation(
             self, player: Player, game: Game,
             valid_hexes: List[HexTile]) -> Tuple[HexTile, Optional[Player], Optional[ActionExplanation]]:
+        """Select the robber target with explanation."""
         if not self._use_strategic_move():
             tile, steal_from = self.random_ai.select_robber_target(player, game, valid_hexes)
             return tile, steal_from, self.explain_robber_choice(player, game, valid_hexes, tile, steal_from)
@@ -145,6 +147,7 @@ class RobberPolicy:
     def explain_robber_choice(
             self, player: Player, game: Game, _valid_hexes: List[HexTile], chosen_hex: HexTile,
             chosen_player: Optional[Player]) -> ActionExplanation:
+        """Handle explain robber choice."""
         our_resource_tiles = {h for v in (player.settlements + player.cities) for h in v.hexes}
         if not self.decision_config.use_opponent_interference:
             self_harm = 0.0
@@ -217,6 +220,7 @@ class RobberPolicy:
     def _build_robber_explanation(
             self, hex_tile: HexTile, target_player: Optional[Player], best_score: float,
             blocks_own_hex: bool, self_harm: float, leader_vp_ratio: float) -> ActionExplanation:
+        """Build the robber explanation."""
         reasons_for: List[Reason] = []
         if best_score > float("-inf"):
             reasons_for.append(Reason(

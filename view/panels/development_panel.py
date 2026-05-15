@@ -27,6 +27,7 @@ class DevelopmentPanel:
         back_action,
         pre_roll_mode: bool = False,
     ) -> None:
+        """Show the development card menu for the current player."""
         self.window.canvas.display_board(controller)
         development_manager = self.development_manager_widget
         development_manager.setParent(self.window.main_menu)

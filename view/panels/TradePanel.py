@@ -32,6 +32,7 @@ class TradePanel:
         self.active_trade_preview_widget: QWidget | None = None
 
     def clear_trade_preview(self) -> None:
+        """Clear the trade preview."""
         if self.active_trade_preview_widget is None:
             return
         self.window.main_menu.action_btn_layout.removeWidget(self.active_trade_preview_widget)
@@ -40,6 +41,7 @@ class TradePanel:
         self.window.restore_spacer()
 
     def display_trade_preview(self, explanation: ActionExplanation) -> None:
+        """Display the trade preview."""
         self.clear_trade_preview()
         template = explanation.metadata.get("template") or explanation.chosen_candidate.metadata.get("template")
         if template == ExplanationTemplate.TRADE_PARTNER:
@@ -56,6 +58,7 @@ class TradePanel:
             self._display_monopoly_preview(explanation)
 
     def _display_trade_partner_preview(self, explanation: ActionExplanation) -> None:
+        """Display the trade partner preview."""
         partner_name = explanation.chosen_candidate.metadata.get("partner_name", "player")
         payment = explanation.chosen_candidate.metadata.get("payment", {})
         buying = explanation.chosen_candidate.metadata.get("buying", {})
@@ -76,6 +79,7 @@ class TradePanel:
         select_trade.trade_list.setEnabled(False)
 
     def _display_trade_response_preview(self, explanation: ActionExplanation) -> None:
+        """Display the trade response preview."""
         trade_manager = self.trade_manager_widget
         trade_manager.setParent(self.window.main_menu)
         self.window.minimise_spacer()
@@ -115,6 +119,7 @@ class TradePanel:
             trade_manager.accept_btn.hide()
 
     def _display_robber_preview(self, explanation: ActionExplanation) -> None:
+        """Display the robber preview."""
         target_player = explanation.chosen_candidate.metadata.get("target_player_name")
         self.window.main_menu.main_label.setText("Move The Robber")
         if target_player:
@@ -125,6 +130,7 @@ class TradePanel:
             self.window.main_menu.action_label.setText("Move the robber to the highlighted tile.")
 
     def _display_discard_preview(self, explanation: ActionExplanation) -> None:
+        """Display the discard preview."""
         discard = explanation.chosen_candidate.metadata.get("discard_resources", {})
         total_to_discard = sum(discard.values())
         chooser = self.resource_selector_widget
@@ -143,6 +149,7 @@ class TradePanel:
         chooser.submit_btn.hide()
 
     def _display_year_of_plenty_preview(self, explanation: ActionExplanation) -> None:
+        """Display the year of plenty preview."""
         selected = explanation.chosen_candidate.metadata.get("selected_resources", {})
         self._display_resource_choice_preview(
             "Year Of Plenty",
@@ -151,6 +158,7 @@ class TradePanel:
         )
 
     def _display_monopoly_preview(self, explanation: ActionExplanation) -> None:
+        """Display the monopoly preview."""
         selected = explanation.chosen_candidate.metadata.get("selected_resources", {})
         self._display_resource_choice_preview(
             "Monopoly",
@@ -159,6 +167,7 @@ class TradePanel:
         )
 
     def _display_resource_choice_preview(self, title: str, action_text: str, selected: ResourceCount) -> None:
+        """Display the resource choice preview."""
         chooser = self.resource_selector_widget
         chooser.setParent(self.window.main_menu)
         self.window.minimise_spacer()
@@ -182,6 +191,7 @@ class TradePanel:
         on_update: Callable[[], None] | None = None,
         zero_other: Tuple[ResourceCount, Dict[Resource, Tuple[QLabel, QToolButton, QToolButton]]] | None = None,
     ) -> None:
+        """Handle create quantity handlers."""
         if caps is None:
             caps = {res: float("inf") for res in current_counts}
 
@@ -213,6 +223,7 @@ class TradePanel:
             update_label(res)
 
     def display_trade_menu(self, controller: GameController, player: Player, back_action) -> None:
+        """Display the trade menu workflow."""
         self.window.display_resources(controller)
         trade_designer = self.trade_designer_widget
         trade_designer.setParent(self.window.main_menu)
@@ -320,6 +331,7 @@ class TradePanel:
         buying: ResourceCount,
         willing_players,
     ) -> None:
+        """Display the player-trade selection workflow."""
         self.window.display_resources(controller)
         self.clear_trade_preview()
         self.window.main_menu.action_label.show()
@@ -393,6 +405,7 @@ class TradePanel:
     def show_resource_chooser(
         self, player, num_resources: int, title: str, resource_caps: ResourceCount | None = None
     ) -> None:
+        """Display the resource chooser widget."""
         self.clear_trade_preview()
         selection_widget = self.resource_selector_widget
         selection_widget.setParent(self.window.main_menu)
@@ -453,6 +466,7 @@ class TradePanel:
         update_labels()
 
     def display_trade_manager(self, player: Player, selling: ResourceCount, buying: ResourceCount, selling_player):
+        """Display the trade manager widget."""
         self.clear_trade_preview()
         trade_manager = self.trade_manager_widget
         trade_manager.setParent(self.window.main_menu)

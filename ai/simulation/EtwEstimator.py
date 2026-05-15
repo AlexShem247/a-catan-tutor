@@ -33,11 +33,12 @@ class EtwEstimator:
         self.selector = EtwSelection(self.timing, self.evaluator, self.last_trade_rejected, self)
 
     def new_turn(self):
-        """Clear previous turn trade info."""
+        """Reset per-turn AI state."""
         self._last_trade_proposed = False
         self._last_trade_resources = None
 
     def snapshot_trade_state(self) -> EtwTradeStateSnapshot:
+        """Capture the trade state."""
         last_trade_resources = self._last_trade_resources
         return EtwTradeStateSnapshot(
             last_trade_resources=None if last_trade_resources is None else last_trade_resources.copy(),
@@ -45,16 +46,19 @@ class EtwEstimator:
         )
 
     def restore_trade_state(self, snapshot: EtwTradeStateSnapshot) -> None:
+        """Restore the trade state."""
         self._last_trade_proposed = snapshot.last_trade_proposed
         self._last_trade_resources = (
             None if snapshot.last_trade_resources is None else snapshot.last_trade_resources.copy()
         )
 
     def record_trade_proposal(self, resources: ResourceCount) -> None:
+        """Record the trade proposal."""
         self._last_trade_proposed = True
         self._last_trade_resources = resources.copy()
 
     def clear_trade_proposal(self) -> None:
+        """Handle clear trade proposal."""
         self._last_trade_proposed = False
         self._last_trade_resources = None
 
@@ -65,6 +69,7 @@ class EtwEstimator:
         target_resources: ResourceCount,
         include_player_trades: bool = True,
     ) -> float:
+        """Handle estimated time to build."""
         return self.timing.estimated_time_to_build(
             player,
             sim_game,
@@ -82,6 +87,7 @@ class EtwEstimator:
         allow_development_cards: bool = True,
         use_planning: bool = True,
     ) -> float:
+        """Handle estimated time to win."""
         return self.evaluator.estimated_time_to_win(
             player,
             sim_game,
@@ -93,9 +99,11 @@ class EtwEstimator:
         )
 
     def calc_etb_actions(self, player, sim_game: SimGame, total_actions):
+        """Handle calc etb actions."""
         return self.timing.calc_etb_actions(player, sim_game, total_actions)
 
     def _simulate_step(self, sim_game: SimGame, player, step: Action):
+        """Simulate the step."""
         self.evaluator.simulate_step(sim_game, player, step)
 
     def _build_end_turn_candidate(
@@ -109,6 +117,7 @@ class EtwEstimator:
         use_planning: bool = True,
         use_time_discount: bool = True,
     ) -> CandidateExplanation:
+        """Build the end turn candidate."""
         return self.evaluator.build_end_turn_candidate(
             player,
             sim_game,
@@ -133,6 +142,7 @@ class EtwEstimator:
         use_planning: bool = True,
         use_time_discount: bool = True,
     ):
+        """Evaluate the candidates with explanations."""
         return self.evaluator.evaluate_candidates_with_explanations(
             player,
             sim_game,
@@ -147,7 +157,7 @@ class EtwEstimator:
         )
 
     def last_trade_rejected(self, player) -> bool:
-        """Return True if the last trade was proposed but resources did not change."""
+        """Handle last trade rejected."""
         if not self._last_trade_proposed or self._last_trade_resources is None:
             return False
         return self._last_trade_resources == player.resources
@@ -164,7 +174,7 @@ class EtwEstimator:
         allow_development_cards: bool = True,
         use_planning: bool = True,
     ) -> Action:
-        """Return the best next action for the given player number using the SimGame overlay."""
+        """Handle calculate best game action."""
         sim_player = sim_game.overlay.get_sim_player(player_number)
         etw_before = self.estimated_time_to_win(
             sim_player.copy(),
@@ -247,6 +257,7 @@ class EtwEstimator:
         allow_development_cards: bool = True,
         use_planning: bool = True,
     ) -> ActionExplanation:
+        """Handle explain action."""
         sim_player = sim_game.overlay.get_sim_player(player_number)
         etw_before = self.estimated_time_to_win(
             sim_player.copy(),
@@ -357,6 +368,7 @@ class EtwEstimator:
         allow_development_cards: bool = True,
         use_planning: bool = True,
     ) -> ActionExplanation:
+        """Handle calculate best game action with explanation."""
         sim_player = sim_game.overlay.get_sim_player(player_number)
         etw_before = self.estimated_time_to_win(
             sim_player.copy(),

@@ -1,7 +1,7 @@
 from typing import Dict, Tuple, List, Callable, Optional
 
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QObject, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QObject
 from PyQt6.QtGui import QIcon, QKeyEvent
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel, QToolButton, QSpacerItem,
@@ -29,11 +29,34 @@ from view.panels.TradePanel import TradePanel
 from view.panels.TutorPanel import TutorPanel
 from config.view_constants import (
     APP_ICON,
+    APP_WINDOW_TITLE,
     CROWN_SYM,
     HOME_ICON,
+    MAIN_WINDOW_BOARD_PANEL_DEFAULT_WIDTH,
+    MAIN_WINDOW_HEADER_ICON_SIZE,
+    MAIN_WINDOW_SIDE_PANEL_MAX_WIDTH,
+    MAIN_WINDOW_SIDE_PANEL_WIDTH,
+    OPPONENT_BADGE_PADDING_PX,
     PLAYER_COLORS,
+    PLAYER_BADGE_FONT_SIZE_PX,
+    PLAYER_BADGE_LIGHTER_FACTOR,
+    PLAYER_INDICATOR_BADGE_PADDING_PX,
     RULES_ICON,
     SETTINGS_ICON,
+    TUTOR_PANEL_DEFAULT_WIDTH_RATIO,
+    TURN_LABEL_BADGE_PADDING_PX,
+    UI_DEVELOPMENT_MANAGER_PATH,
+    UI_ENDGAME_REVIEW_PATH,
+    UI_MAIN_MENU_PATH,
+    UI_RESOURCE_SELECTOR_PATH,
+    UI_RESULTS_MENU_PATH,
+    UI_RULES_WINDOW_PATH,
+    UI_SELECT_TRADE_PATH,
+    UI_SETTINGS_WINDOW_PATH,
+    UI_START_MENU_PATH,
+    UI_TRADE_DESIGNER_PATH,
+    UI_TRADE_MANAGER_PATH,
+    UI_TUTOR_MENU_PATH,
 )
 from view.rich_text import tutor_window_title_html
 from view.styles import (
@@ -42,9 +65,8 @@ from view.styles import (
 from view.View import GameMode
 
 
+# noinspection PyUnresolvedReferences
 class MainWindow(QMainWindow):
-    SIDE_PANEL_WIDTH = 360
-    LABEL_LINE_LENGTH = 38
     startGame = pyqtSignal(object)
     turnMade = pyqtSignal(object)
     debugShortcutResult = pyqtSignal(object)
@@ -54,7 +76,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Settlers of Catan")
+        self.setWindowTitle(APP_WINDOW_TITLE)
         self.setWindowIcon(QIcon(APP_ICON))
 
         # Central widget
@@ -73,29 +95,29 @@ class MainWindow(QMainWindow):
         self.splitter_layout.addWidget(self.canvas)
 
         # Side panel
-        self.main_menu = uic.loadUi("view/ui/main_menu.ui")
+        self.main_menu = self._load_ui(UI_MAIN_MENU_PATH)
         self.main_menu.setMinimumWidth(0)
-        self.main_menu.setMaximumWidth(self.SIDE_PANEL_WIDTH * 2)
+        self.main_menu.setMaximumWidth(MAIN_WINDOW_SIDE_PANEL_MAX_WIDTH)
         self.splitter_layout.addWidget(self.main_menu)
-        self.splitter_layout.setSizes([1000, self.SIDE_PANEL_WIDTH])
+        self.splitter_layout.setSizes([MAIN_WINDOW_BOARD_PANEL_DEFAULT_WIDTH, MAIN_WINDOW_SIDE_PANEL_WIDTH])
 
         # Prevent canvas from being squashed too much
         self.splitter_layout.setStretchFactor(0, 1)
         self.splitter_layout.setStretchFactor(1, 0)
 
         # Tutor panel
-        self.tutor_menu = uic.loadUi("view/ui/tutor_menu.ui")
+        self.tutor_menu = self._load_ui(UI_TUTOR_MENU_PATH)
         self.tutor_menu.setMinimumWidth(0)
-        self.tutor_menu.setMaximumWidth(self.SIDE_PANEL_WIDTH * 2)
+        self.tutor_menu.setMaximumWidth(MAIN_WINDOW_SIDE_PANEL_MAX_WIDTH)
 
-        self.resource_selector_widget = uic.loadUi("view/ui/resource_selector.ui")
-        self.trade_designer_widget = uic.loadUi("view/ui/trade_designer.ui")
-        self.select_trade_widget = uic.loadUi("view/ui/select_trade.ui")
-        self.trade_manager_widget = uic.loadUi("view/ui/trade_manager.ui")
-        self.development_manager_widget = uic.loadUi("view/ui/development_manager.ui")
-        self.results_menu = uic.loadUi("view/ui/results_menu.ui")
-        self.endgame_review_menu = uic.loadUi("view/ui/endgame_review.ui")
-        self.start_menu = uic.loadUi("view/ui/start_menu.ui")
+        self.resource_selector_widget = self._load_ui(UI_RESOURCE_SELECTOR_PATH)
+        self.trade_designer_widget = self._load_ui(UI_TRADE_DESIGNER_PATH)
+        self.select_trade_widget = self._load_ui(UI_SELECT_TRADE_PATH)
+        self.trade_manager_widget = self._load_ui(UI_TRADE_MANAGER_PATH)
+        self.development_manager_widget = self._load_ui(UI_DEVELOPMENT_MANAGER_PATH)
+        self.results_menu = self._load_ui(UI_RESULTS_MENU_PATH)
+        self.endgame_review_menu = self._load_ui(UI_ENDGAME_REVIEW_PATH)
+        self.start_menu = self._load_ui(UI_START_MENU_PATH)
         self.tutor_panel = TutorPanel(self, self.tutor_menu)
         self.trade_panel = TradePanel(
             self,
@@ -117,9 +139,9 @@ class MainWindow(QMainWindow):
         self.history_next_btn = self.tutor_panel.history_next_btn
         self.history_exit_btn = self.tutor_panel.history_exit_btn
 
-        self.rule_window = uic.loadUi("view/ui/rules_window.ui")
+        self.rule_window = self._load_ui(UI_RULES_WINDOW_PATH)
         self.rule_window.setWindowIcon(QIcon(APP_ICON))
-        self.settings_window = uic.loadUi("view/ui/settings_window.ui")
+        self.settings_window = self._load_ui(UI_SETTINGS_WINDOW_PATH)
         self.settings_window.setWindowIcon(QIcon(APP_ICON))
         self.settings_difficulty_group = QButtonGroup(self.settings_window)
         self.settings_difficulty_group.setExclusive(True)
@@ -130,11 +152,10 @@ class MainWindow(QMainWindow):
         self.safe_connect(self.start_menu.settings_btn, self.show_settings)
         self.safe_connect(self.main_menu.help_btn, self.show_rules)
         self.tutor_menu.title_label.setText(tutor_window_title_html())
-        button_icon_size = QSize(18, 18)
         self.start_menu.help_btn.setIcon(QIcon(RULES_ICON))
-        self.start_menu.help_btn.setIconSize(button_icon_size)
+        self.start_menu.help_btn.setIconSize(MAIN_WINDOW_HEADER_ICON_SIZE)
         self.start_menu.settings_btn.setIcon(QIcon(SETTINGS_ICON))
-        self.start_menu.settings_btn.setIconSize(button_icon_size)
+        self.start_menu.settings_btn.setIconSize(MAIN_WINDOW_HEADER_ICON_SIZE)
         self.main_menu.help_btn.setText("")
         self.main_menu.help_btn.setIcon(QIcon(RULES_ICON))
         self.main_menu.help_btn.setIconSize(self.main_menu.help_btn.size())
@@ -160,7 +181,13 @@ class MainWindow(QMainWindow):
         self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(Action(ActionType.END_TURN)))
         self.safe_connect(self.main_menu.home_btn, self.return_to_start_screen)
 
+    @staticmethod
+    def _load_ui(path: str) -> QWidget:
+        """Load a Qt Designer UI file."""
+        return uic.loadUi(path)
+
     def safe_connect(self, button: QToolButton | QPushButton, slot: Callable):
+        """Reconnect a button click signal to the given slot."""
         try:
             button.clicked.disconnect()  # type: ignore[attr-defined]
         except TypeError:
@@ -168,9 +195,11 @@ class MainWindow(QMainWindow):
         button.clicked.connect(slot)  # type: ignore[attr-defined]
 
     def set_restore_board_state_callback(self, callback: Optional[Callable[[], None]]):
+        """Store the callback used to restore the board state."""
         self.restore_board_state_callback = callback
 
     def return_to_start_screen(self):
+        """Return the UI to the start screen workflow."""
         self.tutor_panel.stop_auto_feedback()
         self.return_home_requested = True
         home_action = Action(ActionType.RETURN_HOME)
@@ -181,23 +210,27 @@ class MainWindow(QMainWindow):
         self.resourcesPicked.emit(home_action)
 
     def consume_return_home_request(self) -> bool:
+        """Consume and clear any pending return-home request."""
         requested = self.return_home_requested
         self.return_home_requested = False
         return requested
 
     def show_rules(self):
+        """Show the rules window."""
         # Show the rule window
         self.rule_window.show()
         self.rule_window.raise_()  # Bring it to the front
         self.rule_window.activateWindow()  # Focus it
 
     def show_settings(self):
+        """Show the settings window with current values loaded."""
         self.settings_panel.load_settings_into_ui()
         self.settings_window.show()
         self.settings_window.raise_()
         self.settings_window.activateWindow()
 
     def _apply_player_colour_indicators(self) -> None:
+        """Apply styled player indicators to the opponent labels."""
         player_label_map = {
             PlayerNumber.P2: self.main_menu.p2_label,
             PlayerNumber.P3: self.main_menu.p3_label,
@@ -208,21 +241,23 @@ class MainWindow(QMainWindow):
                 label,
                 label.text(),
                 player_number,
-                vertical_padding_px=3,
-                horizontal_padding_px=8,
-                font_size_px=12,
+                vertical_padding_px=PLAYER_INDICATOR_BADGE_PADDING_PX[0],
+                horizontal_padding_px=PLAYER_INDICATOR_BADGE_PADDING_PX[1],
+                font_size_px=PLAYER_BADGE_FONT_SIZE_PX,
             )
 
     def _set_turn_label(self, player: Player) -> None:
+        """Update the turn label for the active player."""
         self._set_player_badge(
             self.main_menu.turn_label,
             f"{player.name}'s turn",
             player.player_number,
-            vertical_padding_px=4,
-            horizontal_padding_px=8,
+            vertical_padding_px=TURN_LABEL_BADGE_PADDING_PX[0],
+            horizontal_padding_px=TURN_LABEL_BADGE_PADDING_PX[1],
         )
 
     def _resolve_turn_label_player(self, player: Player, explanation: ActionExplanation | None = None) -> Player:
+        """Resolve which player should be shown in the turn label."""
         if explanation is None:
             return player
 
@@ -254,7 +289,8 @@ class MainWindow(QMainWindow):
             horizontal_padding_px: int,
             font_size_px: int | None = None,
     ) -> None:
-        colour = PLAYER_COLORS[player_number].lighter(150).name()
+        """Apply the styled player badge text to a label."""
+        colour = PLAYER_COLORS[player_number].lighter(PLAYER_BADGE_LIGHTER_FACTOR).name()
         label.setStyleSheet(player_badge_stylesheet(
             colour,
             vertical_padding_px,
@@ -264,6 +300,7 @@ class MainWindow(QMainWindow):
         label.setText(text)
 
     def find_last_vertical_spacer(self) -> QSpacerItem | None:
+        """Find the last vertical spacer in the main menu layout."""
         last_spacer = None
         layout = self.main_menu.frame.layout()
         if layout is None:
@@ -277,7 +314,7 @@ class MainWindow(QMainWindow):
         return last_spacer
 
     def minimise_spacer(self):
-        """Shrinks self.verticalSpacer to zero size, effectively hiding it."""
+        """Collapse the main menu spacer to reclaim vertical space."""
         if getattr(self, "verticalSpacer", None) is None:
             return
 
@@ -295,7 +332,7 @@ class MainWindow(QMainWindow):
             self.main_menu.frame.layout().update()
 
     def restore_spacer(self):
-        """Restores self.verticalSpacer to its original size and size policy."""
+        """Restore the main menu spacer to its original size."""
         if getattr(self, "verticalSpacer", None) is None:
             return
 
@@ -309,6 +346,7 @@ class MainWindow(QMainWindow):
             self.main_menu.frame.layout().update()
 
     def toggle_main_action_btns(self, show: bool):
+        """Show or hide the main action buttons."""
         for i in range(self.main_menu.action_btn_layout.count()):
             widget: QWidget = self.main_menu.action_btn_layout.itemAt(i).widget()
             if widget:
@@ -318,12 +356,14 @@ class MainWindow(QMainWindow):
                     widget.hide()
 
     def set_main_action_btns_enabled(self, enabled: bool):
+        """Enable or disable the main action buttons."""
         for i in range(self.main_menu.action_btn_layout.count()):
             widget: QWidget = self.main_menu.action_btn_layout.itemAt(i).widget()
             if widget:
                 widget.setEnabled(enabled)
 
     def _capture_main_action_btn_enabled_states(self) -> List[bool]:
+        """Capture the enabled state of the main action buttons."""
         states: List[bool] = []
         for i in range(self.main_menu.action_btn_layout.count()):
             widget: QWidget = self.main_menu.action_btn_layout.itemAt(i).widget()
@@ -332,6 +372,7 @@ class MainWindow(QMainWindow):
         return states
 
     def _restore_main_action_btn_enabled_states(self):
+        """Restore the saved enabled state of the main action buttons."""
         if not self.main_action_btn_enabled_states:
             return
         state_index = 0
@@ -343,21 +384,26 @@ class MainWindow(QMainWindow):
         self.main_action_btn_enabled_states = []
 
     def _clear_debug_tutor_shortcut_context(self):
+        """Clear the temporary tutor shortcut handlers."""
         self.debug_tutor_shortcut_handler = None
         self.debug_tutor_shortcut_finalizer = None
 
     def set_debug_tutor_shortcut_handler(self, handler: Optional[Callable[[], object]]):
+        """Store the debug tutor shortcut handler."""
         self.debug_tutor_shortcut_handler = handler
 
     def set_debug_tutor_shortcut_finalizer(self, finalizer: Optional[Callable[[], None]]):
+        """Store the debug tutor shortcut finalizer."""
         self.debug_tutor_shortcut_finalizer = finalizer
 
     def _clear_tutor_shortcut_ui_state(self) -> None:
+        """Clear temporary tutor shortcut UI state."""
         if self.tutor_panel.dismiss_tutor_hint_callback is not None:
             self.tutor_panel.dismiss_tutor_hint_callback()
         self.trade_panel.clear_trade_preview()
 
     def _try_apply_tutor_shortcut(self, handler: Optional[Callable[[], object]]) -> bool:
+        """Try to run the active tutor shortcut handler."""
         if handler is None:
             return False
 
@@ -369,9 +415,11 @@ class MainWindow(QMainWindow):
         return True
 
     def _try_apply_tutor_recommended_move(self) -> bool:
+        """Try to apply the tutor-recommended move shortcut."""
         return self._try_apply_tutor_shortcut(self.debug_tutor_shortcut_handler)
 
     def _show_fullscreen_panel(self, panel: QWidget):
+        """Show the fullscreen panel."""
         current_size = self.size()
         if self.root_layout.indexOf(self.splitter_layout) != -1:
             self.root_layout.removeWidget(self.splitter_layout)
@@ -389,20 +437,24 @@ class MainWindow(QMainWindow):
         self.resize(current_size)
 
     def resizeEvent(self, event):
+        """Refresh hover state after the window is resized."""
         super().resizeEvent(event)
         self.endgame_review_panel.reset_hover()
 
     def leaveEvent(self, event):
+        """Clear hover state when the cursor leaves the window."""
         self.endgame_review_panel.reset_hover()
         super().leaveEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent):
+        """Handle key presses for window-level shortcuts."""
         if event.key() == Qt.Key.Key_F8 and self._try_apply_tutor_recommended_move():
             event.accept()
             return
         super().keyPressEvent(event)
 
     def _restore_splitter_layout(self):
+        """Restore the main splitter layout after fullscreen panels."""
         if self.fullscreen_panel is not None and self.root_layout.indexOf(self.fullscreen_panel) != -1:
             self.root_layout.removeWidget(self.fullscreen_panel)
             self.fullscreen_panel.setParent(None)
@@ -414,6 +466,7 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _clear_layout(layout: QLayout):
+        """Remove and delete all widgets from a layout."""
         while layout.count():
             item = layout.takeAt(0)
             child_layout = item.layout()
@@ -426,14 +479,17 @@ class MainWindow(QMainWindow):
                 widget.deleteLater()
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        """Handle filtered events for endgame review widgets."""
         if self.endgame_review_panel.handle_event_filter(watched, event):
             return True
         return super().eventFilter(watched, event)
 
     def closeEvent(self, _):
+        """Exit the application when the window closes."""
         quit()
 
     def display_resources(self, controller: BoardDisplaySource):
+        """Display the current board and player resource totals."""
         if isinstance(controller, GameController):
             self.live_board_source = controller
 
@@ -502,9 +558,9 @@ class MainWindow(QMainWindow):
                     labels["name"],
                     name_text,
                     player.player_number,
-                    vertical_padding_px=2,
-                    horizontal_padding_px=8,
-                    font_size_px=12,
+                    vertical_padding_px=OPPONENT_BADGE_PADDING_PX[0],
+                    horizontal_padding_px=OPPONENT_BADGE_PADDING_PX[1],
+                    font_size_px=PLAYER_BADGE_FONT_SIZE_PX,
                 )
                 labels["victory_points"].setText(str(player.calc_victory_points()[0]))
                 labels["num_resources"].setText(str(sum(player.resources.values())))
@@ -513,6 +569,7 @@ class MainWindow(QMainWindow):
                 labels["longest_road"].setText(str(player.longest_road_length))
 
     def display_generic_info(self, player: Player, msg: str):
+        """Show a generic status message for the current player."""
         self._clear_debug_tutor_shortcut_context()
         self.canvas.clear_planned_builds()
         self._set_turn_label(player)
@@ -524,6 +581,7 @@ class MainWindow(QMainWindow):
 
     def display_round_info(self, controller: GameController, player: Player, dice_info: Tuple[int, int, int],
                            played_dev_card: bool = False):
+        """Display the main round UI for a player turn."""
         self.tutor_panel.reset_for_turn()
         self.canvas.clear_feedback_builds()
         self.canvas.interactive_shapes.clear()
@@ -561,42 +619,54 @@ class MainWindow(QMainWindow):
         self.set_restore_board_state_callback(None)
 
     def configure_tutor_panel(self, game_mode: GameMode):
+        """Configure the tutor panel for the selected game mode."""
         self.tutor_panel.configure_for_game_mode(game_mode)
 
     def open_tutor_menu(self, open_menu: bool):
+        """Toggle the tutor menu visibility."""
         if open_menu:
             # Avoid adding it twice
             if self.splitter_layout.indexOf(self.tutor_menu) == -1:
                 self.tutor_menu.setMinimumWidth(0)
-                self.tutor_menu.setMaximumWidth(self.SIDE_PANEL_WIDTH * 2)
+                self.tutor_menu.setMaximumWidth(MAIN_WINDOW_SIDE_PANEL_MAX_WIDTH)
                 self.splitter_layout.insertWidget(0, self.tutor_menu)
             self.tutor_menu.show()
-            self.splitter_layout.setSizes([int(self.SIDE_PANEL_WIDTH * 0.8), 1000, self.SIDE_PANEL_WIDTH])
+            self.splitter_layout.setSizes([
+                int(MAIN_WINDOW_SIDE_PANEL_WIDTH * TUTOR_PANEL_DEFAULT_WIDTH_RATIO),
+                MAIN_WINDOW_BOARD_PANEL_DEFAULT_WIDTH,
+                MAIN_WINDOW_SIDE_PANEL_WIDTH,
+            ])
 
         else:
             if self.splitter_layout.indexOf(self.tutor_menu) != -1:
                 self.tutor_menu.hide()
                 self.tutor_menu.setParent(None)
-            self.splitter_layout.setSizes([1000, self.SIDE_PANEL_WIDTH])
+            self.splitter_layout.setSizes([MAIN_WINDOW_BOARD_PANEL_DEFAULT_WIDTH, MAIN_WINDOW_SIDE_PANEL_WIDTH])
 
     def display_tutor_init(self, player: Player, stage: TutorStage, explanation: ActionExplanation):
+        """Display the tutor introduction for the current stage."""
         self.tutor_panel.display_tutor_init(player, stage, explanation)
 
     def display_explanation(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
                             explanation: ActionExplanation):
+        """Display the tutor explanation for the current move."""
         self.tutor_panel.display_explanation(player, dice_info, explanation)
 
     def display_tutor_action_feedback(self, feedback: TutorFeedbackExplanation) -> None:
+        """Display tutor feedback for the player action."""
         self.tutor_panel.display_tutor_action_feedback(feedback)
 
     def display_trade_menu(self, controller: GameController, player: Player, back_action):
+        """Display the trade menu workflow."""
         self.trade_panel.display_trade_menu(controller, player, back_action)
 
     def select_player_to_trade(self, controller: GameController, player: Player, selling: ResourceCount,
                                buying: ResourceCount, willing_players: List[Tuple[Player, ResourceCount | None]]):
+        """Display the player-trade selection workflow."""
         self.trade_panel.select_player_to_trade(controller, player, selling, buying, willing_players)
 
     def display_round_info_ai_start(self, player: Player, dice_info: Optional[Tuple[int, int, int]], msg: str):
+        """Display the waiting state while an AI turn begins."""
         self._clear_debug_tutor_shortcut_context()
         self.tutor_panel.prepare_ai_wait_state()
         self.canvas.clear_feedback_builds()
@@ -620,13 +690,16 @@ class MainWindow(QMainWindow):
 
     def show_resource_chooser(self, player, num_resources: int, title: str,
                               resource_caps: ResourceCount | None = None):
+        """Display the resource chooser widget."""
         self.trade_panel.show_resource_chooser(player, num_resources, title, resource_caps)
 
     def display_trade_manager(self, player: Player, selling: ResourceCount,
                               buying: ResourceCount, selling_player: Player):
+        """Display the trade manager widget."""
         self.trade_panel.display_trade_manager(player, selling, buying, selling_player)
 
     def draw_buildables_if_can_build(self, controller, player):
+        """Draw buildable board options when the player can build."""
         def build(selected_buildable: Vertex | Edge):
             match selected_buildable:
                 case Edge():
@@ -651,6 +724,7 @@ class MainWindow(QMainWindow):
             self.main_menu.action_label.setText("")
 
     def display_results(self, controller: GameController):
+        """Display the game results view."""
         self._clear_debug_tutor_shortcut_context()
         if controller.game_mode in {GameMode.PLAY, GameMode.TUTOR}:
             self.endgame_review_panel.display_tutor_endgame_review(controller)
@@ -658,6 +732,7 @@ class MainWindow(QMainWindow):
         self.endgame_review_panel.display_results(controller)
 
     def _set_primary_side_panel(self, panel: QWidget):
+        """Show the given widget as the primary side panel."""
         self._restore_splitter_layout()
 
         for widget in (self.main_menu, self.start_menu, self.results_menu):
@@ -665,12 +740,13 @@ class MainWindow(QMainWindow):
                 widget.setParent(None)
 
         panel.setMinimumWidth(0)
-        panel.setMaximumWidth(self.SIDE_PANEL_WIDTH * 2)
+        panel.setMaximumWidth(MAIN_WINDOW_SIDE_PANEL_MAX_WIDTH)
         self.splitter_layout.addWidget(panel)
         panel.show()
-        self.splitter_layout.setSizes([1000, self.SIDE_PANEL_WIDTH])
+        self.splitter_layout.setSizes([MAIN_WINDOW_BOARD_PANEL_DEFAULT_WIDTH, MAIN_WINDOW_SIDE_PANEL_WIDTH])
 
     def display_start_screen(self):
+        """Render the start screen artwork on the canvas."""
         self.return_home_requested = False
         self._clear_debug_tutor_shortcut_context()
         self.tutor_panel.reset_for_start_screen()

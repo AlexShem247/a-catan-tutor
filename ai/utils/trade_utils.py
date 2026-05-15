@@ -5,6 +5,7 @@ from ai.simulation.SimGame import SimGame
 from ai.simulation.SimPlayerState import SimPlayerState
 from ai.actions import Action, ActionType
 from ai.utils.resource_utils import expected_rolls_for_resource
+from config.move_quality_constants import LOGISTIC_CLAMP_MAX, LOGISTIC_CLAMP_MIN
 from config.StrategyWeights import StrategyWeights
 from config.performance_constants import EPSILON, TRADE_ETW_SHORTLIST_K, CHECK_INVALID_TRADES_EARLY
 from game.Resources import Resource, ResourceCount
@@ -14,13 +15,13 @@ if TYPE_CHECKING:
 
 
 def _stable_logistic(score: float) -> float:
-    """Numerically stable logistic function."""
-    clamped_score = max(-60.0, min(60.0, score))
+    """Compute a numerically stable logistic value."""
+    clamped_score = max(LOGISTIC_CLAMP_MIN, min(LOGISTIC_CLAMP_MAX, score))
     return 1.0 / (1.0 + math.exp(-clamped_score))
 
 
 def _sim_game_with_replaced_player(sim_game: SimGame, sim_player: SimPlayerState) -> SimGame:
-    """Return a SimGame with the given player state replaced in the overlay."""
+    """Clone a simulation game with a replacement player state."""
     ov2 = sim_game.overlay.copy()
     ov2.set_sim_player(sim_player)
     return SimGame(game=sim_game.game, overlay=ov2)
@@ -31,7 +32,7 @@ def _generate_candidate_offers(
     surplus: ResourceCount,
     max_ratio: int = StrategyWeights.MAX_PLAYER_TRADE_GIVE_RATIO,
 ) -> List[Action]:
-    """Generate plausible trade offers exchanging surplus resources for a needed resource."""
+    """Generate candidate trade offers to evaluate."""
 
     # Generate simple "fair" exchange ratios (e.g. 1:1, 2:1, ..., up to a cap).
     fair_ratios: List[Tuple[int, int]] = [(k, 1) for k in range(1, max_ratio + 1)]
@@ -75,7 +76,7 @@ def _evaluate_etw_after_trade(
     etw_estimator: "EtwEstimator",
     trade: Action,
 ) -> float:
-    """Estimate ETW after applying a trade, without crediting additional player trades."""
+    """Estimate ETW after applying a trade."""
     selling, buying = trade.payload
     sim_player = player.copy()
     sim_player.remove_resources(selling)
@@ -97,7 +98,7 @@ def _estimate_opponent_benefit_etw(
     etw_estimator: "EtwEstimator",
     trade: Action,
 ) -> float:
-    """Estimate opponent ETW improvement if they accept the trade."""
+    """Estimate the opponent ETW benefit from a trade."""
 
     # Compute opponent ETW before the trade.
     selling_by_them, buying_from_us = trade.payload
@@ -126,7 +127,7 @@ def _estimate_opponent_benefit_etw(
 
 
 def _predict_acceptance_prob(_: SimPlayerState, delta_etw: float, trade: Action) -> float:
-    """Estimate probability that an opponent accepts a proposed trade."""
+    """Estimate the acceptance probability for a trade."""
 
     # Cost to opponent measured as total resources they give up.
     _, buying_from_them = trade.payload
@@ -143,7 +144,7 @@ def _predict_acceptance_prob(_: SimPlayerState, delta_etw: float, trade: Action)
 
 
 def _apply_trade_copy(player: SimPlayerState, trade: Action) -> SimPlayerState:
-    """Return a copy of player state with the trade applied."""
+    """Return a copied player state with a trade applied."""
     selling, buying = trade.payload
     p2 = player.copy()
     p2.remove_resources(selling)
@@ -158,7 +159,7 @@ def _cheap_score_offer(
     trade: Action,
     p_accept: float,
 ) -> float:
-    """Return a cheap ETB-based proxy score for an offer, adjusted by acceptance probability."""
+    """Score a trade offer with a lightweight heuristic."""
 
     # Measure how fast the desired resources can be built before the trade.
     _, buying = trade.payload
@@ -197,7 +198,7 @@ def propose_trade(
     lambda_leader: float = StrategyWeights.LAMBDA_RISK_LEADER,
     lambda_base: float = StrategyWeights.LAMBDA_RISK_BASE,
 ) -> Optional[Action]:
-    """Return best trade proposal if it beats BATNA and is not too helpful to the opponent."""
+    """Propose the best trade for the current simulated state."""
     best_offer = None
     best_score = float("inf")
 
@@ -290,7 +291,7 @@ def propose_trade(
 
 
 def _apply_trade_to_sim(sim_p: SimPlayerState, selling_to_us: ResourceCount, buying_from_us: ResourceCount) -> None:
-    """Apply the trade from our perspective."""
+    """Apply a trade directly to a simulated player state."""
     sim_p.add_resources(selling_to_us)
     sim_p.remove_resources(buying_from_us)
 
@@ -302,7 +303,7 @@ def _opponent_delta_etw_if_accepts(
     selling_to_us: ResourceCount,
     buying_from_us: ResourceCount,
 ) -> float:
-    """Return opponent ETW improvement if they accept a trade."""
+    """Estimate the opponent ETW change if the trade is accepted."""
 
     # Opponent ETW before the trade.
     etw_before = etw_estimator.estimated_time_to_win(
@@ -331,7 +332,7 @@ def _opponent_delta_etw_if_accepts(
 
 def _is_close_or_leading(opponent: SimPlayerState, us: SimPlayerState,
                          all_players: List[SimPlayerState], sim_game: SimGame, etw_estimator) -> bool:
-    """True if opponent is ETW-leader or close by VP."""
+    """Check whether an opponent is close to or ahead of us."""
 
     # Identify the current ETW leader (lowest expected time to win).
     etw_by_p = {
@@ -352,7 +353,7 @@ def _generate_counter_payments_keep_offer_fixed(
     selling_to_us: ResourceCount,
     buying_from_us: ResourceCount,
 ) -> List[ResourceCount]:
-    """Return candidate counter-payments from us while keeping their offered selling fixed."""
+    """Generate counter payments while keeping the requested resources fixed."""
     counters: List[ResourceCount] = []
 
     # Nothing to counter if we were offering nothing.
@@ -414,7 +415,7 @@ def respond_to_trade_batna(
     lambda_leader: float = StrategyWeights.LAMBDA_RISK_LEADER,
     lambda_base: float = StrategyWeights.LAMBDA_RISK_BASE,
 ) -> Tuple[bool, Optional[ResourceCount]]:
-    """Return (accept, counter_payment) for an incoming trade offer."""
+    """Choose the best trade response under the BATNA heuristic."""
 
     # Reject immediately if we can't actually pay our side.
     for r, q in buying_from_us.items():
@@ -537,7 +538,7 @@ def select_best_trade_partner(
     lambda_base: float = StrategyWeights.LAMBDA_RISK_BASE,
     leader_penalty: float = StrategyWeights.TRADE_LEADER_PENALTY,
 ) -> Optional[Tuple[SimPlayerState, Optional[ResourceCount]]]:
-    """Return best partner (and optional counter) that yields lowest ETW-after subject to risk constraints."""
+    """Choose the best trade partner for the proposed deal."""
     if not available_players:
         return None
 

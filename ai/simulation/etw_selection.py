@@ -26,6 +26,7 @@ class EtwSelection:
         ignore_affordability: bool = False,
         include_player_trades: bool = True,
     ) -> Action:
+        """Choose the max utility action."""
         best_action: Optional[Action] = None
         best_utility = float("-inf")
 
@@ -65,6 +66,7 @@ class EtwSelection:
         include_player_trades: bool = True,
         use_time_discount: bool = True,
     ) -> Tuple[Action, CandidateExplanation]:
+        """Choose the max utility action with candidate."""
         best_action: Optional[Action] = None
         best_candidate: Optional[CandidateExplanation] = None
         best_utility = float("-inf")

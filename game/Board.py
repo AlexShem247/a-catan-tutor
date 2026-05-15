@@ -46,6 +46,7 @@ class Board:
         self.assign_neighbors()
 
     def create_hexes(self) -> None:
+        """Create and assign the board hex tiles."""
         hex_types_sequence: List[HexType] = [
             HexType.FOREST, HexType.FOREST, HexType.FOREST, HexType.FOREST,
             HexType.HILLS, HexType.HILLS, HexType.HILLS,
@@ -103,6 +104,7 @@ class Board:
                 self.production_to_hex[production_number].append(hex_tile)
 
     def create_vertices(self) -> None:
+        """Create the board vertices and attach them to hexes."""
         vertex_map: Dict[Tuple[Tuple[int, int], ...], Vertex] = {}
 
         # Axial offsets for corners of a pointy-top hex
@@ -133,6 +135,7 @@ class Board:
                 self.vertex_map[(hex_tile.q, hex_tile.r, VertexDirection(idx))] = vertex
 
     def create_edges(self) -> None:
+        """Create the board edges and connect them to vertices."""
         edge_map: Dict[Tuple[int, int], Edge] = {}
 
         for hex_tile in self.hexes:
@@ -189,6 +192,7 @@ class Board:
             available_edges.remove(i)
 
     def assign_neighbors(self) -> None:
+        """Link neighboring vertices across the board."""
         directions: List[Tuple[int, int]] = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]
         for hex_tile in self.hexes:
             for dq, dr in directions:
@@ -197,24 +201,24 @@ class Board:
                     hex_tile.neighbors.append(neighbor)
 
     def build_settlement(self, vertex: Vertex, player: Player) -> None:
-        """Directly build a settlement at the vertex, ignoring validation."""
+        """Build a settlement for the player on the given vertex."""
         vertex.owner = player
         vertex.building = Building.SETTLEMENT
         player.add_settlement(vertex)
 
     def build_city(self, vertex: Vertex, player: Player) -> None:
-        """Directly upgrade a settlement to a city, ignoring validation."""
+        """Upgrade the given settlement to a city."""
         vertex.building = Building.CITY
         player.add_city(vertex)
 
     def build_road(self, edge: Edge, player: Player) -> None:
-        """Directly assign ownership of a road, ignoring validation."""
+        """Build a road for the player on the given edge."""
         edge.owner = player
         player.add_road(edge)
 
     @staticmethod
     def calculate_longest_road_length(roads: List[Edge]) -> int:
-        """Calculate the longest continuous road length for a player."""
+        """Calculate the longest connected road length."""
         if not roads:
             return 0
 
@@ -240,7 +244,7 @@ class Board:
     @staticmethod
     def _dfs_longest_path(current_road: Edge, current_vertex: Vertex,
                           road_graph: Dict, visited_roads: Set) -> int:
-        """DFS to find the longest path from current position."""
+        """Explore road paths to find the longest valid route."""
         visited_roads.add(current_road)
         max_length = 1  # Current road counts as 1
 
@@ -264,12 +268,12 @@ class Board:
 
     @staticmethod
     def _is_road_blocked(vertex: Vertex, player: Player) -> bool:
-        """Check if a road connection is blocked by opponent's building."""
+        """Check whether a road path is blocked at the vertex."""
         # If vertex has a building owned by another player, it blocks the path
         return vertex.owner is not None and vertex.owner != player
 
     def _get_water_edges(self) -> List[Edge]:
-        """Returns the edges that are on the edge of the map"""
+        """Return the water-facing edges on the board perimeter."""
         WIDTH = 6  # Edges in a hexagon
         directions = [
             t

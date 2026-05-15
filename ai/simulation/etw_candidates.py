@@ -26,6 +26,7 @@ class EtwCandidateGenerator:
 
     @staticmethod
     def _immediate_vp_gain(action: Action) -> float:
+        """Handle immediate vp gain."""
         if action.type != ActionType.BUILD:
             return 0.0
         buildable, _ = action.payload
@@ -40,6 +41,7 @@ class EtwCandidateGenerator:
         action: Action,
         include_player_trades: bool = True,
     ) -> float:
+        """Estimate the single action etb."""
         cost = Game.BUILDING_COST.get(action.payload[0], {}) if action.type == ActionType.BUILD else None
         if cost is None:
             from ai.utils.resource_utils import calc_step_resources
@@ -60,6 +62,7 @@ class EtwCandidateGenerator:
         action: Action,
         include_player_trades: bool = True,
     ) -> float:
+        """Estimate the single action etb."""
         return self._estimate_single_action_etb(
             player,
             sim_game,
@@ -76,7 +79,7 @@ class EtwCandidateGenerator:
         allow_development_cards: bool = True,
         use_planning: bool = True,
     ) -> List[Tuple[List[Action], float, float]]:
-        """Generate and prune candidates, returning (actions, etb, expected_vp_gain)."""
+        """Return the candidate actions."""
         cache_key = (
             player.player_number,
             dev_played,

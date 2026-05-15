@@ -11,10 +11,11 @@ from game.PlayerAssets import Buildable
 from game.Resources import HexType
 from view.canvas.board_display_source import BoardDisplaySource
 from view.canvas.board_geometry import hex_center, vertex_xy
-from config.view_constants import WINDOW_HEIGHT, BOARD_BG_COLOR, HEX_TILE_RADIUS, SETTLEMENT_ICONS, hex_to_filepath, \
-    EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON, HIGHLIGHT_COLOR, OUTLINE_COLOR, \
-    PORT_EDGE_COLOR, PORT_ICONS, TITLE_COLOR, SEA_BACKGROUND, SETTLEMENT_OUTLINE, SETTLEMENT_OUTLINE_SOLID, \
-    CITY_OUTLINE, PLAN_OUTLINE_COLOR
+from config.view_constants import WINDOW_HEIGHT, BOARD_BG_COLOR, CANVAS_ANIMATION_INTERVAL_MS, \
+    CANVAS_ZOOM_HINT_FONT_SIZE_PX, CANVAS_ZOOM_HINT_PADDING_PX, HEX_TILE_RADIUS, SETTLEMENT_ICONS, \
+    hex_to_filepath, EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON, HIGHLIGHT_COLOR, \
+    OUTLINE_COLOR, PORT_EDGE_COLOR, PORT_ICONS, TITLE_COLOR, SEA_BACKGROUND, SETTLEMENT_OUTLINE, \
+    SETTLEMENT_OUTLINE_SOLID, CITY_OUTLINE, PLAN_OUTLINE_COLOR
 from view.canvas.shapes import HexTileShape, VertexShape, LineShape, InteractiveShape, InteractiveCircle, PixmapShape, \
     TextShape, InteractivePixmap, InteractiveRoadOverlay, InteractiveRoadVertexOverlay, PulsingPixmapShape, \
     PulsingLineShape
@@ -55,7 +56,7 @@ class SquareCanvas(QWidget):
         # Timer for animation
         self.anim_timer = QTimer()
         self.anim_timer.timeout.connect(self.update)
-        self.anim_timer.start(16)
+        self.anim_timer.start(CANVAS_ANIMATION_INTERVAL_MS)
 
         # Load icons
         self.icons: Dict[str, QPixmap] = {}
@@ -76,17 +77,21 @@ class SquareCanvas(QWidget):
             self.icons[path] = QPixmap(path)
 
     def sizeHint(self):
+        """Return the preferred canvas size."""
         return QSize(WINDOW_HEIGHT, WINDOW_HEIGHT)
 
     def add_shape(self, shape):
+        """Add a shape to the canvas."""
         self.shapes.append(shape)
         self.update()
 
     def clear_shapes(self):
+        """Clear all shapes from the canvas."""
         self.shapes = []
         self.update()
 
     def clamp_offset(self):
+        """Clamp the canvas pan offset to the visible bounds."""
         scale = self.base_scale * self.zoom
         world_px = self.world_size * scale
         view_px = self.square_rect.width()
@@ -102,6 +107,7 @@ class SquareCanvas(QWidget):
             self.offset.setY(min(max(self.offset.y(), min_y), max_y))
 
     def mousePressEvent(self, event):
+        """Handle mouse press interactions on the canvas."""
         if event.button() == Qt.MouseButton.LeftButton:
 
             # Manage object selection
@@ -120,6 +126,7 @@ class SquareCanvas(QWidget):
                 self.setCursor(QCursor(Qt.CursorShape.ClosedHandCursor))
 
     def mouseMoveEvent(self, event):
+        """Handle mouse movement for dragging and hover state."""
         # Handle dragging
         if self.dragging:
             delta = event.position() - self.last_mouse_pos
@@ -157,12 +164,14 @@ class SquareCanvas(QWidget):
                 self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
 
     def mouseReleaseEvent(self, event):
+        """Handle mouse release interactions on the canvas."""
         if event.button() == Qt.MouseButton.LeftButton:
             self.dragging = False
             self.last_mouse_pos = None
             self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
 
     def wheelEvent(self, event):
+        """Handle mouse-wheel zooming on the canvas."""
         if not self.square_rect.contains(event.position().toPoint()):
             return
 
@@ -190,6 +199,7 @@ class SquareCanvas(QWidget):
         self.update()
 
     def paintEvent(self, event):
+        """Paint the widget contents."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
@@ -200,14 +210,15 @@ class SquareCanvas(QWidget):
             painter.fillRect(self.rect(), BOARD_BG_COLOR)
 
             font = painter.font()
-            font.setPointSize(12)
+            font.setPointSize(CANVAS_ZOOM_HINT_FONT_SIZE_PX)
             painter.setFont(font)
 
             text = "Use the scrollbar to zoom in"
             fm = QFontMetrics(font)
             text_rect = fm.boundingRect(text)
 
-            padding_x, padding_y = 12, 12
+            padding_x = CANVAS_ZOOM_HINT_PADDING_PX
+            padding_y = CANVAS_ZOOM_HINT_PADDING_PX
 
             x = self.width() - text_rect.width() - padding_x
             y = self.height() - padding_y
@@ -235,29 +246,34 @@ class SquareCanvas(QWidget):
             shape.draw(painter, scale, self.offset)
 
     def clear_interactives(self):
+        """Clear all interactive shapes from the canvas."""
         self.interactive_shapes.clear()
         self.shapes = [shape for shape in self.shapes if not isinstance(shape, InteractiveShape)]
         self.hovered_shape = None
 
     def clear_planned_builds(self):
+        """Clear the planned build overlays from the canvas."""
         self.planned_builds = []
         self.shapes = [shape for shape in self.shapes if shape not in self.planned_overlay_shapes]
         self.planned_overlay_shapes = []
         self.update()
 
     def clear_feedback_builds(self):
+        """Clear the feedback build overlays from the canvas."""
         self.feedback_builds = []
         self.shapes = [shape for shape in self.shapes if shape not in self.feedback_overlay_shapes]
         self.feedback_overlay_shapes = []
         self.update()
 
     def screen_to_world(self, pos):
+        """Convert screen coordinates into world coordinates."""
         scale = self.base_scale * self.zoom
         wx = (pos.x() - self.offset.x()) / scale
         wy = (pos.y() - self.offset.y()) / scale
         return wx, wy
 
     def display_board(self, controller: BoardDisplaySource):
+        """Render the current board state on the canvas."""
         self.clear_shapes()
         cx, cy = self.get_world_centre()
         self.background_image = None
@@ -304,6 +320,7 @@ class SquareCanvas(QWidget):
         self._draw_feedback_builds(self.feedback_builds)
 
     def draw_selectable_vertices(self, vertices):
+        """Draw selectable vertices on the board."""
         self.interactive_shapes.clear()
         cx, cy = self.get_world_centre()
 
@@ -317,6 +334,7 @@ class SquareCanvas(QWidget):
             self.add_shape(shape)
 
     def draw_selectable_edges(self, edges: List[Edge]):
+        """Draw selectable edges on the board."""
         self.interactive_shapes.clear()
         cx, cy = self.get_world_centre()
 
@@ -336,6 +354,7 @@ class SquareCanvas(QWidget):
             self.add_shape(shape)
 
     def draw_selectable_tiles(self, tiles: List[HexTile]):
+        """Draw selectable tiles on the board."""
         cx, cy = self.get_world_centre()
 
         for tile in tiles:
@@ -348,6 +367,7 @@ class SquareCanvas(QWidget):
             self.add_shape(shape)
 
     def draw_buildables(self, buildables: Dict):
+        """Draw the currently buildable board options."""
         # Clear interactive shapes
         self.shapes = [s for s in self.shapes if not isinstance(s, InteractiveShape)]
 
@@ -362,9 +382,11 @@ class SquareCanvas(QWidget):
         self.interactive_shapes.extend(interactive_shapes)
 
     def get_world_centre(self) -> Tuple[int, int]:
+        """Return the board world centre point."""
         return int(self.world_size * 0.5), int(self.world_size * (21/40))
 
     def display_start_screen(self):
+        """Render the start screen artwork on the canvas."""
         self.shapes.clear()
         self.planned_builds = []
         self.planned_overlay_shapes = []
@@ -385,18 +407,21 @@ class SquareCanvas(QWidget):
                                  TITLE_COLOR.lighter(150), 25, bold=True))
 
     def render_planned_builds(self, builds: List[Tuple]):
+        """Render the planned build overlays."""
         self.planned_builds = builds.copy()
         self.shapes = [shape for shape in self.shapes if shape not in self.planned_overlay_shapes]
         self.planned_overlay_shapes = []
         self._draw_planned_builds(self.planned_builds)
 
     def render_feedback_builds(self, builds: List[Tuple]):
+        """Render the feedback build overlays."""
         self.feedback_builds = builds.copy()
         self.shapes = [shape for shape in self.shapes if shape not in self.feedback_overlay_shapes]
         self.feedback_overlay_shapes = []
         self._draw_feedback_builds(self.feedback_builds)
 
     def _draw_planned_builds(self, builds: List[Tuple]):
+        """Draw the planned build overlay shapes."""
         cx, cy = self.get_world_centre()
 
         for buildable, position in builds:
@@ -459,6 +484,7 @@ class SquareCanvas(QWidget):
                 self.add_shape(robber_overlay)
 
     def _draw_feedback_builds(self, builds: List[Tuple]):
+        """Draw the feedback build overlay shapes."""
         cx, cy = self.get_world_centre()
 
         for buildable, position, player_number in builds:

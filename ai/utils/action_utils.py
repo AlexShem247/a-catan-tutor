@@ -27,7 +27,7 @@ def distant_settlement_candidates(
         etw_estimator: "EtwEstimator",
         max_extra_roads_override: Optional[int] = None,
 ) -> List[Tuple[List[Action], float, float]]:
-    """Return settlement candidates reachable via up to k extra roads using a bounded beam search."""
+    """Return promising distant settlement candidates."""
 
     # Can't build more settlements.
     if len(player.settlements) >= Buildable.SETTLEMENT.max_on_board:
@@ -102,7 +102,7 @@ def distant_settlement_candidates(
 
 
 def play_development_card_action(player: SimPlayerState, sim_game: SimGame) -> List[Tuple[List[Action], float, float]]:
-    """Return playable development card actions and expected VP gains."""
+    """Generate simulated development-card actions."""
     actions: List[Tuple[List[Action], float, float]] = []
     etb = 0.0  # Playing a dev card is instantaneous (no build time)
 
@@ -131,7 +131,7 @@ def purchase_development_card_action(
         sim_game: SimGame,
         etw_estimator: "EtwEstimator",
 ) -> List[Tuple[List[Action], float, float]]:
-    """Return candidate actions for buying development cards with ETB and expected VP consideration."""
+    """Generate the simulated development-card purchase action."""
     deck = sim_game.game.development_deck
     if deck.empty():
         return []
@@ -160,7 +160,7 @@ def purchase_development_card_action(
 
 
 def get_bank_trade_for_action(player: SimPlayerState, cost: ResourceCount) -> Optional[Action]:
-    """Return a single bank trade action to make an unaffordable action feasible, or None."""
+    """Return a bank trade that enables the target cost."""
 
     # Find the first resource we are short on, then see if we can convert a surplus via bank/ports.
     for needed_resource, needed_amount in cost.items():
@@ -192,7 +192,7 @@ def get_bank_trade_for_action(player: SimPlayerState, cost: ResourceCount) -> Op
 
 
 def compute_k_lr(player: SimPlayerState, sim_game: SimGame) -> float:
-    """Calculate Longest Road scaling factor for utility computations."""
+    """Estimate the largest-road value contribution."""
 
     # As we get closer to 10 VP, Longest Road becomes more valuable.
     vp = player.victory_points()
@@ -227,7 +227,7 @@ def compute_k_lr(player: SimPlayerState, sim_game: SimGame) -> float:
 
 
 def compute_k_la(player: SimPlayerState, sim_game: SimGame) -> float:
-    """Calculate Largest Army scaling factor for utility computations."""
+    """Estimate the largest-army value contribution."""
 
     # As we approach 10 VP, Largest Army becomes more valuable as a fast +2 VP swing.
     vp = player.victory_points()
@@ -262,7 +262,7 @@ def compute_k_la(player: SimPlayerState, sim_game: SimGame) -> float:
 
 
 def expected_vp_from_knight(player: SimPlayerState, sim_game: SimGame) -> float:
-    """Estimate expected victory points from playing a Knight card based on army comparison."""
+    """Estimate the expected victory-point value of a knight."""
     my_knights = player.army_size
     opponents = get_opponents(sim_game, player.player_number)
     opponent_best = max((p.army_size for p in opponents), default=0)
@@ -285,7 +285,7 @@ def expected_vp_from_knight(player: SimPlayerState, sim_game: SimGame) -> float:
 
 
 def _get_network_vertices(player: SimPlayerState) -> Set[Vertex]:
-    """Vertices we can expand from (road endpoints + existing structures)."""
+    """Return the vertices connected to the player's network."""
     network: Set[Vertex] = set()
     for road in player.roads:
         network.update(road.vertices)
@@ -295,7 +295,7 @@ def _get_network_vertices(player: SimPlayerState) -> Set[Vertex]:
 
 
 def _vertex_score_fn() -> Tuple[Dict[Vertex, float], Any]:
-    """Return (cache, fn) where fn(vertex) is a cheap yield score."""
+    """Build the cached settlement scoring function."""
     cache: Dict[Vertex, float] = {}
 
     def score(vertex: Vertex) -> float:
@@ -314,7 +314,7 @@ def _vertex_score_fn() -> Tuple[Dict[Vertex, float], Any]:
 
 
 def _road_edge_available_fn(player_roads_set: Set, ov: BoardOverlay):
-    """Return a predicate for whether an edge is available for building."""
+    """Build the road-availability predicate for the overlay."""
 
     def ok(edge) -> bool:
         if edge in player_roads_set:
@@ -332,7 +332,7 @@ def _calc_etb_actions_fast(
         sim_game: SimGame,
         actions: List[Action],
 ) -> float:
-    """ETB for an action list using bank/port trades only (no player trades)."""
+    """Estimate settlement paths and ETB values efficiently."""
 
     # Aggregate total resources required for the full action sequence.
     total_resources: ResourceCount = {res: 0 for res in Resource}
@@ -356,7 +356,7 @@ def _select_start_vertices(
         vertex_score,
         road_edge_available,
 ) -> List[Vertex]:
-    """Pick a small set of promising vertices to start beam expansion from."""
+    """Select starting vertices for the path search."""
 
     # Rank starting points by local yield and how many directions they can expand.
     start_scored: List[Tuple[float, Vertex]] = []
@@ -383,7 +383,7 @@ def _direct_settlement_candidates(
         vertex_score,
         etw_estimator: "EtwEstimator",
 ) -> List[Tuple[List[Action], float, float]]:
-    """Candidate settlements already on the connected network (no extra roads)."""
+    """Return directly reachable settlement candidates."""
 
     # First consider settlements that can be placed immediately without road extensions.
     direct_vertices: List[Tuple[float, Vertex]] = []
@@ -422,7 +422,7 @@ def _beam_search_settlement_candidates(
         road_edge_available,
         etw_estimator: "EtwEstimator",
 ) -> List[Tuple[List[Action], float, float]]:
-    """Beam BFS over road expansions, ETB-evaluate only top cheap candidates."""
+    """Search settlement candidates with beam search."""
 
     # Track the shallowest depth at which each vertex has been reached.
     visited_best_depth: Dict[Vertex, int] = {}

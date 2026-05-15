@@ -29,6 +29,7 @@ from ai.tutor.explanations import ActionExplanation, CandidateExplanation, Expla
 
 
 def generate_text_concise(explanation: ActionExplanation) -> Tuple[str, str]:
+    """Generate the concise explanation text."""
     template = explanation_template(explanation)
     if template == ExplanationTemplate.INITIAL_SETTLEMENT:
         return initial_settlement_concise(explanation)
@@ -58,6 +59,7 @@ def generate_text_concise(explanation: ActionExplanation) -> Tuple[str, str]:
 
 
 def generate_text_detail(explanation: ActionExplanation) -> str:
+    """Generate the detailed explanation text."""
     template = explanation_template(explanation)
     if template == ExplanationTemplate.INITIAL_SETTLEMENT:
         return initial_settlement_detail(explanation)
@@ -121,6 +123,7 @@ def generate_text_detail(explanation: ActionExplanation) -> str:
 
 
 def end_turn_plan_text(explanation: ActionExplanation, candidate: CandidateExplanation) -> str:
+    """Describe the follow-up plan after ending the turn."""
     next_plan = candidate.next_plan
     next_step = next_plan[0]
     next_step_text = action_to_text(next_step, short=False)
@@ -147,16 +150,19 @@ def end_turn_plan_text(explanation: ActionExplanation, candidate: CandidateExpla
 
 
 def initial_settlement_concise(explanation: ActionExplanation) -> Tuple[str, str]:
+    """Generate concise text for an opening settlement explanation."""
     vertex = explanation.chosen_candidate.metadata.get("target_vertex")
     intersection = vertex_intersection_text(vertex)
     return "Place A Settlement Here", f"Place your settlement at the intersection of {intersection}."
 
 
 def initial_road_concise(explanation: ActionExplanation) -> Tuple[str, str]:
+    """Generate concise text for an opening road explanation."""
     return "Place A Road Here", initial_road_target_sentence(explanation)
 
 
 def initial_settlement_detail(explanation: ActionExplanation) -> str:
+    """Generate detailed text for an opening settlement explanation."""
     vertex = explanation.chosen_candidate.metadata.get("target_vertex")
     parts = [f"The idea is to place your settlement at the intersection of {vertex_intersection_text(vertex)}."]
     port_text = port_reason_text(explanation.chosen_candidate.metadata.get("port"))
@@ -167,6 +173,7 @@ def initial_settlement_detail(explanation: ActionExplanation) -> str:
 
 
 def initial_road_detail(explanation: ActionExplanation) -> str:
+    """Generate detailed text for an opening road explanation."""
     parts = [
         f"The idea is to {initial_road_target_sentence(explanation).lower()}",
         detail_sentence_from_reasons(explanation, explanation.chosen_candidate.reasons_for),
@@ -175,6 +182,7 @@ def initial_road_detail(explanation: ActionExplanation) -> str:
 
 
 def trade_partner_concise(explanation: ActionExplanation) -> Tuple[str, str]:
+    """Generate concise text for a trade-partner explanation."""
     partner_name = explanation.chosen_candidate.metadata.get("partner_name", "this player")
     exchange = trade_exchange_text(
         explanation.chosen_candidate.metadata.get("payment"),
@@ -186,6 +194,7 @@ def trade_partner_concise(explanation: ActionExplanation) -> Tuple[str, str]:
 
 
 def trade_partner_detail(explanation: ActionExplanation) -> str:
+    """Generate detailed text for a trade-partner explanation."""
     partner_name = explanation.chosen_candidate.metadata.get("partner_name", "this player")
     if explanation.alternatives:
         opening = f"The best trade partner is {partner_name}."
@@ -202,6 +211,7 @@ def trade_partner_detail(explanation: ActionExplanation) -> str:
 
 
 def trade_response_concise(explanation: ActionExplanation) -> Tuple[str, str]:
+    """Generate concise text for a trade-response explanation."""
     decision = explanation.chosen_candidate.metadata.get("decision")
     opponent_name = explanation.chosen_candidate.metadata.get("opponent_name", "the other player")
     offered = explanation.chosen_candidate.metadata.get("selling_to_us")
@@ -215,6 +225,7 @@ def trade_response_concise(explanation: ActionExplanation) -> Tuple[str, str]:
 
 
 def trade_response_detail(explanation: ActionExplanation) -> str:
+    """Generate detailed text for a trade-response explanation."""
     decision = explanation.chosen_candidate.metadata.get("decision")
     opponent_name = explanation.chosen_candidate.metadata.get("opponent_name", "the other player")
     offered = explanation.chosen_candidate.metadata.get("selling_to_us")
@@ -241,6 +252,7 @@ def trade_response_detail(explanation: ActionExplanation) -> str:
 
 
 def robber_target_concise(explanation: ActionExplanation) -> Tuple[str, str]:
+    """Generate concise text for a robber explanation."""
     target_player = explanation.chosen_candidate.metadata.get("target_player_name")
     if target_player:
         return (
@@ -251,6 +263,7 @@ def robber_target_concise(explanation: ActionExplanation) -> Tuple[str, str]:
 
 
 def robber_target_detail(explanation: ActionExplanation) -> str:
+    """Generate detailed text for a robber explanation."""
     parts = []
     target_player = explanation.chosen_candidate.metadata.get("target_player_name")
     if target_player:
@@ -262,6 +275,7 @@ def robber_target_detail(explanation: ActionExplanation) -> str:
 
 
 def discard_resources_concise(explanation: ActionExplanation) -> Tuple[str, str]:
+    """Generate concise text for a discard explanation."""
     discard_text = resource_count_text(explanation.chosen_candidate.metadata.get("discard_resources", {}))
     if discard_text:
         return "Discard These Resources", f"Discard {discard_text}."
@@ -269,6 +283,7 @@ def discard_resources_concise(explanation: ActionExplanation) -> Tuple[str, str]
 
 
 def discard_resources_detail(explanation: ActionExplanation) -> str:
+    """Generate detailed text for a discard explanation."""
     discard_text = resource_count_text(explanation.chosen_candidate.metadata.get("discard_resources", {}))
     protected_plan = discard_protected_plan_text(explanation)
     parts = [f"Discard {discard_text}." if discard_text else "Discard the highlighted resources."]
@@ -279,6 +294,7 @@ def discard_resources_detail(explanation: ActionExplanation) -> str:
 
 
 def year_of_plenty_concise(explanation: ActionExplanation) -> Tuple[str, str]:
+    """Generate concise text for a Year of Plenty explanation."""
     selected_text = resource_count_text(explanation.chosen_candidate.metadata.get("selected_resources", {}))
     if selected_text:
         return "Take These Resources", f"Take {selected_text} from the bank."
@@ -286,6 +302,7 @@ def year_of_plenty_concise(explanation: ActionExplanation) -> Tuple[str, str]:
 
 
 def year_of_plenty_detail(explanation: ActionExplanation) -> str:
+    """Generate detailed text for a Year of Plenty explanation."""
     selected_text = resource_count_text(explanation.chosen_candidate.metadata.get("selected_resources", {}))
     primary_action = explanation.chosen_candidate.metadata.get("primary_action")
     follow_up_action = explanation.chosen_candidate.metadata.get("follow_up_action")
@@ -327,12 +344,14 @@ def year_of_plenty_detail(explanation: ActionExplanation) -> str:
 
 
 def monopoly_resource_concise(explanation: ActionExplanation) -> Tuple[str, str]:
+    """Generate concise text for a Monopoly explanation."""
     selected_resource = explanation.chosen_candidate.metadata.get("selected_resource")
     resource_name = getattr(selected_resource, "name", "resource").replace("_", " ").upper()
     return "Choose This Resource", f"Choose <b>{resource_name}</b> for Monopoly."
 
 
 def monopoly_resource_detail(explanation: ActionExplanation) -> str:
+    """Generate detailed text for a Monopoly explanation."""
     selected_resource = explanation.chosen_candidate.metadata.get("selected_resource")
     resource_name = getattr(selected_resource, "name", "resource").replace("_", " ").upper()
     parts = [

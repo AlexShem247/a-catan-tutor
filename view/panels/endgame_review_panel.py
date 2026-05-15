@@ -1,6 +1,6 @@
 from typing import Dict, List, Tuple, TYPE_CHECKING
 
-from PyQt6.QtCore import QEvent, QObject, QSize, Qt, QTimer
+from PyQt6.QtCore import QEvent, QObject, Qt, QTimer
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import (
     QAbstractScrollArea,
@@ -15,7 +15,9 @@ from PyQt6.QtWidgets import (
 
 from controllers.GameController import GameController, PlayerScoreSnapshot
 from ai.tutor.feedback import TutorFeedbackExplanation
-from config.view_constants import TROPHY_ICON
+from config.view_constants import ENDGAME_FEEDBACK_CARD_LAYOUT_SPACING_PX, ENDGAME_REPLAY_MIN_PANEL_WIDTH, \
+    ENDGAME_REPLAY_SPLITTER_HANDLE_WIDTH_PX, ENDGAME_REVIEW_BREAKDOWN_PANEL_WIDTH, ENDGAME_REVIEW_TROPHY_SIZE, \
+    TROPHY_ICON
 from game.Player import Player, PlayerNumber
 from game.PlayerAssets import DevelopmentCardType
 from view.canvas.SquareCanvas import SquareCanvas
@@ -78,7 +80,7 @@ class EndgameReviewPanel:
         self.winner_trophy_label = QLabel(self.widget)
         self.winner_trophy_label.setObjectName("winnerTrophyLabel")
         self.winner_trophy_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.winner_trophy_label.setFixedSize(QSize(80, 80))
+        self.winner_trophy_label.setFixedSize(ENDGAME_REVIEW_TROPHY_SIZE)
         self.winner_trophy_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self.widget.globalHeaderLayout.insertWidget(0, self.winner_trophy_label)
 
@@ -89,7 +91,7 @@ class EndgameReviewPanel:
         self.widget.replayMainLayout.removeWidget(self.widget.selectedMomentScrollArea)
         self.replay_splitter = QSplitter(Qt.Orientation.Horizontal, self.widget.replayTab)
         self.replay_splitter.setChildrenCollapsible(False)
-        self.replay_splitter.setHandleWidth(8)
+        self.replay_splitter.setHandleWidth(ENDGAME_REPLAY_SPLITTER_HANDLE_WIDTH_PX)
         self.replay_splitter.addWidget(self.replay_canvas)
         self.replay_splitter.addWidget(self.widget.selectedMomentScrollArea)
         self.replay_splitter.setStretchFactor(0, 1)
@@ -131,32 +133,40 @@ class EndgameReviewPanel:
         self.configure_endgame_feedback_filters()
 
     def reset_hover(self) -> None:
+        """Reset the active endgame plot hover state."""
         reset_hover_state(self)
 
     def handle_plot_hover(self, scene_pos) -> None:
+        """Handle hover updates for the endgame plot."""
         handle_plot_hover(self, scene_pos)
 
     @staticmethod
     def get_player_victory_breakdown(player: Player) -> Dict[str, int]:
+        """Return the player victory-point breakdown."""
         return get_player_victory_breakdown(player)
 
     @classmethod
     def format_player_breakdown_text(cls, player: Player) -> str:
+        """Format a player breakdown as plain text."""
         return format_player_breakdown_text(player)
 
     @classmethod
     def format_player_breakdown_html(cls, player: Player) -> str:
+        """Format a player breakdown as HTML."""
         return format_player_breakdown_html(player)
 
     @classmethod
     def format_player_ranking_summary(cls, player: Player) -> str:
+        """Format the summary text for a ranked player."""
         return format_player_ranking_summary(player)
 
     @staticmethod
     def endgame_rank_card_stylesheet(selected: bool) -> str:
+        """Return the stylesheet for an endgame ranking card."""
         return endgame_rank_card_stylesheet(selected)
 
     def set_endgame_winner_header(self, winner_name: str, winner_total_vp: int) -> None:
+        """Populate the endgame winner header."""
         trophy_pixmap = QPixmap(TROPHY_ICON)
         if trophy_pixmap.isNull():
             self.winner_trophy_label.hide()
@@ -171,6 +181,7 @@ class EndgameReviewPanel:
         self.widget.titleWinnerLabel.setText(winner_title_html(winner_name, winner_total_vp))
 
     def select_endgame_rank_card(self, card_btn: QPushButton, player: Player) -> None:
+        """Select an endgame ranking card and show its breakdown."""
         if self.selected_rank_card is not None:
             self.selected_rank_card.setStyleSheet(self.endgame_rank_card_stylesheet(False))
         self.selected_rank_card = card_btn
@@ -178,21 +189,22 @@ class EndgameReviewPanel:
         self.widget.selectedBreakdownBox.setHtml(self.format_player_breakdown_html(player))
 
     def configure_tutor_endgame_layout(self) -> None:
+        """Configure the tutor endgame review layout."""
         self.widget.setMinimumSize(0, 0)
         self.widget.titleWinnerLabel.setMinimumWidth(0)
         self.widget.reviewTabs.setMinimumWidth(0)
-        self.widget.selectedBreakdownBox.setMinimumSize(200, 0)
-        self.widget.selectedBreakdownBox.setMinimumWidth(200)
-        self.widget.selectedBreakdownBox.setMaximumWidth(200)
+        self.widget.selectedBreakdownBox.setMinimumSize(ENDGAME_REVIEW_BREAKDOWN_PANEL_WIDTH, 0)
+        self.widget.selectedBreakdownBox.setMinimumWidth(ENDGAME_REVIEW_BREAKDOWN_PANEL_WIDTH)
+        self.widget.selectedBreakdownBox.setMaximumWidth(ENDGAME_REVIEW_BREAKDOWN_PANEL_WIDTH)
         self.widget.selectedBreakdownBox.setMinimumHeight(0)
         self.widget.selectedBreakdownBox.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
         self.widget.selectedBreakdownBox.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.widget.selectedBreakdownBox.setLineWrapMode(self.widget.selectedBreakdownBox.LineWrapMode.WidgetWidth)
         self.victory_points_plot.setMinimumSize(0, 0)
         self.replay_canvas.setMinimumSize(0, 0)
-        self.replay_canvas.setMinimumWidth(280)
+        self.replay_canvas.setMinimumWidth(ENDGAME_REPLAY_MIN_PANEL_WIDTH)
         self.widget.selectedMomentScrollArea.setMinimumSize(0, 0)
-        self.widget.selectedMomentScrollArea.setMinimumWidth(280)
+        self.widget.selectedMomentScrollArea.setMinimumWidth(ENDGAME_REPLAY_MIN_PANEL_WIDTH)
         self.widget.selectedBreakdownBox.viewport().setCursor(Qt.CursorShape.ArrowCursor)
         self.widget.titleWinnerLabel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.widget.selectedBreakdownBox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
@@ -203,6 +215,7 @@ class EndgameReviewPanel:
         self.widget.quit_btn.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
 
     def configure_endgame_feedback_filters(self) -> None:
+        """Connect the endgame feedback filter checkboxes."""
         checkboxes = self.widget.feedbackTab.findChildren(QCheckBox)
         for checkbox in checkboxes:
             label = checkbox.text().strip().lower()
@@ -211,25 +224,31 @@ class EndgameReviewPanel:
 
     @staticmethod
     def strip_html(text: str) -> str:
+        """Strip HTML markup from the given text."""
         return strip_html(text)
 
     @staticmethod
     def compact_feedback_action(action_text: str) -> str:
+        """Shorten an endgame feedback action label."""
         return compact_feedback_action(action_text)
 
     @classmethod
     def feedback_card_title(cls, feedback: TutorFeedbackExplanation) -> str:
+        """Build the title text for an endgame feedback card."""
         return feedback_card_title(feedback)
 
     @staticmethod
     def endgame_feedback_filter_state_from_owner(owner) -> Dict[str, bool]:
+        """Read the endgame feedback filter state from an owner."""
         return endgame_feedback_filter_state_from_owner(owner)
 
     def endgame_feedback_filter_state(self) -> Dict[str, bool]:
+        """Read the current endgame feedback filter state."""
         return self.endgame_feedback_filter_state_from_owner(self)
 
     @classmethod
     def feedback_matches_filter_from_owner(cls, owner, feedback: TutorFeedbackExplanation) -> bool:
+        """Check whether feedback matches the owner filter state."""
         filter_state = cls.endgame_feedback_filter_state_from_owner(owner)
         label = feedback.label.strip().lower()
         if label == "poor":
@@ -243,13 +262,16 @@ class EndgameReviewPanel:
         return True
 
     def feedback_matches_filter(self, feedback: TutorFeedbackExplanation) -> bool:
+        """Check whether feedback matches the active filters."""
         return self.feedback_matches_filter_from_owner(self, feedback)
 
     def jump_to_endgame_feedback(self, index: int) -> None:
+        """Jump to a specific endgame feedback item."""
         self.widget.reviewTabs.setCurrentIndex(0)
         self.render_endgame_replay_feedback(index)
 
     def build_endgame_feedback_card(self, feedback: TutorFeedbackExplanation, index: int) -> QPushButton:
+        """Build a clickable card for an endgame feedback item."""
         card_btn = QPushButton()
         card_btn.setObjectName("endgameFeedbackCard")
         card_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -258,7 +280,7 @@ class EndgameReviewPanel:
 
         layout = QVBoxLayout(card_btn)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(ENDGAME_FEEDBACK_CARD_LAYOUT_SPACING_PX)
 
         title_label = QLabel(self.feedback_card_title(feedback), card_btn)
         title_label.setStyleSheet(endgame_feedback_title_stylesheet())
@@ -287,6 +309,7 @@ class EndgameReviewPanel:
         return card_btn
 
     def refresh_endgame_feedback_list(self) -> None:
+        """Rebuild the filtered endgame feedback list."""
         layout = self.widget.feedbackListLayout
         self.window._clear_layout(layout)
 
@@ -309,10 +332,12 @@ class EndgameReviewPanel:
 
     @classmethod
     def replay_feedback_player_name(cls, feedback: TutorFeedbackExplanation) -> str:
+        """Return the player name for a replay feedback item."""
         return replay_feedback_player_name(feedback)
 
     @classmethod
     def format_replay_feedback_details(cls, feedback: TutorFeedbackExplanation, total_turns: int) -> Dict[str, str]:
+        """Format the detail fields for replay feedback."""
         return format_replay_feedback_details(feedback, total_turns)
 
     @staticmethod
@@ -321,29 +346,36 @@ class EndgameReviewPanel:
         final_snapshot: PlayerScoreSnapshot | None = None,
         leader_vp: int | None = None,
     ) -> Dict[str, str]:
+        """Summarise the overall endgame performance."""
         return overall_performance_summary(feedback_items, final_snapshot, leader_vp)
 
     @staticmethod
     def outcome_performance_score(final_snapshot: PlayerScoreSnapshot | None) -> float | None:
+        """Return the final outcome performance score."""
         return outcome_performance_score(final_snapshot)
 
     @staticmethod
     def outcome_strength_line(final_snapshot: PlayerScoreSnapshot | None) -> str | None:
+        """Return the outcome strength summary line."""
         return outcome_strength_line(final_snapshot)
 
     @staticmethod
     def outcome_weakness_line(final_snapshot: PlayerScoreSnapshot | None, leader_vp: int | None) -> str | None:
+        """Return the outcome weakness summary line."""
         return outcome_weakness_line(final_snapshot, leader_vp)
 
     @staticmethod
     def performance_category(feedback: TutorFeedbackExplanation) -> str:
+        """Return the performance category for feedback."""
         return performance_category(feedback)
 
     @staticmethod
     def performance_line(category: str, score: float, positive: bool) -> str:
+        """Format a single performance summary line."""
         return performance_line(category, score, positive)
 
     def render_endgame_replay_feedback(self, index: int) -> None:
+        """Render the selected endgame replay feedback item."""
         if not self.replay_feedback and self.final_board_source is None:
             return
 
@@ -390,20 +422,24 @@ class EndgameReviewPanel:
         self.sync_replay_layout()
 
     def show_previous_endgame_replay_feedback(self) -> None:
+        """Show the previous endgame replay feedback item."""
         if self.replay_index is None:
             return
         self.render_endgame_replay_feedback(self.replay_index - 1)
 
     def show_next_endgame_replay_feedback(self) -> None:
+        """Show the next endgame replay feedback item."""
         if self.replay_index is None:
             return
         self.render_endgame_replay_feedback(self.replay_index + 1)
 
     def mark_replay_splitter_adjusted(self) -> None:
+        """Mark the replay splitter as user-adjusted."""
         if self.replay_splitter_initialised:
             self.replay_splitter_user_adjusted = True
 
     def set_replay_splitter_sizes(self, prefer_equal: bool = False) -> None:
+        """Set the replay splitter panel sizes."""
         total_width = max(0, self.replay_splitter.width())
         if total_width <= 0:
             return
@@ -416,11 +452,13 @@ class EndgameReviewPanel:
             self.replay_splitter_initialised = True
 
     def sync_replay_layout(self) -> None:
+        """Synchronise the replay tab layout sizing."""
         if not self.widget.replayTab.isVisible():
             return
         self.set_replay_splitter_sizes(prefer_equal=not self.replay_splitter_initialised)
 
     def handle_event_filter(self, watched: QObject, event: QEvent) -> bool:
+        """Handle replay layout events from watched widgets."""
         if watched in {self.widget.replayTab, self.widget.selectedMomentScrollArea} and event.type() in {
             QEvent.Type.Resize,
             QEvent.Type.Show,
@@ -430,6 +468,7 @@ class EndgameReviewPanel:
         return False
 
     def populate_tutor_endgame_performance(self, controller: GameController) -> None:
+        """Populate the tutor endgame performance chart."""
         populate_tutor_endgame_performance(self, controller)
 
     @classmethod
@@ -438,6 +477,7 @@ class EndgameReviewPanel:
         history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
         players: List[Player],
     ) -> Dict[int, str]:
+        """Build tooltip text for the endgame performance plot."""
         return build_endgame_plot_tooltips(history, players)
 
     @classmethod
@@ -447,10 +487,12 @@ class EndgameReviewPanel:
         current_snapshot: Dict[PlayerNumber, PlayerScoreSnapshot],
         player_names: Dict[PlayerNumber, str],
     ) -> List[str]:
+        """Describe victory-point changes for a review round."""
         return describe_round_vp_events(previous_snapshot, current_snapshot, player_names)
 
     @staticmethod
     def format_endgame_players(names: List[str]) -> str:
+        """Format a list of endgame player names."""
         return format_endgame_players(names)
 
     @classmethod
@@ -459,35 +501,42 @@ class EndgameReviewPanel:
         history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
         players: List[Player],
     ) -> Tuple[str, str, str]:
+        """Build the headline summary labels for endgame review."""
         return summarise_endgame_review_labels(history, players)
 
     @classmethod
     def build_lead_change_label(
         cls, history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]], player_names: Dict[PlayerNumber, str]
     ) -> str:
+        """Build the lead-change summary label."""
         return build_lead_change_label(history, player_names)
 
     @classmethod
     def build_biggest_swing_label(
         cls, history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]], player_names: Dict[PlayerNumber, str]
     ) -> str:
+        """Build the biggest-swing summary label."""
         return build_biggest_swing_label(history, player_names)
 
     @staticmethod
     def join_reasons(reasons: List[str]) -> str:
+        """Join endgame reason strings into readable text."""
         return join_reasons(reasons)
 
     @staticmethod
     def score_swing_reasons(previous: PlayerScoreSnapshot, current: PlayerScoreSnapshot) -> List[str]:
+        """Describe the reasons for a score swing."""
         return score_swing_reasons(previous, current)
 
     @classmethod
     def build_closest_moment_label(
         cls, history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]], player_names: Dict[PlayerNumber, str]
     ) -> str:
+        """Build the closest-moment summary label."""
         return build_closest_moment_label(history, player_names)
 
     def populate_tutor_endgame_review(self, controller: GameController) -> None:
+        """Populate the tutor endgame review view."""
         self.configure_tutor_endgame_layout()
         sorted_players = sorted(controller.get_all_players(), key=lambda p: p.calc_victory_points()[1], reverse=True)
         winner = sorted_players[0]
@@ -578,6 +627,7 @@ class EndgameReviewPanel:
         self.widget.closestMomentLabel.setText(closest_moment_label)
 
     def display_tutor_endgame_review(self, controller: GameController) -> None:
+        """Display the tutor endgame review screen."""
         def return_to_main_menu() -> None:
             self.window._restore_splitter_layout()
             controller.start_game()
@@ -591,6 +641,7 @@ class EndgameReviewPanel:
         QTimer.singleShot(0, self.sync_replay_layout)
 
     def display_results(self, controller: GameController) -> None:
+        """Display the game results view."""
         self.window._restore_splitter_layout()
         self.window.open_tutor_menu(False)
         self.window.canvas.clear_planned_builds()

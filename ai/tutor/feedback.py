@@ -10,6 +10,7 @@ from view.canvas.board_display_source import BoardDisplaySource
 
 
 def move_quality_colour(label: str) -> str:
+    """Return the display colour for a move-quality label."""
     if label == "Excellent":
         return "#2563eb"
     if label == "Good":
@@ -37,27 +38,35 @@ class BoardStateSnapshot(BoardDisplaySource):
 
     @classmethod
     def from_game(cls, game_state: Any) -> "BoardStateSnapshot":
+        """Create a board snapshot from the current game state."""
         return cls(deepcopy(game_state))
 
     def get_ports(self):
+        """Return the ports from the stored board state."""
         return self.game_state.get_ports()
 
     def get_all_edges(self):
+        """Return the edges from the stored board state."""
         return self.game_state.get_all_edges()
 
     def get_all_vertices(self):
+        """Return the vertices from the stored board state."""
         return self.game_state.get_all_vertices()
 
     def get_all_hexes(self):
+        """Return the hexes from the stored board state."""
         return self.game_state.get_all_hexes()
 
     def get_bank_resources(self):
+        """Return the bank resources from the stored board state."""
         return self.game_state.bank_resources
 
     def get_development_deck(self):
+        """Return the development deck from the stored board state."""
         return self.game_state.development_deck
 
     def get_all_players(self):
+        """Return the players from the stored board state."""
         return self.game_state.players
 
 
@@ -79,10 +88,12 @@ class TutorAssessment:
 
     @staticmethod
     def _normalise_display_text(text: str) -> str:
+        """Normalise display text for comparison."""
         return " ".join(text.split()).strip().lower()
 
     @classmethod
     def _reason_core_text(cls, text: str) -> str:
+        """Extract the canonical comparison text for a reason."""
         text = cls._normalise_display_text(re.sub(r"<[^>]+>", "", text or ""))
         for prefix in (
                 "you miss out because ",
@@ -99,6 +110,7 @@ class TutorAssessment:
 
     @classmethod
     def _dedupe_display_texts(cls, texts: List[str]) -> List[str]:
+        """Remove duplicate display texts while preserving order."""
         deduped: List[str] = []
         seen = set()
         for text in texts:
@@ -112,6 +124,7 @@ class TutorAssessment:
         return deduped
 
     def concise_html(self) -> str:
+        """Render the concise assessment HTML."""
         label_colour = move_quality_colour(self.label)
         parts = [
             f"<span style=\"color: {label_colour};\"><b>{escape(self.label)}.</b></span> "
@@ -127,6 +140,7 @@ class TutorAssessment:
         return "<br>".join(parts)
 
     def detailed_html(self) -> str:
+        """Render the detailed assessment HTML."""
         parts = [f"<b>Your move:</b> {escape(self.your_move)}"]
         if self.move_context:
             parts.append(f"<b>Resources:</b> {escape(self.move_context)}")
@@ -157,11 +171,13 @@ class TutorAssessment:
         return "<br>".join(parts)
 
     def history_summary(self) -> str:
+        """Summarise the assessment for history display."""
         better_text = f" Better move: {self.better_move}" if self.better_move else ""
         return f"[{self.label}] {self.judgment_sentence}{better_text}"
 
     @property
     def score_gap(self) -> float:
+        """Return the score gap between the chosen and best moves."""
         return max(0.0, self.best_internal_score - self.internal_score)
 
 
@@ -185,6 +201,7 @@ class TutorFeedbackExplanation:
             game_state: Any,
             visual_build_plan: Optional[List[Tuple[Any, Any, Any]]] = None,
     ) -> "TutorFeedbackExplanation":
+        """Create a feedback explanation from an assessment."""
         return cls(
             title=title,
             concise_html=assessment.concise_html(),
@@ -198,13 +215,16 @@ class TutorFeedbackExplanation:
         )
 
     def render_html(self, detailed: bool = False) -> str:
+        """Render the selected feedback HTML variant."""
         return self.detailed_html if detailed else self.concise_html
 
     def set_visual_build(self, buildable: Any, position: Any, player_number: Any):
+        """Store the visual build highlight for the feedback."""
         if buildable == Buildable.DEVELOPMENT_CARD:
             self.visual_build_plan = []
             return
         self.visual_build_plan = [(buildable, position, player_number)]
 
     def set_recommended_visual_plan(self, visual_plan: List[Tuple[Any, Any]]):
+        """Store the recommended visual plan for the feedback."""
         self.recommended_visual_plan = list(visual_plan)

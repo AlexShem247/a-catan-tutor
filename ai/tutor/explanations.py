@@ -147,49 +147,58 @@ class ActionExplanation:
 
     @property
     def move_quality_label(self) -> str:
+        """Return the user-facing label for the move quality."""
         return move_quality_label(self.move_quality)
 
     @property
     def tutor_move_quality_label(self) -> str:
+        """Return the tutor-facing label for the move quality."""
         return tutor_move_quality_label(self.move_quality)
 
     def generate_text_concise(self) -> Tuple[str, str]:
+        """Generate the concise explanation text."""
         from ai.tutor.explanation_text import generate_text_concise
 
         return generate_text_concise(self)
 
     def generate_text_detail(self) -> str:
+        """Generate the detailed explanation text."""
         from ai.tutor.explanation_text import generate_text_detail
 
         return generate_text_detail(self)
 
     def describe_action(self, action: Action | None = None, short: bool = True) -> str:
+        """Describe the action for display."""
         from ai.tutor.explanation_formatting import action_to_text
 
         return action_to_text(action or self.chosen_action, short=short)
 
     def describe_reason(self, reason: Reason, detail: bool = True) -> str:
+        """Describe a reason for display."""
         from ai.tutor.explanation_formatting import describe_reason
 
         return describe_reason(self, reason, detail)
 
     def strongest_plan_focus_phrase(self) -> str:
+        """Return the strongest-plan focus phrase."""
         from ai.tutor.explanation_formatting import strongest_plan_focus_phrase
 
         return strongest_plan_focus_phrase(self)
 
     def sorted_reasons_for(self) -> List[Reason]:
+        """Return the supporting reasons sorted for display."""
         from ai.tutor.explanation_formatting import sorted_reasons
 
         return sorted_reasons(self.chosen_candidate.reasons_for)
 
     def sorted_reasons_against(self) -> List[Reason]:
+        """Return the opposing reasons sorted for display."""
         from ai.tutor.explanation_formatting import sorted_reasons
 
         return sorted_reasons(self.chosen_candidate.reasons_against)
 
     def get_visual_build_plan(self) -> List[Tuple]:
-        """Return the planned build actions to visualise, in execution order."""
+        """Return the visual build plan for the explanation."""
         custom_plan = self.metadata.get("visual_plan") or self.chosen_candidate.metadata.get("visual_plan")
         if isinstance(custom_plan, list):
             return custom_plan

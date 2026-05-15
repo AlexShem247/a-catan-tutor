@@ -15,22 +15,26 @@ from ai.tutor.explanations import (
 
 
 def capitalise(text: str) -> str:
+    """Capitalise the first character of the text."""
     if not text:
         return ""
     return text[0].upper() + text[1:]
 
 
 def describe_reason(explanation: ActionExplanation, reason: Reason, detail: bool = True) -> str:
+    """Describe a reason for display."""
     if detail:
         return reason_to_detail_phrase(explanation, reason)
     return normalise_reason_label(reason_label_text(reason))
 
 
 def explanation_template(explanation: ActionExplanation) -> Any:
+    """Return the explanation template for an action explanation."""
     return explanation.metadata.get("template") or explanation.chosen_candidate.metadata.get("template")
 
 
 def action_to_text(action: Action, short: bool = True) -> str:
+    """Convert an action into display text."""
     if action.type == ActionType.ROLL:
         return "roll the dice"
     if action.type == ActionType.END_TURN:
@@ -56,6 +60,7 @@ def action_to_text(action: Action, short: bool = True) -> str:
 
 
 def strongest_plan_focus_phrase(explanation: ActionExplanation) -> str:
+    """Return the strongest-plan focus phrase."""
     action = explanation.chosen_action
     if action.type == ActionType.END_TURN and explanation.chosen_candidate.next_plan:
         next_phrase = plan_action_phrase(explanation.chosen_candidate.next_plan[0])
@@ -66,15 +71,18 @@ def strongest_plan_focus_phrase(explanation: ActionExplanation) -> str:
 
 
 def sorted_reasons(reasons: List[Reason]) -> List[Reason]:
+    """Return reasons sorted for display."""
     return sorted(reasons, key=lambda reason: reason.value, reverse=True)
 
 
 def top_reason_sentence(reasons: List[Reason], limit: int = 2) -> str:
+    """Build a sentence from the top-ranked reasons."""
     top = sorted_reasons(reasons)[:limit]
     return reason_sentence_from_ordered(top)
 
 
 def trade_concise_reason(candidate: CandidateExplanation, limit: int = 2) -> str:
+    """Build a concise reason for a trade candidate."""
     ordered: List[Reason] = []
     ordered.extend(reason for reason in candidate.reasons_for if reason.type == ReasonType.REQUIRES_TRADE)
     ordered.extend(
@@ -84,6 +92,7 @@ def trade_concise_reason(candidate: CandidateExplanation, limit: int = 2) -> str
 
 
 def reason_sentence_from_ordered(reasons: List[Reason]) -> str:
+    """Build a sentence from ordered reasons."""
     labels = [normalise_reason_label(reason_label_text(reason)) for reason in reasons if reason.label]
     if not labels:
         return ""
@@ -95,6 +104,7 @@ def reason_sentence_from_ordered(reasons: List[Reason]) -> str:
 
 
 def normalise_reason_label(label: str) -> str:
+    """Normalise a reason label for display."""
     if not label:
         return ""
     label = label.strip()
@@ -104,6 +114,7 @@ def normalise_reason_label(label: str) -> str:
 
 
 def reason_label_text(reason: Reason) -> str:
+    """Return the display text for a reason label."""
     label = reason.label
     metadata = reason.metadata
 
@@ -216,6 +227,7 @@ def reason_label_text(reason: Reason) -> str:
 
 
 def reason_to_detail_phrase(explanation: ActionExplanation, reason: Reason) -> str:
+    """Convert a reason into a detailed explanation phrase."""
     if reason.label in (
         ReasonLabel.INIT_EARLY_PRODUCTION,
         ReasonLabel.INIT_RESOURCE_DIVERSITY,
@@ -276,6 +288,7 @@ def reason_to_detail_phrase(explanation: ActionExplanation, reason: Reason) -> s
 
 
 def final_benefit_text(explanation: ActionExplanation, candidate: CandidateExplanation) -> str:
+    """Describe the final benefit of a candidate plan."""
     card_benefit = development_card_benefit_text(candidate)
     if card_benefit:
         return card_benefit
@@ -302,6 +315,7 @@ def final_benefit_text(explanation: ActionExplanation, candidate: CandidateExpla
 
 
 def resource_count_text(resource_count: Dict[Any, int]) -> str:
+    """Format a resource bundle for display."""
     if not resource_count:
         return ""
     parts: List[str] = []
@@ -320,6 +334,7 @@ def resource_count_text(resource_count: Dict[Any, int]) -> str:
 
 
 def trade_exchange_text(payment: Dict[Any, int], buying: Dict[Any, int]) -> str:
+    """Format a trade exchange for display."""
     pay_text = resource_count_text(payment)
     receive_text = resource_count_text(buying)
     if pay_text and receive_text:
@@ -332,6 +347,7 @@ def trade_exchange_text(payment: Dict[Any, int], buying: Dict[Any, int]) -> str:
 
 
 def vertex_intersection_text(vertex: Any) -> str:
+    """Describe the intersection represented by a vertex."""
     if vertex is None or not getattr(vertex, "hexes", None):
         return "the available tiles"
     descriptions = [
@@ -352,6 +368,7 @@ def vertex_intersection_text(vertex: Any) -> str:
 
 
 def plan_action_phrase(action: Any) -> str:
+    """Describe a plan action as a short phrase."""
     if not isinstance(action, Action):
         return ""
     if action.type == ActionType.BUILD and isinstance(action.payload, tuple) and len(action.payload) >= 1:
@@ -378,6 +395,7 @@ def plan_action_phrase(action: Any) -> str:
 
 
 def follow_up_action_text(action: Any) -> str:
+    """Describe a follow-up action for display."""
     if not isinstance(action, Action):
         return ""
     if action.type == ActionType.BUILD and isinstance(action.payload, tuple) and len(action.payload) >= 1:
@@ -401,6 +419,7 @@ def follow_up_action_text(action: Any) -> str:
 
 
 def trade_detail_sentence_from_reasons(explanation: ActionExplanation, reasons: List[Reason]) -> str:
+    """Build a detailed trade sentence from reasons."""
     if not reasons:
         return "This is the best trade available here."
     phrases = [reason_to_detail_phrase(explanation, reason) for reason in reasons[:3]]
@@ -417,6 +436,7 @@ def trade_detail_sentence_from_reasons(explanation: ActionExplanation, reasons: 
 
 
 def detail_sentence_from_reasons(explanation: ActionExplanation, reasons: List[Reason]) -> str:
+    """Build a detailed sentence from reasons."""
     if not reasons:
         return "This is the strongest available setup choice here."
     phrases = [reason_to_detail_phrase(explanation, reason) for reason in reasons[:3]]
@@ -433,6 +453,7 @@ def detail_sentence_from_reasons(explanation: ActionExplanation, reasons: List[R
 
 
 def discard_protected_plan_text(explanation: ActionExplanation) -> str:
+    """Describe the plan protected by a discard choice."""
     protected_action = explanation.chosen_candidate.metadata.get("protected_action")
     if not isinstance(protected_action, Action):
         return ""
@@ -456,6 +477,7 @@ def discard_protected_plan_text(explanation: ActionExplanation) -> str:
 
 
 def initial_road_target_sentence(explanation: ActionExplanation) -> str:
+    """Describe the target of an opening road choice."""
     target_vertex = explanation.chosen_candidate.metadata.get("target_vertex")
     kind = explanation.chosen_candidate.metadata.get("road_explanation_kind")
     if kind == RoadExplanationKind.CONNECTION:
@@ -469,12 +491,14 @@ def initial_road_target_sentence(explanation: ActionExplanation) -> str:
 
 
 def end_turn_concise_reason(candidate: CandidateExplanation) -> str:
+    """Build a concise reason for ending the turn."""
     next_step = candidate.next_plan[0]
     next_step_text = action_to_text(next_step, short=False)
     return f"end turn so we can save resources for {next_step_text}"
 
 
 def bank_trade_text(action: Action) -> str:
+    """Format a bank trade action for display."""
     payload = action.payload
     if not isinstance(payload, tuple) or len(payload) != 2:
         return "trade with the bank"
@@ -487,6 +511,7 @@ def bank_trade_text(action: Action) -> str:
 
 
 def player_trade_text(action: Action) -> str:
+    """Format a player trade action for display."""
     payload = action.payload
     if not isinstance(payload, tuple) or len(payload) != 2:
         return "propose a player trade"
@@ -499,6 +524,7 @@ def player_trade_text(action: Action) -> str:
 
 
 def build_text(action: Action) -> str:
+    """Format a build action for display."""
     payload = action.payload
     if not isinstance(payload, tuple) or len(payload) < 1:
         return "build"
@@ -509,11 +535,13 @@ def build_text(action: Action) -> str:
 
 
 def display_name(value: Any) -> str:
+    """Return the display name for a value."""
     name = getattr(value, "name", str(value))
     return name.replace("_", " ").title()
 
 
 def resource_list_text(resources: List[Any]) -> str:
+    """Format a resource list for display."""
     names = [f"<b>{getattr(resource, 'name', str(resource)).upper()}</b>" for resource in resources]
     if not names:
         return ""
@@ -525,6 +553,7 @@ def resource_list_text(resources: List[Any]) -> str:
 
 
 def hex_description(hex_tile: Any) -> str:
+    """Describe a hex tile for display."""
     name = getattr(getattr(hex_tile, "type", None), "name", "tile").lower()
     if name.endswith("s"):
         name = name[:-1]
@@ -534,6 +563,7 @@ def hex_description(hex_tile: Any) -> str:
 
 
 def port_reason_text(port: Any) -> str:
+    """Describe the value of a port."""
     if port is None:
         return ""
     if getattr(port, "name", "") == "THREE_TO_ONE":
@@ -544,6 +574,7 @@ def port_reason_text(port: Any) -> str:
 
 
 def dice_probability(number: Any) -> float:
+    """Return the roll probability for a dice number."""
     probs = {
         2: 1 / 36, 3: 2 / 36, 4: 3 / 36, 5: 4 / 36, 6: 5 / 36,
         8: 5 / 36, 9: 4 / 36, 10: 3 / 36, 11: 2 / 36, 12: 1 / 36,
@@ -552,6 +583,7 @@ def dice_probability(number: Any) -> float:
 
 
 def position_text(pos: Any) -> str:
+    """Format a board position for display."""
     if pos is None:
         return ""
     raw = str(pos).strip()
@@ -566,6 +598,7 @@ def position_text(pos: Any) -> str:
 
 
 def gerund_phrase(action: Action, action_text: str) -> str:
+    """Convert an action into a gerund phrase."""
     if action.type == ActionType.BUILD:
         payload = action.payload
         if isinstance(payload, tuple) and len(payload) >= 1:
@@ -592,6 +625,7 @@ def gerund_phrase(action: Action, action_text: str) -> str:
 
 
 def trade_opening_text(plan: List[Action]) -> str:
+    """Build the opening text for a trade plan."""
     if len(plan) < 2:
         return ""
     first_action = plan[0]
@@ -609,6 +643,7 @@ def trade_opening_text(plan: List[Action]) -> str:
 
 
 def plan_linking_text(plan: List[Action]) -> str:
+    """Build the linking text between plan actions."""
     if not plan:
         return ""
     final_action = plan[-1]
@@ -635,6 +670,7 @@ def plan_linking_text(plan: List[Action]) -> str:
 
 
 def buildable_name(action: Action) -> str:
+    """Return the buildable name for an action."""
     if action.type != ActionType.BUILD:
         return ""
     payload = action.payload
@@ -647,6 +683,7 @@ def buildable_name(action: Action) -> str:
 
 
 def plan_timing_text(candidate: CandidateExplanation) -> str:
+    """Describe the timing of a candidate plan."""
     if candidate.etb <= 0:
         return ""
     if candidate.etb <= 2:
@@ -659,6 +696,7 @@ def plan_timing_text(candidate: CandidateExplanation) -> str:
 
 
 def development_card_benefit_text(candidate: CandidateExplanation) -> str:
+    """Describe the benefit of a development card plan."""
     if candidate.action.type != ActionType.PLAY_DEV_CARD:
         return ""
     card_type = candidate.action.payload
@@ -691,4 +729,5 @@ def development_card_benefit_text(candidate: CandidateExplanation) -> str:
 
 
 def highlight_buildable(name: str) -> str:
+    """Highlight a buildable name for display."""
     return f"<b>{name}</b>"

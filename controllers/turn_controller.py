@@ -1,3 +1,4 @@
+from abc import ABC
 from typing import Optional, Tuple
 
 from ai.actions import Action, ActionType, Phase
@@ -8,8 +9,9 @@ from game.PlayerAssets import Buildable, DevelopmentCardType
 from view.canvas.display_utils import resource_dict_to_str
 
 
-class TurnController(ControllerSupport):
+class TurnController(ControllerSupport, ABC):
     def make_round_move(self, player: Player):
+        """Run a full turn for the given player."""
         if self.game_mode in {self.GameMode.PLAY, self.GameMode.TUTOR}:
             self.tutor_ai.new_turn()
         if self.game_mode == self.GameMode.TUTOR:
@@ -139,6 +141,7 @@ class TurnController(ControllerSupport):
                         self._show_tutor_action_feedback(player, action_feedback)
 
     def _is_guided_turn(self, player: Player):
+        """Check whether the current turn should use guided flow."""
         return (
             self.game_mode == self.GameMode.GUIDED
             and player.player_number == PlayerNumber.P1
@@ -152,6 +155,7 @@ class TurnController(ControllerSupport):
             dev_played: bool,
             dice_info: Optional[Tuple[int, int, int]] = None,
     ) -> Action:
+        """Get the next AI action for the current phase."""
         if self._is_guided_turn(player) and isinstance(player.policy, RuleBasedAI):
             action, explanation = player.policy.next_action_with_explanation(
                 player,
@@ -171,6 +175,7 @@ class TurnController(ControllerSupport):
         )
 
     def make_round_move_ai(self, player: Player):
+        """Run the AI turn wrapper for the given player."""
         player.policy.new_turn()
         ai_action_requests = 0
 

@@ -9,6 +9,13 @@ from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 from controllers.GameController import GameController, PlayerScoreSnapshot
 from config.view_constants import (
     ENDGAME_PLOT_BACKGROUND_COLOR,
+    ENDGAME_PLOT_HOVER_DISTANCE_THRESHOLD_PX,
+    ENDGAME_PLOT_LAYOUT_MARGINS,
+    ENDGAME_PLOT_LEGEND_OFFSET,
+    ENDGAME_PLOT_TARGET_TICK_PIXEL_SPACING,
+    ENDGAME_PLOT_TARGET_VICTORY_POINTS,
+    ENDGAME_PLOT_TOOLTIP_BORDER_RADIUS_PX,
+    ENDGAME_PLOT_TOOLTIP_OFFSET_PX,
     PLAYER_COLORS,
     TOOLTIP_BACKGROUND_COLOR,
     TOOLTIP_BORDER_COLOR,
@@ -20,11 +27,12 @@ from view.panels.endgame_summary import describe_round_vp_events, format_endgame
 
 class IntegerAxisItem(pg.AxisItem):
     def tickSpacing(self, minVal: float, maxVal: float, size: float) -> List[Tuple[float, float]]:
+        """Calculate sensible tick spacing for the integer axis."""
         value_range = abs(maxVal - minVal)
         if value_range <= 0 or size <= 0:
             return [(1.0, 0.0)]
 
-        target_tick_count = max(2, int(size / 80))
+        target_tick_count = max(2, int(size / ENDGAME_PLOT_TARGET_TICK_PIXEL_SPACING))
         raw_spacing = max(1.0, value_range / target_tick_count)
         magnitude = 10 ** math.floor(math.log10(raw_spacing))
 
@@ -38,11 +46,12 @@ class IntegerAxisItem(pg.AxisItem):
         return [(float(spacing), 0.0)]
 
     def tickStrings(self, values: List[float], scale: float, spacing: float) -> List[str]:
+        """Format axis tick values as whole-number labels."""
         return [str(int(round(value))) for value in values]
 
 
 class HoverTooltip(QFrame):
-    BORDER_RADIUS = 8
+    BORDER_RADIUS = ENDGAME_PLOT_TOOLTIP_BORDER_RADIUS_PX
 
     def __init__(self, parent: QWidget):
         super().__init__(parent, Qt.WindowType.FramelessWindowHint | Qt.WindowType.ToolTip)
@@ -51,7 +60,7 @@ class HoverTooltip(QFrame):
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setContentsMargins(*ENDGAME_PLOT_LAYOUT_MARGINS)
         self.label = QLabel(self)
         self.label.setTextFormat(Qt.TextFormat.PlainText)
         self.label.setWordWrap(False)
@@ -62,6 +71,7 @@ class HoverTooltip(QFrame):
         self.hide()
 
     def paintEvent(self, event) -> None:
+        """Paint the widget contents."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(QPen(TOOLTIP_BORDER_COLOR, 1))
@@ -71,21 +81,22 @@ class HoverTooltip(QFrame):
         super().paintEvent(event)
 
     def show_text(self, text: str, global_pos) -> None:
+        """Show the hover tooltip near the given screen position."""
         self.label.setText(text)
         self.adjustSize()
         if not isinstance(global_pos, QPoint):
             global_pos = QPoint(int(global_pos.x()), int(global_pos.y()))
 
-        x_pos = global_pos.x() + 16
-        y_pos = global_pos.y() + 16
+        x_pos = global_pos.x() + ENDGAME_PLOT_TOOLTIP_OFFSET_PX
+        y_pos = global_pos.y() + ENDGAME_PLOT_TOOLTIP_OFFSET_PX
 
         screen = self.parentWidget().screen() if self.parentWidget() is not None else self.screen()
         if screen is not None:
             screen_rect = screen.availableGeometry()
             if x_pos + self.width() > screen_rect.right():
-                x_pos = max(screen_rect.left(), global_pos.x() - self.width() - 16)
+                x_pos = max(screen_rect.left(), global_pos.x() - self.width() - ENDGAME_PLOT_TOOLTIP_OFFSET_PX)
             if y_pos + self.height() > screen_rect.bottom():
-                y_pos = max(screen_rect.top(), global_pos.y() - self.height() - 16)
+                y_pos = max(screen_rect.top(), global_pos.y() - self.height() - ENDGAME_PLOT_TOOLTIP_OFFSET_PX)
 
         self.move(x_pos, y_pos)
         self.show()
@@ -131,7 +142,11 @@ def handle_plot_hover(owner, scene_pos: QPointF) -> None:
             nearest_round = round_num
             nearest_distance = distance
 
-    if nearest_round is None or nearest_distance is None or nearest_distance > 100:
+    if (
+        nearest_round is None
+        or nearest_distance is None
+        or nearest_distance > ENDGAME_PLOT_HOVER_DISTANCE_THRESHOLD_PX
+    ):
         reset_hover_state(owner)
         return
 
@@ -189,7 +204,7 @@ def populate_tutor_endgame_performance(owner, controller: GameController) -> Non
     owner.plot_points = []
     owner.plot_tooltips = {}
     if plot_item.legend is None:
-        plot_item.addLegend(offset=(10, 10))
+        plot_item.addLegend(offset=ENDGAME_PLOT_LEGEND_OFFSET)
     else:
         plot_item.legend.clear()
 
@@ -207,7 +222,7 @@ def populate_tutor_endgame_performance(owner, controller: GameController) -> Non
     plot_item.setLabel("left", "Victory Points")
     plot_item.showGrid(x=True, y=True, alpha=0.2)
     target_line = pg.InfiniteLine(
-        pos=10,
+        pos=ENDGAME_PLOT_TARGET_VICTORY_POINTS,
         angle=0,
         pen=pg.mkPen(color=(156, 163, 175), width=2, style=Qt.PenStyle.DashLine),
     )
@@ -241,4 +256,4 @@ def populate_tutor_endgame_performance(owner, controller: GameController) -> Non
         curve.setZValue(100 - player.player_number.value)
 
     owner.victory_points_plot.setXRange(1, max_round)
-    owner.victory_points_plot.setYRange(2, max(10, max_victory_points))
+    owner.victory_points_plot.setYRange(2, max(ENDGAME_PLOT_TARGET_VICTORY_POINTS, max_victory_points))

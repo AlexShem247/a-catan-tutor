@@ -10,7 +10,7 @@ from game.Vertex import Vertex, Port
 
 
 def expected_rolls_for_resource(player: SimPlayerState, resource: Resource) -> float:
-    """Estimate the expected number of dice rolls to gather one unit of the given resource."""
+    """Estimate expected rolls to gain a resource."""
     fr = player.get_production_rate(resource)
 
     if fr <= EPSILON:
@@ -21,7 +21,7 @@ def expected_rolls_for_resource(player: SimPlayerState, resource: Resource) -> f
 
 
 def calc_step_resources(step: Action) -> ResourceCount:
-    """Calculate the resource cost of a single action."""
+    """Return the resource effect of an action step."""
     total_resources = {res: 0 for res in Resource}
     if step.type == ActionType.BUILD:
         building: Buildable = step.payload[0]
@@ -34,7 +34,7 @@ def calc_step_resources(step: Action) -> ResourceCount:
 
 
 def get_bank_trade_ratio(buildings: List[Vertex], resource: Resource) -> int:
-    """Determine the best trade ratio for a resource given a player's controlled ports."""
+    """Return the bank trade ratio for a resource."""
 
     # Get all ports the player controls
     controlled_ports = {v.port for v in buildings if v.port}

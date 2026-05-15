@@ -1,3 +1,4 @@
+from abc import ABC
 from typing import Callable, Optional
 
 from ai.actions import ActionType
@@ -10,12 +11,9 @@ from game.Vertex import Vertex
 from controllers.controller_support import ControllerSupport
 
 
-class InitialPlacementController(ControllerSupport):
+class InitialPlacementController(ControllerSupport, ABC):
     def run_initial_placement(self):
-        """
-        Each player places two settlements and two roads in order:
-        forward + reverse order for second placement.
-        """
+        """Run the initial settlement and road placement sequence."""
         import controllers.GameController as GameControllerModule
 
         players = self._game.players
@@ -125,6 +123,7 @@ class InitialPlacementController(ControllerSupport):
             settlement: Optional[Vertex] = None,
             selector: Optional[Callable[[list[Edge]], Optional[Edge]]] = None,
     ) -> Edge:
+        """Return the selected road choice for the current flow."""
         edges = self._game.get_available_edges(player)
         if settlement is not None:
             edges = [edge for edge in edges if settlement in edge.vertices]
@@ -147,6 +146,7 @@ class InitialPlacementController(ControllerSupport):
         return edge
 
     def get_road_choice_ai(self, player: Player, settlement: Optional[Vertex] = None) -> Optional[Edge]:
+        """Return the AI-selected road choice."""
         if settlement is None:
             available_edges = self._game.get_available_edges(player)
         else:
