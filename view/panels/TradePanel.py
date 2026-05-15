@@ -1,11 +1,11 @@
-from typing import Callable, Dict, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Dict, Optional, Tuple
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QLabel, QListWidgetItem, QToolButton, QWidget
 
-from controllers.GameController import GameController
 from ai.actions import Action, ActionType
 from ai.tutor.explanations import ActionExplanation, ExplanationTemplate
+from controllers.GameController import GameController
 from game.Player import Player
 from game.Resources import Resource, ResourceCount
 from view.canvas.display_utils import format_counter_offer
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 # noinspection PyProtectedMember,PyUnresolvedReferences
 class TradePanel:
+
     def __init__(
         self,
         window: "MainWindow",
@@ -95,8 +96,7 @@ class TradePanel:
 
         self.window.main_menu.main_label.setText(f"Trade Offer from {opponent_name}")
         self.window.main_menu.action_label.setText(
-            f"{opponent_name} is buying {format_counter_offer(requested, requested)} for:"
-        )
+            f"{opponent_name} is buying {format_counter_offer(requested, requested)} for:")
 
         for res in Resource:
             getattr(trade_manager, f"{res.name.lower()}_quantity").setText(str(shown_offer.get(res, 0)))
@@ -124,8 +124,7 @@ class TradePanel:
         self.window.main_menu.main_label.setText("Move The Robber")
         if target_player:
             self.window.main_menu.action_label.setText(
-                f"Move the robber to the highlighted tile and steal from {target_player} if possible."
-            )
+                f"Move the robber to the highlighted tile and steal from {target_player} if possible.")
         else:
             self.window.main_menu.action_label.setText("Move the robber to the highlighted tile.")
 
@@ -140,8 +139,7 @@ class TradePanel:
         self.active_trade_preview_widget = chooser
         self.window.main_menu.main_label.setText("The Robber Has Been Rolled!")
         self.window.main_menu.action_label.setText(
-            f"Discard {total_to_discard} resource{'s' if total_to_discard != 1 else ''}."
-        )
+            f"Discard {total_to_discard} resource{'s' if total_to_discard != 1 else ''}.")
         for res in Resource:
             getattr(chooser, f"{res.name.lower()}_quantity").setText(str(discard.get(res, 0)))
             getattr(chooser, f"{res.name.lower()}_quantity_dec").setEnabled(False)
@@ -260,9 +258,8 @@ class TradePanel:
                 inc_btn.setEnabled(True)
 
             trade_incomplete = all(v == 0 for v in selling.values()) or all(v == 0 for v in buying.values())
-            valid_bank_trade = (
-                not trade_incomplete and controller.try_trade_with_bank(player, selling, buying, use_resources=False)
-            )
+            valid_bank_trade = (not trade_incomplete
+                                and controller.try_trade_with_bank(player, selling, buying, use_resources=False))
             valid_player_trade = not trade_incomplete
 
             trade_designer.bank_trade_btn.setEnabled(valid_bank_trade)
@@ -402,9 +399,8 @@ class TradePanel:
         self.window.set_debug_tutor_shortcut_finalizer(cleanup_select_trade)
         self.window.safe_connect(select_trade.submit_btn, cancel)
 
-    def show_resource_chooser(
-        self, player, num_resources: int, title: str, resource_caps: ResourceCount | None = None
-    ) -> None:
+    def show_resource_chooser(self, player, num_resources: int, title: str,
+                              resource_caps: ResourceCount | None = None) -> None:
         """Display the resource chooser widget."""
         self.clear_trade_preview()
         selection_widget = self.resource_selector_widget
@@ -426,8 +422,7 @@ class TradePanel:
         self.window._set_turn_label(player)
         self.window.main_menu.main_label.setText(title)
         self.window.main_menu.action_label.setText(
-            f"You need to select {num_resources} more resource{'s' if num_resources != 1 else ''}."
-        )
+            f"You need to select {num_resources} more resource{'s' if num_resources != 1 else ''}.")
 
         self.window.toggle_main_action_btns(False)
         self.window.main_menu.action_btn_layout.addWidget(selection_widget)
@@ -436,8 +431,7 @@ class TradePanel:
         def update_labels() -> None:
             total_remaining = num_resources - sum(chosen.values())
             self.window.main_menu.action_label.setText(
-                f"You need to select {total_remaining} more resource{'s' if total_remaining != 1 else ''}."
-            )
+                f"You need to select {total_remaining} more resource{'s' if total_remaining != 1 else ''}.")
             for res, (_, dec, inc) in quantity_btns.items():
                 dec.setEnabled(chosen[res] > 0)
                 inc.setEnabled(chosen[res] < resource_caps[res] and total_remaining > 0)
@@ -487,8 +481,7 @@ class TradePanel:
         self.window._set_turn_label(selling_player)
         self.window.main_menu.main_label.setText(f"Trade Offer from {selling_player.name}")
         self.window.main_menu.action_label.setText(
-            f"{selling_player.name} is buying {format_counter_offer(buying, buying)} for:"
-        )
+            f"{selling_player.name} is buying {format_counter_offer(buying, buying)} for:")
         trade_manager.accept_btn.show()
         trade_manager.decline_btn.show()
 

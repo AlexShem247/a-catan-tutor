@@ -3,13 +3,13 @@ from enum import Enum
 from typing import List, Tuple
 
 from game.Board import Board
-from game.Edge import EdgeDirection, Edge
+from game.Edge import Edge, EdgeDirection
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
 from game.PlayerAssets import DevelopmentCardType
-from game.Resources import Resource, ResourceCount, HexType
-from game.Vertex import VertexDirection, Building, Vertex, Port
+from game.Resources import HexType, Resource, ResourceCount
+from game.Vertex import Building, Port, Vertex, VertexDirection
 
 
 def rgb_to_ansi(r: int, g: int, b: int) -> str:
@@ -101,6 +101,7 @@ class Renderable(ABC):
 
 
 class Empty(Renderable):
+
     def render(self) -> str:
         """Render this display element as text."""
         if self.robber:
@@ -183,6 +184,7 @@ class DisplayVertex(Renderable):
 
 
 class DisplayEdge(Renderable):
+
     def __init__(self, edge: Edge):
         self.edge = edge
 
@@ -337,11 +339,7 @@ def display_resources(resources: ResourceCount, player_resources: ResourceCount 
 
 def resource_dict_to_str(resources: ResourceCount) -> str:
     """Convert a resource-count dict into a human-readable string."""
-    parts = [
-        f"{count} {resource.name.upper()}"
-        for resource, count in resources.items()
-        if count > 0
-    ]
+    parts = [f"{count} {resource.name.upper()}" for resource, count in resources.items() if count > 0]
 
     if not parts:
         return "nothing"
@@ -353,13 +351,8 @@ def resource_dict_to_str(resources: ResourceCount) -> str:
     return ", ".join(parts[:-1]) + " and " + parts[-1]
 
 
-def display_trade_offer(
-        game: Game,
-        selling_player: Player,
-        selling: ResourceCount,
-        buying: ResourceCount,
-        player: Player
-):
+def display_trade_offer(game: Game, selling_player: Player, selling: ResourceCount, buying: ResourceCount,
+                        player: Player):
     clear_screen()
     display_board(game)
     print(f"\n--- Trade Offer from {selling_player.name} ---\n")

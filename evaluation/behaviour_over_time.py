@@ -8,11 +8,11 @@ from typing import List, Optional, TypedDict
 
 from tqdm import tqdm
 
-from controllers.GameController import GameController
-from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.actions import Action, ActionType, Phase
-from config.StrategyWeights import EVO_STRATEGY_WEIGHTS, ORIGINAL_STRATEGY_WEIGHTS
+from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from config.player_policies import PolicyFactory, make_rule_based_policy
+from config.StrategyWeights import EVO_STRATEGY_WEIGHTS, ORIGINAL_STRATEGY_WEIGHTS
+from controllers.GameController import GameController
 from game.Player import PlayerNumber
 from game.PlayerAssets import Buildable
 from view.HeadlessView import HeadlessView
@@ -50,6 +50,7 @@ class ExportedActionRow(TypedDict):
 
 
 class InstrumentedTutorAI(RuleBasedAI):
+
     def __init__(self, rng: Random, **kwargs):
         super().__init__(rng, **kwargs)
         self._action_rows: List[ActionRow] = []
@@ -78,12 +79,10 @@ class InstrumentedTutorAI(RuleBasedAI):
         tracked_action_type = self._tracked_action_type(action)
         if tracked_action_type is None:
             return
-        self._action_rows.append(
-            {
-                "turn": int(game.round_num),
-                "action_type": tracked_action_type,
-            }
-        )
+        self._action_rows.append({
+            "turn": int(game.round_num),
+            "action_type": tracked_action_type,
+        })
 
     def export_action_rows(self, game_id: int, final_turns: int) -> List[ExportedActionRow]:
         if final_turns <= 0:
@@ -92,15 +91,13 @@ class InstrumentedTutorAI(RuleBasedAI):
         exported_rows: List[ExportedActionRow] = []
         for row in self._action_rows:
             turn = row["turn"]
-            exported_rows.append(
-                {
-                    "game_id": game_id,
-                    "turn": turn,
-                    "final_turns": final_turns,
-                    "progress": f"{turn / final_turns:.3f}",
-                    "action_type": row["action_type"],
-                }
-            )
+            exported_rows.append({
+                "game_id": game_id,
+                "turn": turn,
+                "final_turns": final_turns,
+                "progress": f"{turn / final_turns:.3f}",
+                "action_type": row["action_type"],
+            })
         return exported_rows
 
     def next_action(self, player, game, phase: Phase, dev_played: bool) -> Action:
@@ -136,10 +133,7 @@ def _build_player_config(player_policies, order_seed: int):
     if SHUFFLE_ORDER:
         rng.shuffle(ordered_policies)
 
-    return {
-        player_number: policy
-        for player_number, policy in zip(ordered_player_numbers, ordered_policies)
-    }
+    return {player_number: policy for player_number, policy in zip(ordered_player_numbers, ordered_policies)}
 
 
 def _collect_tutor_action_rows(controller: GameController, game_id: int) -> List[ExportedActionRow]:
@@ -228,21 +222,16 @@ def run_simulations_parallel(
                     pending_rows.clear()
                 if progress is not None:
                     progress.close()
-                raise RuntimeError(
-                    f"Policy evaluation exceeded the retry budget after {aborted_games} aborted games."
-                )
+                raise RuntimeError(f"Policy evaluation exceeded the retry budget after {aborted_games} aborted games.")
 
             batch_size = min(remaining_runs, remaining_attempt_budget)
-            args_list = [
-                (
-                    seed + attempts_started + i,
-                    seed * 10_000 + attempts_started + i,
-                    player_policies,
-                    attempts_started + i,
-                    MAX_EVALUATION_ROUNDS,
-                )
-                for i in range(batch_size)
-            ]
+            args_list = [(
+                seed + attempts_started + i,
+                seed * 10_000 + attempts_started + i,
+                player_policies,
+                attempts_started + i,
+                MAX_EVALUATION_ROUNDS,
+            ) for i in range(batch_size)]
             attempts_started += batch_size
 
             for game_result in pool.imap_unordered(run_single_game, args_list):
@@ -258,10 +247,8 @@ def run_simulations_parallel(
                         total_rows_written += len(pending_rows)
                         pending_rows.clear()
                         if progress is not None:
-                            progress.write(
-                                f"Wrote rows after {completed_games} completed games "
-                                f"(total rows: {total_rows_written})."
-                            )
+                            progress.write(f"Wrote rows after {completed_games} completed games "
+                                           f"(total rows: {total_rows_written}).")
                 else:
                     aborted_games += 1
                     if progress is not None:
@@ -277,16 +264,12 @@ def run_simulations_parallel(
     elapsed = time.time() - start
 
     if aborted_games:
-        print(
-            f"Skipped {aborted_games} games that either hit the {MAX_EVALUATION_ROUNDS}-round cap "
-            f"or exceeded the per-turn AI action request limit, and retried them."
-        )
+        print(f"Skipped {aborted_games} games that either hit the {MAX_EVALUATION_ROUNDS}-round cap "
+              f"or exceeded the per-turn AI action request limit, and retried them.")
 
     print(f"Wrote {total_rows_written} action rows from {completed_games} completed games.")
-    print(
-        f"Simulation of {completed_games} games took {elapsed:.1f} seconds "
-        f"({elapsed / max(completed_games, 1):.2f} seconds/game)."
-    )
+    print(f"Simulation of {completed_games} games took {elapsed:.1f} seconds "
+          f"({elapsed / max(completed_games, 1):.2f} seconds/game).")
 
 
 def parse_args():

@@ -2,17 +2,17 @@ from dataclasses import dataclass
 from typing import Dict, Optional
 
 from ai.actions import Action, ActionType
-from ai.simulation.SimGame import SimGame
+from ai.simulation.board_sim_utils import get_opponents
 from ai.simulation.etw_candidates import EtwCandidateGenerator
 from ai.simulation.etw_evaluation import EtwEvaluation
 from ai.simulation.etw_selection import EtwSelection
 from ai.simulation.etw_timing import EtwTiming
+from ai.simulation.SimGame import SimGame
 from ai.tutor.explanations import ActionExplanation, AssumptionCode, CandidateExplanation
 from ai.tutor.move_quality import strategic_turn_move_quality
 from config.StrategyWeights import StrategyWeights
 from game.Player import PlayerNumber
 from game.Resources import ResourceCount
-from ai.simulation.board_sim_utils import get_opponents
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,7 @@ class EtwTradeStateSnapshot:
 
 
 class EtwEstimator:
+
     def __init__(self):
         self._eval_stats = {"cache_hits": 0, "cache_misses": 0, "evaluations": 0}
         self._last_trade_resources: Optional[ResourceCount] = None
@@ -48,9 +49,8 @@ class EtwEstimator:
     def restore_trade_state(self, snapshot: EtwTradeStateSnapshot) -> None:
         """Restore the trade state."""
         self._last_trade_proposed = snapshot.last_trade_proposed
-        self._last_trade_resources = (
-            None if snapshot.last_trade_resources is None else snapshot.last_trade_resources.copy()
-        )
+        self._last_trade_resources = (None if snapshot.last_trade_resources is None else
+                                      snapshot.last_trade_resources.copy())
 
     def record_trade_proposal(self, resources: ResourceCount) -> None:
         """Record the trade proposal."""
@@ -334,15 +334,10 @@ class EtwEstimator:
                 reasons_for=[],
             )
 
-        alternatives = [
-            candidate for candidate in explained_candidates
-            if candidate.action != chosen_candidate.action
-        ][:3]
-        worst_utility = (
-            explained_candidates[-1].utility_total
-            if explained_candidates
-            else chosen_candidate.utility_total
-        )
+        alternatives = [candidate for candidate in explained_candidates
+                        if candidate.action != chosen_candidate.action][:3]
+        worst_utility = (explained_candidates[-1].utility_total
+                         if explained_candidates else chosen_candidate.utility_total)
         return ActionExplanation(
             chosen_action=chosen_candidate.action,
             chosen_candidate=chosen_candidate,
@@ -353,7 +348,10 @@ class EtwEstimator:
                 worst_utility,
             ),
             assumptions=[AssumptionCode.EXPECTED_PRODUCTION, AssumptionCode.LEGALITY_AND_AFFORDABILITY],
-            metadata={"player_number": player_number, "etw_before": etw_before},
+            metadata={
+                "player_number": player_number,
+                "etw_before": etw_before
+            },
         )
 
     def calculate_best_game_action_with_explanation(
@@ -461,8 +459,7 @@ class EtwEstimator:
             use_time_discount=use_time_discount,
         )
         alternatives = [
-            candidate for candidate in explained_candidates
-            if candidate.full_plan != chosen_candidate.full_plan
+            candidate for candidate in explained_candidates if candidate.full_plan != chosen_candidate.full_plan
         ][:3]
         return ActionExplanation(
             chosen_action=chosen_action,
@@ -474,5 +471,8 @@ class EtwEstimator:
                 explained_candidates[-1].utility_total if explained_candidates else None,
             ),
             assumptions=[AssumptionCode.EXPECTED_PRODUCTION, AssumptionCode.LEGALITY_AND_AFFORDABILITY],
-            metadata={"player_number": player_number, "etw_before": etw_before},
+            metadata={
+                "player_number": player_number,
+                "etw_before": etw_before
+            },
         )

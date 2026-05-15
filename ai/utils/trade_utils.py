@@ -1,13 +1,13 @@
 import math
-from typing import Optional, List, Tuple, Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
+from ai.actions import Action, ActionType
 from ai.simulation.SimGame import SimGame
 from ai.simulation.SimPlayerState import SimPlayerState
-from ai.actions import Action, ActionType
 from ai.utils.resource_utils import expected_rolls_for_resource
 from config.move_quality_constants import LOGISTIC_CLAMP_MAX, LOGISTIC_CLAMP_MIN
+from config.performance_constants import CHECK_INVALID_TRADES_EARLY, EPSILON, TRADE_ETW_SHORTLIST_K
 from config.StrategyWeights import StrategyWeights
-from config.performance_constants import EPSILON, TRADE_ETW_SHORTLIST_K, CHECK_INVALID_TRADES_EARLY
 from game.Resources import Resource, ResourceCount
 
 if TYPE_CHECKING:
@@ -134,10 +134,7 @@ def _predict_acceptance_prob(_: SimPlayerState, delta_etw: float, trade: Action)
     opp_cost = sum(buying_from_them.values())
 
     # Acceptance increases with opponent ETW gain and decreases with resource cost.
-    score = (
-            StrategyWeights.ACCEPT_ETW_WEIGHT * delta_etw
-            - StrategyWeights.ACCEPT_COST_WEIGHT * opp_cost
-    )
+    score = (StrategyWeights.ACCEPT_ETW_WEIGHT * delta_etw - StrategyWeights.ACCEPT_COST_WEIGHT * opp_cost)
 
     # Squash into [0,1] via a numerically stable logistic function.
     return _stable_logistic(score)
@@ -242,10 +239,9 @@ def propose_trade(
                     continue
 
             # Cheap "benefit" proxy for acceptance: receiving roll-expensive resources is good.
-            benefit = (
-                    sum(q * rolls_per_unit[r] for r, q in selling_by_us.items())
-                    - sum(q * rolls_per_unit[r] for r, q in buying_from_them.items())
-            )
+            benefit = (sum(q * rolls_per_unit[r]
+                           for r, q in selling_by_us.items()) - sum(q * rolls_per_unit[r]
+                                                                    for r, q in buying_from_them.items()))
             benefit = max(0.0, benefit)
 
             # Acceptance probability gates which offers are worth deeper evaluation.
@@ -330,8 +326,8 @@ def _opponent_delta_etw_if_accepts(
     return max(0.0, etw_before - etw_after)
 
 
-def _is_close_or_leading(opponent: SimPlayerState, us: SimPlayerState,
-                         all_players: List[SimPlayerState], sim_game: SimGame, etw_estimator) -> bool:
+def _is_close_or_leading(opponent: SimPlayerState, us: SimPlayerState, all_players: List[SimPlayerState],
+                         sim_game: SimGame, etw_estimator) -> bool:
     """Check whether an opponent is close to or ahead of us."""
 
     # Identify the current ETW leader (lowest expected time to win).

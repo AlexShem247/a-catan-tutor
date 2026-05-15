@@ -1,12 +1,12 @@
 from typing import List
 
+from ai.actions import Action, ActionType
 from ai.simulation.SimPlayerState import SimPlayerState
-from ai.actions import ActionType, Action
 from config.performance_constants import EPSILON
 from game.Game import Game
 from game.PlayerAssets import Buildable
 from game.Resources import Resource, ResourceCount
-from game.Vertex import Vertex, Port
+from game.Vertex import Port, Vertex
 
 
 def expected_rolls_for_resource(player: SimPlayerState, resource: Resource) -> float:

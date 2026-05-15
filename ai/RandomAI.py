@@ -1,14 +1,14 @@
 from random import Random
 from typing import List, Optional, Tuple
 
-from ai.AI import AI
 from ai.actions import Action, ActionType, Phase
+from ai.AI import AI
 from game.Edge import Edge
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
 from game.PlayerAssets import Buildable
-from game.Resources import ResourceCount, Resource
+from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
 
 
@@ -38,9 +38,14 @@ class RandomAI(AI):
             result[r] = result.get(r, 0) + 1
         return result
 
-    def choose_trade_partner(self, player: Player, game: "Game", selling: ResourceCount, buying: ResourceCount,
-                             available_players: List[Tuple[Player, Optional[ResourceCount]]],
-                             ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+    def choose_trade_partner(
+        self,
+        player: Player,
+        game: "Game",
+        selling: ResourceCount,
+        buying: ResourceCount,
+        available_players: List[Tuple[Player, Optional[ResourceCount]]],
+    ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
         """Choose the trade partner and offer to pursue."""
         if not available_players:
             return None
@@ -57,18 +62,16 @@ class RandomAI(AI):
         """Select the opening road location."""
         return self.rng.choice(available_edges) if available_edges else None
 
-    def select_robber_target(self,
-                             player: Player,
-                             game: Game,
-                             valid_hexes: List[HexTile],
-                             ) -> Tuple[HexTile, Optional[Player]]:
+    def select_robber_target(
+        self,
+        player: Player,
+        game: Game,
+        valid_hexes: List[HexTile],
+    ) -> Tuple[HexTile, Optional[Player]]:
         """Select the robber placement and steal target."""
         hex_tile = self.rng.choice(valid_hexes)
 
-        players = [
-            p for p in game.get_players_on_hex(hex_tile)
-            if p != player and p.has_resources()
-        ]
+        players = [p for p in game.get_players_on_hex(hex_tile) if p != player and p.has_resources()]
 
         target = self.rng.choice(players) if players else None
         return hex_tile, target

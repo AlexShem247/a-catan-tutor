@@ -3,23 +3,17 @@ from typing import List, Tuple
 from ai.actions import Action, ActionType
 from ai.simulation.SimGame import SimGame
 from ai.simulation.SimPlayerState import SimPlayerState, dice_probability
-from ai.utils.action_utils import (
-    distant_settlement_candidates,
-    play_development_card_action,
-    purchase_development_card_action,
-)
+from ai.utils.action_utils import (distant_settlement_candidates, play_development_card_action,
+                                   purchase_development_card_action)
+from config.performance_constants import ETW_SIMULATION_MAX_CANDIDATES, MAX_SETTLEMENT_CANDIDATES, ROAD_ETB_THRESHOLD
 from config.StrategyWeights import StrategyWeights
-from config.performance_constants import (
-    ETW_SIMULATION_MAX_CANDIDATES,
-    MAX_SETTLEMENT_CANDIDATES,
-    ROAD_ETB_THRESHOLD,
-)
 from game.Game import Game
 from game.PlayerAssets import Buildable
 from game.Resources import Resource
 
 
 class EtwCandidateGenerator:
+
     def __init__(self, timing, estimator):
         self.timing = timing
         self.estimator = estimator
@@ -105,10 +99,7 @@ class EtwCandidateGenerator:
             )
             sorted_settlements = sorted(
                 player.settlements,
-                key=lambda s: sum(
-                    dice_probability(hex_tile.production_number)
-                    for hex_tile in s.hexes
-                ),
+                key=lambda s: sum(dice_probability(hex_tile.production_number) for hex_tile in s.hexes),
                 reverse=True,
             )[:StrategyWeights.MAX_SETTLEMENTS_FOR_CITY_UPGRADE]
             for settlement in sorted_settlements:

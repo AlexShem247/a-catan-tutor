@@ -1,17 +1,16 @@
 from dataclasses import dataclass
-from typing import List, Tuple, Optional, TYPE_CHECKING, Set, Dict, Any
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
-from ai.simulation.SimGame import SimGame, BoardOverlay
+from ai.actions import Action, ActionType
+from ai.simulation.board_sim_utils import get_opponents, legal_settlement_vertex
+from ai.simulation.SimGame import BoardOverlay, SimGame
 from ai.simulation.SimPlayerState import SimPlayerState, dice_probability
-from ai.actions import ActionType, Action
-from ai.simulation.board_sim_utils import legal_settlement_vertex, get_opponents
-from ai.utils.resource_utils import get_bank_trade_ratio, calc_step_resources
+from ai.utils.resource_utils import calc_step_resources, get_bank_trade_ratio
+from config.performance_constants import (DEV_CARD_ETB_THRESHOLD, DIRECT_LIMIT, EPSILON, K_ETB_EVAL, MAX_BEAM_PER_DEPTH,
+                                          MAX_CHEAP_CANDIDATES_TOTAL, MAX_EXPANSIONS_PER_STATE,
+                                          MAX_EXTRA_ROADS_FOR_SETTLEMENT, MAX_SETTLEMENT_CANDIDATES, ROAD_LEN_PENALTY,
+                                          START_LIMIT)
 from config.StrategyWeights import StrategyWeights
-from config.performance_constants import (
-    MAX_EXTRA_ROADS_FOR_SETTLEMENT,
-    DEV_CARD_ETB_THRESHOLD,
-    EPSILON, MAX_SETTLEMENT_CANDIDATES, MAX_EXPANSIONS_PER_STATE, MAX_BEAM_PER_DEPTH, DIRECT_LIMIT, ROAD_LEN_PENALTY,
-    MAX_CHEAP_CANDIDATES_TOTAL, K_ETB_EVAL, START_LIMIT)
 from game.Game import Game
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
@@ -22,10 +21,10 @@ if TYPE_CHECKING:
 
 
 def distant_settlement_candidates(
-        player: SimPlayerState,
-        sim_game: SimGame,
-        etw_estimator: "EtwEstimator",
-        max_extra_roads_override: Optional[int] = None,
+    player: SimPlayerState,
+    sim_game: SimGame,
+    etw_estimator: "EtwEstimator",
+    max_extra_roads_override: Optional[int] = None,
 ) -> List[Tuple[List[Action], float, float]]:
     """Return promising distant settlement candidates."""
 
@@ -127,9 +126,9 @@ def play_development_card_action(player: SimPlayerState, sim_game: SimGame) -> L
 
 
 def purchase_development_card_action(
-        player: SimPlayerState,
-        sim_game: SimGame,
-        etw_estimator: "EtwEstimator",
+    player: SimPlayerState,
+    sim_game: SimGame,
+    etw_estimator: "EtwEstimator",
 ) -> List[Tuple[List[Action], float, float]]:
     """Generate the simulated development-card purchase action."""
     deck = sim_game.game.development_deck
@@ -182,8 +181,12 @@ def get_bank_trade_for_action(player: SimPlayerState, cost: ResourceCount) -> Op
                 return Action(
                     ActionType.TRADE_WITH_BANK,
                     payload=(
-                        {sell_resource: trade_ratio},
-                        {needed_resource: 1},
+                        {
+                            sell_resource: trade_ratio
+                        },
+                        {
+                            needed_resource: 1
+                        },
                     ),
                 )
 
@@ -217,12 +220,8 @@ def compute_k_lr(player: SimPlayerState, sim_game: SimGame) -> float:
     f_contest = 1.0 / (1.0 + max(gap, 0) + EPSILON)
 
     # Weighted combination of phase / distance-to-target / contest.
-    k = (
-            StrategyWeights.LR_BASE
-            + StrategyWeights.LR_PHASE * f_phase
-            + StrategyWeights.LR_DISTANCE * f_dist
-            + StrategyWeights.LR_CONTEST * f_contest
-    )
+    k = (StrategyWeights.LR_BASE + StrategyWeights.LR_PHASE * f_phase + StrategyWeights.LR_DISTANCE * f_dist +
+         StrategyWeights.LR_CONTEST * f_contest)
     return max(k, 0.0)
 
 
@@ -252,12 +251,8 @@ def compute_k_la(player: SimPlayerState, sim_game: SimGame) -> float:
     f_contest = 1.0 / (1.0 + max(gap, 0) + EPSILON)
 
     # Weighted combination of phase / distance-to-target / contest.
-    k = (
-            StrategyWeights.LA_BASE
-            + StrategyWeights.LA_PHASE * f_phase
-            + StrategyWeights.LA_KNIGHT_DIST * f_dist
-            + StrategyWeights.LA_CONTEST * f_contest
-    )
+    k = (StrategyWeights.LA_BASE + StrategyWeights.LA_PHASE * f_phase + StrategyWeights.LA_KNIGHT_DIST * f_dist +
+         StrategyWeights.LA_CONTEST * f_contest)
     return max(k, 0.0)
 
 
@@ -327,10 +322,10 @@ def _road_edge_available_fn(player_roads_set: Set, ov: BoardOverlay):
 
 
 def _calc_etb_actions_fast(
-        etw_estimator: "EtwEstimator",
-        player: SimPlayerState,
-        sim_game: SimGame,
-        actions: List[Action],
+    etw_estimator: "EtwEstimator",
+    player: SimPlayerState,
+    sim_game: SimGame,
+    actions: List[Action],
 ) -> float:
     """Estimate settlement paths and ETB values efficiently."""
 
@@ -352,9 +347,9 @@ def _calc_etb_actions_fast(
 
 
 def _select_start_vertices(
-        network_vertices: Set[Vertex],
-        vertex_score,
-        road_edge_available,
+    network_vertices: Set[Vertex],
+    vertex_score,
+    road_edge_available,
 ) -> List[Vertex]:
     """Select starting vertices for the path search."""
 
@@ -376,12 +371,12 @@ def _select_start_vertices(
 
 
 def _direct_settlement_candidates(
-        player: SimPlayerState,
-        sim_game: SimGame,
-        network_vertices: Set[Vertex],
-        all_player_vertices: Set[Vertex],
-        vertex_score,
-        etw_estimator: "EtwEstimator",
+    player: SimPlayerState,
+    sim_game: SimGame,
+    network_vertices: Set[Vertex],
+    all_player_vertices: Set[Vertex],
+    vertex_score,
+    etw_estimator: "EtwEstimator",
 ) -> List[Tuple[List[Action], float, float]]:
     """Return directly reachable settlement candidates."""
 
@@ -413,14 +408,14 @@ class _PathState:
 
 
 def _beam_search_settlement_candidates(
-        player: SimPlayerState,
-        sim_game: SimGame,
-        start_vertices: List[Vertex],
-        all_player_vertices: Set[Vertex],
-        max_extra_roads: int,
-        vertex_score,
-        road_edge_available,
-        etw_estimator: "EtwEstimator",
+    player: SimPlayerState,
+    sim_game: SimGame,
+    start_vertices: List[Vertex],
+    all_player_vertices: Set[Vertex],
+    max_extra_roads: int,
+    vertex_score,
+    road_edge_available,
+    etw_estimator: "EtwEstimator",
 ) -> List[Tuple[List[Action], float, float]]:
     """Search settlement candidates with beam search."""
 
@@ -465,7 +460,7 @@ def _beam_search_settlement_candidates(
 
             for score, to_v, edge in possible_moves:
                 visited_best_depth[to_v] = depth
-                new_edges = state.edges + (edge,)
+                new_edges = state.edges + (edge, )
                 # Penalise longer road chains to avoid overextension.
                 beam_score = score - ROAD_LEN_PENALTY * len(new_edges)
                 next_states_scored.append((-beam_score, _PathState(to_v, new_edges)))

@@ -3,10 +3,7 @@ import math
 
 def hex_center(q, r, cx, cy, radius):
     a = radius * (math.sqrt(3) / 2)
-    return (
-        cx + q * 2 * a + (r - 2) * a,
-        cy + (r - 2) * 1.5 * radius
-    )
+    return cx + q * 2 * a + (r - 2) * a, cy + (r - 2) * 1.5 * radius
 
 
 def vertex_offset(direction, radius):

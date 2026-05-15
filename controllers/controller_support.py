@@ -29,13 +29,13 @@ class ReturnToStart(Exception):
 
 
 class AITurnActionLimitExceeded(Exception):
+
     def __init__(self, player_name: str, request_count: int, phase):
         self.player_name = player_name
         self.request_count = request_count
         self.phase = phase
         super().__init__(
-            f"AI action request limit exceeded for {player_name} after {request_count} requests in {phase.name}."
-        )
+            f"AI action request limit exceeded for {player_name} after {request_count} requests in {phase.name}.")
 
 
 @dataclass(frozen=True)
@@ -74,10 +74,10 @@ class ControllerSupport(ABC):
 
     @abstractmethod
     def _show_tutor_init(
-            self,
-            player: Player,
-            stage: TutorStage,
-            explanation: Optional[ActionExplanation],
+        self,
+        player: Player,
+        stage: TutorStage,
+        explanation: Optional[ActionExplanation],
     ) -> None:
         """Show the tutor introduction for the current decision stage."""
         ...
@@ -119,19 +119,19 @@ class ControllerSupport(ABC):
 
     @abstractmethod
     def _get_tutor_recommended_robber_choice(
-            self,
-            player: Player,
-            valid_hexes: list[HexTile],
+        self,
+        player: Player,
+        valid_hexes: list[HexTile],
     ):
         """Return the tutor-recommended robber choice."""
         ...
 
     @abstractmethod
     def get_road_choice(
-            self,
-            player: Player,
-            settlement: Optional[Vertex] = None,
-            selector: Optional[Callable[[list[Edge]], Optional[Edge]]] = None,
+        self,
+        player: Player,
+        settlement: Optional[Vertex] = None,
+        selector: Optional[Callable[[list[Edge]], Optional[Edge]]] = None,
     ) -> Edge:
         """Return the selected road choice for the current flow."""
         ...
@@ -193,11 +193,11 @@ class ControllerSupport(ABC):
 
     @abstractmethod
     def trade_between_players(
-            self,
-            player: Player,
-            selling: ResourceCount,
-            buying_player: Player,
-            buying: ResourceCount,
+        self,
+        player: Player,
+        selling: ResourceCount,
+        buying_player: Player,
+        buying: ResourceCount,
     ):
         """Run the trade flow between two players."""
         ...

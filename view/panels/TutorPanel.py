@@ -1,24 +1,19 @@
 import math
-from typing import Callable, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, Optional, Tuple
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QAbstractScrollArea, QHBoxLayout, QPushButton, QWidget
 
 from ai.tutor.explanations import ActionExplanation
 from ai.tutor.feedback import TutorFeedbackExplanation, move_quality_colour
-from ai.tutor.tutor import TutorStage, TUTOR_STAGE_CONTENT
-from config.view_constants import (
-    TUTOR_FEEDBACK_FADE_STEPS,
-    TUTOR_FEEDBACK_MAX_DISPLAY_SECONDS,
-    TUTOR_FEEDBACK_HISTORY_LIMIT,
-    TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS,
-    TUTOR_HISTORY_ACTION_HEIGHT_PX,
-    TUTOR_HISTORY_NAV_BUTTON_SIZE_PX,
-)
-from view.View import GameMode
+from ai.tutor.tutor import TUTOR_STAGE_CONTENT, TutorStage
+from config.view_constants import (TUTOR_FEEDBACK_FADE_STEPS, TUTOR_FEEDBACK_HISTORY_LIMIT,
+                                   TUTOR_FEEDBACK_MAX_DISPLAY_SECONDS, TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS,
+                                   TUTOR_HISTORY_ACTION_HEIGHT_PX, TUTOR_HISTORY_NAV_BUTTON_SIZE_PX)
 from view.canvas.display_utils import format_counter_offer
 from view.rich_text import concise_explanation_html, tutor_focus_html
 from view.styles import tutor_feedback_action_stylesheet, tutor_feedback_explanation_stylesheet
+from view.View import GameMode
 
 if TYPE_CHECKING:
     from view.MainWindow import MainWindow
@@ -26,6 +21,7 @@ if TYPE_CHECKING:
 
 # noinspection PyProtectedMember,PyUnresolvedReferences
 class TutorPanel:
+
     def __init__(self, window: "MainWindow", widget: QWidget):
         self.window = window
         self.widget = widget
@@ -83,12 +79,8 @@ class TutorPanel:
 
     def update_previous_feedback_button(self) -> None:
         """Update the visibility of the previous-feedback button."""
-        visible = (
-            self.history_available_in_mode
-            and self.history_enabled_on_turn
-            and bool(self.tutor_feedback_history)
-            and not self.history_mode_active
-        )
+        visible = (self.history_available_in_mode and self.history_enabled_on_turn and bool(self.tutor_feedback_history)
+                   and not self.history_mode_active)
         self.widget.previous_feedback_btn.setVisible(visible)
         self.widget.previous_feedback_btn.setEnabled(visible)
 
@@ -97,9 +89,7 @@ class TutorPanel:
         self.history_enabled_on_turn = enabled
         self.update_previous_feedback_button()
 
-    def set_restore_tutor_menu_callback(
-        self, callback: Optional[Callable[[], None]], allow_history: bool
-    ) -> None:
+    def set_restore_tutor_menu_callback(self, callback: Optional[Callable[[], None]], allow_history: bool) -> None:
         """Store the callback used to restore the tutor menu."""
         self.restore_tutor_menu_callback = callback
         self.set_history_enabled(allow_history)
@@ -274,8 +264,7 @@ class TutorPanel:
         """Return how long tutor feedback should stay visible."""
         gap = max(0.0, min(1.0, feedback.assessment.score_gap))
         return TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS + (
-            (TUTOR_FEEDBACK_MAX_DISPLAY_SECONDS - TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS) * gap
-        )
+            (TUTOR_FEEDBACK_MAX_DISPLAY_SECONDS - TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS) * gap)
 
     def concise_explanation_html(self, explanation: ActionExplanation) -> Tuple[str, str]:
         """Build the concise tutor explanation HTML."""

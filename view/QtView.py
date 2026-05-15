@@ -1,12 +1,14 @@
-from typing import List, Dict, Optional, Tuple, Any
-from typing import Optional, List, Tuple, Dict, Any, Callable
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
 from PyQt6.QtCore import QEventLoop, QTimer, pyqtBoundSignal
 
-from controllers.GameController import GameController
 from ai.actions import Action
 from ai.tutor.explanations import ActionExplanation
 from ai.tutor.feedback import TutorFeedbackExplanation
 from ai.tutor.tutor import TutorStage
+from config.view_constants import (AI_DECISION_ANIMATION_DELAY, SECONDS_TO_MILLISECONDS, WINDOW_DEFAULT_X,
+                                   WINDOW_DEFAULT_Y, WINDOW_HEIGHT, WINDOW_WIDTH)
+from controllers.GameController import GameController
 from game.Edge import Edge
 from game.HexTile import HexTile
 from game.Player import Player
@@ -14,12 +16,11 @@ from game.PlayerAssets import DevelopmentCardType
 from game.Resources import ResourceCount
 from game.Vertex import Vertex
 from view.MainWindow import MainWindow
-from view.View import View, GameMode
-from config.view_constants import AI_DECISION_ANIMATION_DELAY, SECONDS_TO_MILLISECONDS, WINDOW_DEFAULT_X, \
-    WINDOW_DEFAULT_Y, WINDOW_WIDTH, WINDOW_HEIGHT
+from view.View import GameMode, View
 
 
 class QtView(View):
+
     def __init__(self, window: MainWindow, controller: GameController):
         self.window = window
         self.canvas = window.canvas
@@ -52,8 +53,8 @@ class QtView(View):
     def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int], played_dev_card: bool = False) \
             -> Action:
         """Display the board and wait for the player turn action."""
-        return select_blocking(self, self.window.turnMade, self.window.display_round_info, self.controller,
-                               player, dice_info, played_dev_card)
+        return select_blocking(self, self.window.turnMade, self.window.display_round_info, self.controller, player,
+                               dice_info, played_dev_card)
 
     def display_board_turn_ai(self, player: Player, dice_info: Tuple[int, int, int], msg: str, increase_delay=False):
         """Display the board during an AI turn."""
@@ -69,9 +70,7 @@ class QtView(View):
         self.canvas.disable_interactivity = disable_interactivity
         self.canvas.draw_selectable_vertices(vertices)
         if not disable_interactivity:
-            self.window.set_restore_board_state_callback(
-                lambda: self._restore_selectable_vertices(vertices)
-            )
+            self.window.set_restore_board_state_callback(lambda: self._restore_selectable_vertices(vertices))
             selected = select_blocking(self, self.canvas.selectionMade, self.canvas.draw_selectable_vertices, vertices)
             self.window.set_restore_board_state_callback(None)
             return selected
@@ -81,18 +80,14 @@ class QtView(View):
         self.canvas.disable_interactivity = disable_interactivity
         self.canvas.draw_selectable_edges(edges)
         if not disable_interactivity:
-            self.window.set_restore_board_state_callback(
-                lambda: self._restore_selectable_edges(edges)
-            )
+            self.window.set_restore_board_state_callback(lambda: self._restore_selectable_edges(edges))
             selected = select_blocking(self, self.canvas.selectionMade, self.canvas.draw_selectable_edges, edges)
             self.window.set_restore_board_state_callback(None)
             return selected
 
     def draw_selectable_tiles(self, tiles: List[HexTile]) -> HexTile:
         """Draw selectable tiles on the board."""
-        self.window.set_restore_board_state_callback(
-            lambda: self._restore_selectable_tiles(tiles)
-        )
+        self.window.set_restore_board_state_callback(lambda: self._restore_selectable_tiles(tiles))
         selected = select_blocking(self, self.canvas.selectionMade, self.canvas.draw_selectable_tiles, tiles)
         self.window.set_restore_board_state_callback(None)
         return selected
@@ -104,28 +99,32 @@ class QtView(View):
     def show_resource_chooser(self, player, num_resources: int, title: str,
                               resource_caps: ResourceCount | None = None) -> ResourceCount:
         """Display the resource chooser widget."""
-        return select_blocking(self, self.window.resourcesPicked, self.window.show_resource_chooser,
-                               player, num_resources, title, resource_caps)
+        return select_blocking(self, self.window.resourcesPicked, self.window.show_resource_chooser, player,
+                               num_resources, title, resource_caps)
 
-    def display_trade_manager(self, player: Player, selling: ResourceCount,
-                              buying: ResourceCount, selling_player: Player) -> Tuple[bool, Optional[ResourceCount]]:
+    def display_trade_manager(self, player: Player, selling: ResourceCount, buying: ResourceCount,
+                              selling_player: Player) -> Tuple[bool, Optional[ResourceCount]]:
         """Display the trade manager widget."""
-        return select_blocking(
-            self, self.window.tradeDecisionMade, self.window.display_trade_manager, player, selling,
-            buying, selling_player
-        )
+        return select_blocking(self, self.window.tradeDecisionMade, self.window.display_trade_manager, player, selling,
+                               buying, selling_player)
 
     def select_player_trade_offer(
-            self,
-            player: Player,
-            selling: ResourceCount,
-            buying: ResourceCount,
-            willing_players: List[Tuple[Player, Optional[ResourceCount]]],
+        self,
+        player: Player,
+        selling: ResourceCount,
+        buying: ResourceCount,
+        willing_players: List[Tuple[Player, Optional[ResourceCount]]],
     ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
         """Handle select player trade offer."""
         return select_blocking(
-            self, self.window.tradeSelected, self.window.select_player_to_trade,
-            self.controller, player, selling, buying, willing_players,
+            self,
+            self.window.tradeSelected,
+            self.window.select_player_to_trade,
+            self.controller,
+            player,
+            selling,
+            buying,
+            willing_players,
         )
 
     def pre_roll(self, player: Player) -> DevelopmentCardType | bool:
@@ -154,8 +153,8 @@ class QtView(View):
         """Display the board with tutor move explanations."""
         self.canvas.display_board(self.controller)
         self.window.display_resources(self.controller)
-        return select_blocking(self, self.window.turnMade, self.window.display_explanation,
-                               player, dice_info, explanation)
+        return select_blocking(self, self.window.turnMade, self.window.display_explanation, player, dice_info,
+                               explanation)
 
     def display_tutor_init(self, player: Player, stage: TutorStage, explanation: ActionExplanation) -> None:
         """Display the tutor introduction for the current stage."""

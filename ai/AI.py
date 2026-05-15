@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from random import Random
-from typing import Optional, List, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from ai.actions import Action, Phase
 from game.Edge import Edge
@@ -21,9 +21,14 @@ class AI(ABC):
         self.policy_name = type(self).__name__
 
     @abstractmethod
-    def choose_trade_partner(self, player: Player, game: "Game", selling: ResourceCount, buying: ResourceCount,
-                             available_players: List[Tuple[Player, Optional[ResourceCount]]],
-                             ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+    def choose_trade_partner(
+        self,
+        player: Player,
+        game: "Game",
+        selling: ResourceCount,
+        buying: ResourceCount,
+        available_players: List[Tuple[Player, Optional[ResourceCount]]],
+    ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
         """Choose the trade partner and offer to pursue."""
         ...
 
@@ -39,11 +44,12 @@ class AI(ABC):
         ...
 
     @abstractmethod
-    def select_robber_target(self,
-                             player: Player,
-                             game: "Game",
-                             valid_hexes: List[HexTile],
-                             ) -> Tuple[HexTile, Optional[Player]]:
+    def select_robber_target(
+        self,
+        player: Player,
+        game: "Game",
+        valid_hexes: List[HexTile],
+    ) -> Tuple[HexTile, Optional[Player]]:
         """Select the robber placement and steal target."""
         ...
 

@@ -1,12 +1,12 @@
 import unittest
 from random import Random
 
+from game.Edge import Edge, EdgeDirection
 from game.Game import Game
 from game.Player import Player, PlayerNumber
-from game.PlayerAssets import DevelopmentCardType, DevelopmentCard, DevelopmentDeck
+from game.PlayerAssets import DevelopmentCard, DevelopmentCardType, DevelopmentDeck
 from game.Resources import Resource
-from game.Vertex import Vertex, Port, VertexDirection
-from game.Edge import Edge, EdgeDirection
+from game.Vertex import Port, Vertex, VertexDirection
 
 
 class PlayerTests(unittest.TestCase):

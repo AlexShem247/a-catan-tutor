@@ -1,18 +1,19 @@
 import unittest
 from random import Random
 
+from test_helpers import GameTestMixin
+
 from controllers.GameController import GameController
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game
 from game.Player import PlayerNumber
 from game.PlayerAssets import Buildable, DevelopmentCard, DevelopmentCardType
 from game.Resources import Resource
-from game.Vertex import Building, Vertex, VertexDirection, Port
-
-from test_helpers import GameTestMixin
+from game.Vertex import Building, Port, Vertex, VertexDirection
 
 
 class TestGame(GameTestMixin, unittest.TestCase):
+
     def test_can_afford_exact(self):
         self.player.resources = Game.BUILDING_COST[Buildable.ROAD].copy()
         self.assertTrue(self.game.can_afford(self.player, Buildable.ROAD))

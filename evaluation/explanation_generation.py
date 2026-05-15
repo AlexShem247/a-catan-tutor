@@ -9,12 +9,12 @@ from typing import Dict, List, Optional, Tuple
 
 from tqdm import tqdm
 
-from controllers.GameController import GameController
-from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.actions import ActionType, Phase
+from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.tutor.explanations import ActionExplanation
-from config.StrategyWeights import EVO_STRATEGY_WEIGHTS, ORIGINAL_STRATEGY_WEIGHTS
 from config.player_policies import PolicyFactory, make_rule_based_policy
+from config.StrategyWeights import EVO_STRATEGY_WEIGHTS, ORIGINAL_STRATEGY_WEIGHTS
+from controllers.GameController import GameController
 from game.HexTile import HexTile
 from game.Player import Player, PlayerNumber
 from game.Resources import Resource, ResourceCount
@@ -34,6 +34,7 @@ CSV_HEADERS = ["game_id", "explanation_num", "action_label", "detailed_explanati
 
 
 class InstrumentedTutorAI(RuleBasedAI):
+
     def __init__(self, rng: Random, **kwargs):
         super().__init__(rng, **kwargs)
         self._explanations: List[Dict[str, str]] = []
@@ -51,23 +52,18 @@ class InstrumentedTutorAI(RuleBasedAI):
         if explanation.chosen_action.type == ActionType.ROLL:
             return
         action_label, _ = explanation.generate_text_concise()
-        self._explanations.append(
-            {
-                "action_label": action_label.strip(),
-                "detailed_explanation": self._normalise_detail_text(explanation.generate_text_detail()),
-            }
-        )
+        self._explanations.append({
+            "action_label": action_label.strip(),
+            "detailed_explanation": self._normalise_detail_text(explanation.generate_text_detail()),
+        })
 
     def export_explanation_rows(self, game_id: int) -> List[Dict[str, object]]:
-        return [
-            {
-                "game_id": game_id,
-                "explanation_num": explanation_num,
-                "action_label": row["action_label"],
-                "detailed_explanation": row["detailed_explanation"],
-            }
-            for explanation_num, row in enumerate(self._explanations)
-        ]
+        return [{
+            "game_id": game_id,
+            "explanation_num": explanation_num,
+            "action_label": row["action_label"],
+            "detailed_explanation": row["detailed_explanation"],
+        } for explanation_num, row in enumerate(self._explanations)]
 
     def select_initial_settlement_location(self, player, game, available_vertices):
         vertex, explanation = self.select_initial_settlement_location_with_explanation(player, game, available_vertices)
@@ -87,9 +83,8 @@ class InstrumentedTutorAI(RuleBasedAI):
         buying: ResourceCount,
         available_players: List[Tuple[Player, Optional[ResourceCount]]],
     ):
-        selection, explanation = self.choose_trade_partner_with_explanation(
-            player, game, selling, buying, available_players
-        )
+        selection, explanation = self.choose_trade_partner_with_explanation(player, game, selling, buying,
+                                                                            available_players)
         self._record_explanation(explanation)
         return selection
 
@@ -121,9 +116,7 @@ class InstrumentedTutorAI(RuleBasedAI):
         selling: ResourceCount,
         buying: ResourceCount,
     ) -> Tuple[bool, Optional[ResourceCount]]:
-        accepted, counter, explanation = self.respond_to_trade_with_explanation(
-            player, game, opponent, selling, buying
-        )
+        accepted, counter, explanation = self.respond_to_trade_with_explanation(player, game, opponent, selling, buying)
         self._record_explanation(explanation)
         return accepted, counter
 
@@ -160,10 +153,7 @@ def _build_player_config(player_policies, order_seed: int):
     if SHUFFLE_ORDER:
         rng.shuffle(ordered_policies)
 
-    return {
-        player_number: policy
-        for player_number, policy in zip(ordered_player_numbers, ordered_policies)
-    }
+    return {player_number: policy for player_number, policy in zip(ordered_player_numbers, ordered_policies)}
 
 
 def _collect_tutor_explanation_rows(controller: GameController, game_id: int) -> List[Dict[str, object]]:
@@ -250,21 +240,16 @@ def run_simulations_parallel(
                     pending_rows.clear()
                 if progress is not None:
                     progress.close()
-                raise RuntimeError(
-                    f"Policy evaluation exceeded the retry budget after {aborted_games} aborted games."
-                )
+                raise RuntimeError(f"Policy evaluation exceeded the retry budget after {aborted_games} aborted games.")
 
             batch_size = min(remaining_runs, remaining_attempt_budget)
-            args_list = [
-                (
-                    seed + attempts_started + i,
-                    seed * 10_000 + attempts_started + i,
-                    player_policies,
-                    attempts_started + i,
-                    MAX_EVALUATION_ROUNDS,
-                )
-                for i in range(batch_size)
-            ]
+            args_list = [(
+                seed + attempts_started + i,
+                seed * 10_000 + attempts_started + i,
+                player_policies,
+                attempts_started + i,
+                MAX_EVALUATION_ROUNDS,
+            ) for i in range(batch_size)]
             attempts_started += batch_size
 
             for game_result in pool.imap_unordered(run_single_game, args_list):
@@ -280,10 +265,8 @@ def run_simulations_parallel(
                         total_rows_written += len(pending_rows)
                         pending_rows.clear()
                         if progress is not None:
-                            progress.write(
-                                f"Wrote explanation rows after {completed_games} completed games "
-                                f"(total rows: {total_rows_written})."
-                            )
+                            progress.write(f"Wrote explanation rows after {completed_games} completed games "
+                                           f"(total rows: {total_rows_written}).")
                 else:
                     aborted_games += 1
                     if progress is not None:
@@ -299,16 +282,12 @@ def run_simulations_parallel(
     elapsed = time.time() - start
 
     if aborted_games:
-        print(
-            f"Skipped {aborted_games} games that either hit the {MAX_EVALUATION_ROUNDS}-round cap "
-            f"or exceeded the per-turn AI action request limit, and retried them."
-        )
+        print(f"Skipped {aborted_games} games that either hit the {MAX_EVALUATION_ROUNDS}-round cap "
+              f"or exceeded the per-turn AI action request limit, and retried them.")
 
     print(f"Wrote {total_rows_written} explanation rows from {completed_games} completed games.")
-    print(
-        f"Simulation of {completed_games} games took {elapsed:.1f} seconds "
-        f"({elapsed / max(completed_games, 1):.2f} seconds/game)."
-    )
+    print(f"Simulation of {completed_games} games took {elapsed:.1f} seconds "
+          f"({elapsed / max(completed_games, 1):.2f} seconds/game).")
 
 
 def parse_args():

@@ -1,19 +1,15 @@
 import re
 from typing import Any, Callable, List, Optional, Tuple, TypeVar
 
-from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.actions import Action, ActionType, Phase
-from ai.simulation.SimGame import make_sim_game_for_player
+from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.simulation.board_sim_utils import find_edge_toward_vertex, get_legal_settlement_vertices, moves_toward_vertex
+from ai.simulation.SimGame import make_sim_game_for_player
 from ai.tutor.explanations import ActionExplanation, ExplanationTemplate, ReasonType, RoadExplanationKind
 from ai.tutor.feedback import TutorAssessment, TutorDecisionType, TutorFeedbackExplanation
-from ai.tutor.move_quality import (
-    clamp_move_quality,
-    initial_road_connection_move_quality,
-    initial_road_expansion_move_quality,
-    initial_road_flexible_move_quality,
-    move_quality_label,
-)
+from ai.tutor.move_quality import (clamp_move_quality, initial_road_connection_move_quality,
+                                   initial_road_expansion_move_quality, initial_road_flexible_move_quality,
+                                   move_quality_label)
 from config.move_quality_constants import MOVE_QUALITY_GOOD_THRESHOLD, MOVE_QUALITY_OKAY_THRESHOLD
 from config.performance_constants import EPSILON
 from game.Edge import Edge
@@ -23,7 +19,6 @@ from game.Player import Player
 from game.PlayerAssets import Buildable
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
-
 
 T = TypeVar("T")
 
@@ -45,8 +40,7 @@ class TutorEvaluator:
         TutorDecisionType.OPENING_SETTLEMENT: "Prioritise production and resource coverage before smaller extras.",
         TutorDecisionType.OPENING_ROAD: "Aim roads at the strongest follow-up settlement line you can keep open.",
         TutorDecisionType.ROBBER: (
-            "Block the tile that matters most to the strongest opponent without hurting yourself."
-        ),
+            "Block the tile that matters most to the strongest opponent without hurting yourself."),
         TutorDecisionType.DISCARD: "Keep the cards that preserve your next build and throw away surplus first.",
         TutorDecisionType.TRADE_RESPONSE: "Accept trades only when they advance your plan more than your opponent's.",
         TutorDecisionType.TRADE_PARTNER: "Choose the deal that helps your plan while feeding the safest opponent.",
@@ -56,9 +50,9 @@ class TutorEvaluator:
     }
 
     def __init__(
-            self,
-            tutor_ai: RuleBasedAI,
-            live_rng_state_getter: Optional[Callable[[], Tuple[Any, ...]]] = None,
+        self,
+        tutor_ai: RuleBasedAI,
+        live_rng_state_getter: Optional[Callable[[], Tuple[Any, ...]]] = None,
     ):
         self.tutor_ai = tutor_ai
         self.live_rng_state_getter = live_rng_state_getter
@@ -74,25 +68,24 @@ class TutorEvaluator:
             self.tutor_ai.restore_state(snapshot)
 
     def _best_explanation_without_mutating_trade_state(
-            self,
-            player: Player,
-            game: Game,
-            phase: Phase,
-            dev_played: bool,
+        self,
+        player: Player,
+        game: Game,
+        phase: Phase,
+        dev_played: bool,
     ) -> ActionExplanation:
         """Get the tutor's preferred explanation without mutating trade state."""
         return self._run_tutor_preview(
-            lambda: self.tutor_ai.next_action_with_explanation(player, game, phase, dev_played)[1]
-        )
+            lambda: self.tutor_ai.next_action_with_explanation(player, game, phase, dev_played)[1])
 
     def evaluate_main_turn_action(
-            self,
-            player: Player,
-            game: Game,
-            phase: Phase,
-            dev_played: bool,
-            action: Action,
-            title: Optional[str] = None,
+        self,
+        player: Player,
+        game: Game,
+        phase: Phase,
+        dev_played: bool,
+        action: Action,
+        title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
         """Evaluate a main-turn action against the tutor's recommendation."""
         if phase == Phase.PRE_ROLL and action.type == ActionType.PLAY_DEV_CARD:
@@ -118,12 +111,12 @@ class TutorEvaluator:
         return feedback
 
     def evaluate_opening_settlement_choice(
-            self,
-            player: Player,
-            game: Game,
-            available_vertices: List[Vertex],
-            chosen_vertex: Vertex,
-            title: Optional[str] = None,
+        self,
+        player: Player,
+        game: Game,
+        available_vertices: List[Vertex],
+        chosen_vertex: Vertex,
+        title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
         """Evaluate an opening settlement choice against the tutor's recommendation."""
         if chosen_vertex not in available_vertices:
@@ -134,8 +127,7 @@ class TutorEvaluator:
                 player,
                 game,
                 available_vertices,
-            )
-        )
+            ))
         if best_explanation is None or best_vertex is None:
             return None
 
@@ -164,12 +156,12 @@ class TutorEvaluator:
         return feedback
 
     def evaluate_opening_road_choice(
-            self,
-            player: Player,
-            game: Game,
-            available_edges: List[Edge],
-            chosen_edge: Edge,
-            title: Optional[str] = None,
+        self,
+        player: Player,
+        game: Game,
+        available_edges: List[Edge],
+        chosen_edge: Edge,
+        title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
         """Evaluate an opening road choice against the tutor's recommendation."""
         if chosen_edge not in available_edges:
@@ -180,8 +172,7 @@ class TutorEvaluator:
                 player,
                 game,
                 available_edges,
-            )
-        )
+            ))
         if best_edge is None or best_explanation is None:
             return None
 
@@ -198,26 +189,24 @@ class TutorEvaluator:
         return feedback
 
     def evaluate_trade_response_choice(
-            self,
-            player: Player,
-            game: Game,
-            opponent: Player,
-            selling: ResourceCount,
-            buying: ResourceCount,
-            accepted: bool,
-            counter: Optional[ResourceCount],
-            title: Optional[str] = None,
+        self,
+        player: Player,
+        game: Game,
+        opponent: Player,
+        selling: ResourceCount,
+        buying: ResourceCount,
+        accepted: bool,
+        counter: Optional[ResourceCount],
+        title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
         """Evaluate a trade-response choice against the tutor's recommendation."""
-        _, _, best_explanation = self._run_tutor_preview(
-            lambda: self.tutor_ai.respond_to_trade_with_explanation(
-                player,
-                game,
-                opponent,
-                selling,
-                buying,
-            )
-        )
+        _, _, best_explanation = self._run_tutor_preview(lambda: self.tutor_ai.respond_to_trade_with_explanation(
+            player,
+            game,
+            opponent,
+            selling,
+            buying,
+        ))
         actual_explanation = self.tutor_ai.explain_trade_response_choice(
             player,
             game,
@@ -236,26 +225,24 @@ class TutorEvaluator:
         )
 
     def evaluate_trade_partner_choice(
-            self,
-            player: Player,
-            game: Game,
-            selling: ResourceCount,
-            buying: ResourceCount,
-            available_players: List[Tuple[Player, Optional[ResourceCount]]],
-            chosen_player: Player,
-            counter: Optional[ResourceCount],
-            title: Optional[str] = None,
+        self,
+        player: Player,
+        game: Game,
+        selling: ResourceCount,
+        buying: ResourceCount,
+        available_players: List[Tuple[Player, Optional[ResourceCount]]],
+        chosen_player: Player,
+        counter: Optional[ResourceCount],
+        title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
         """Evaluate a trade-partner choice against the tutor's recommendation."""
-        _, best_explanation = self._run_tutor_preview(
-            lambda: self.tutor_ai.choose_trade_partner_with_explanation(
-                player,
-                game,
-                selling,
-                buying,
-                available_players,
-            )
-        )
+        _, best_explanation = self._run_tutor_preview(lambda: self.tutor_ai.choose_trade_partner_with_explanation(
+            player,
+            game,
+            selling,
+            buying,
+            available_players,
+        ))
         actual_explanation = self.tutor_ai.explain_trade_partner_choice(
             player,
             game,
@@ -274,17 +261,16 @@ class TutorEvaluator:
         )
 
     def evaluate_discard_choice(
-            self,
-            player: Player,
-            game: Game,
-            discard: ResourceCount,
-            discard_count: int,
-            title: Optional[str] = None,
+        self,
+        player: Player,
+        game: Game,
+        discard: ResourceCount,
+        discard_count: int,
+        title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
         """Evaluate a discard choice against the tutor's recommendation."""
         _, best_explanation = self._run_tutor_preview(
-            lambda: self.tutor_ai.select_discard_resources_with_explanation(player, game, discard_count)
-        )
+            lambda: self.tutor_ai.select_discard_resources_with_explanation(player, game, discard_count))
         actual_explanation = self.tutor_ai.explain_discard_choice(player, game, discard)
         return self._feedback_from_explanations(
             TutorDecisionType.DISCARD,
@@ -295,18 +281,17 @@ class TutorEvaluator:
         )
 
     def evaluate_robber_choice(
-            self,
-            player: Player,
-            game: Game,
-            valid_hexes: List[HexTile],
-            chosen_hex: HexTile,
-            chosen_player: Optional[Player],
-            title: Optional[str] = None,
+        self,
+        player: Player,
+        game: Game,
+        valid_hexes: List[HexTile],
+        chosen_hex: HexTile,
+        chosen_player: Optional[Player],
+        title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
         """Evaluate a robber choice against the tutor's recommendation."""
         _, _, best_explanation = self._run_tutor_preview(
-            lambda: self.tutor_ai.select_robber_target_with_explanation(player, game, valid_hexes)
-        )
+            lambda: self.tutor_ai.select_robber_target_with_explanation(player, game, valid_hexes))
         actual_explanation = self.tutor_ai.explain_robber_choice(player, game, valid_hexes, chosen_hex, chosen_player)
         return self._feedback_from_explanations(
             TutorDecisionType.ROBBER,
@@ -317,16 +302,15 @@ class TutorEvaluator:
         )
 
     def evaluate_year_of_plenty_choice(
-            self,
-            player: Player,
-            game: Game,
-            selected: ResourceCount,
-            title: Optional[str] = None,
+        self,
+        player: Player,
+        game: Game,
+        selected: ResourceCount,
+        title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
         """Evaluate a Year of Plenty choice against the tutor's recommendation."""
         _, best_explanation = self._run_tutor_preview(
-            lambda: self.tutor_ai.select_year_of_plenty_resources_with_explanation(player, game)
-        )
+            lambda: self.tutor_ai.select_year_of_plenty_resources_with_explanation(player, game))
         actual_explanation = self.tutor_ai.explain_year_of_plenty_choice(player, game, selected)
         return self._feedback_from_explanations(
             TutorDecisionType.YEAR_OF_PLENTY,
@@ -337,16 +321,15 @@ class TutorEvaluator:
         )
 
     def evaluate_monopoly_choice(
-            self,
-            player: Player,
-            game: Game,
-            resource: Resource,
-            title: Optional[str] = None,
+        self,
+        player: Player,
+        game: Game,
+        resource: Resource,
+        title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
         """Evaluate a Monopoly choice against the tutor's recommendation."""
         _, best_explanation = self._run_tutor_preview(
-            lambda: self.tutor_ai.select_monopoly_resource_with_explanation(player, game)
-        )
+            lambda: self.tutor_ai.select_monopoly_resource_with_explanation(player, game))
         actual_explanation = self.tutor_ai.explain_monopoly_choice(player, game, resource)
         return self._feedback_from_explanations(
             TutorDecisionType.MONOPOLY,
@@ -357,12 +340,12 @@ class TutorEvaluator:
         )
 
     def _feedback_from_explanations(
-            self,
-            decision_type: TutorDecisionType,
-            actual_explanation: Optional[ActionExplanation],
-            best_explanation: Optional[ActionExplanation],
-            game: Any,
-            title: Optional[str] = None,
+        self,
+        decision_type: TutorDecisionType,
+        actual_explanation: Optional[ActionExplanation],
+        best_explanation: Optional[ActionExplanation],
+        game: Any,
+        title: Optional[str] = None,
     ) -> Optional[TutorFeedbackExplanation]:
         """Build tutor feedback from the actual and recommended explanations."""
         if actual_explanation is None or best_explanation is None:
@@ -381,10 +364,10 @@ class TutorEvaluator:
         return feedback
 
     def _build_assessment(
-            self,
-            decision_type: TutorDecisionType,
-            actual_explanation: ActionExplanation,
-            best_explanation: ActionExplanation,
+        self,
+        decision_type: TutorDecisionType,
+        actual_explanation: ActionExplanation,
+        best_explanation: ActionExplanation,
     ) -> TutorAssessment:
         """Build a tutor assessment from the compared explanations."""
         same_choice = actual_explanation.chosen_action == best_explanation.chosen_action
@@ -436,9 +419,9 @@ class TutorEvaluator:
 
     @staticmethod
     def _display_scores_for_feedback(
-            actual_explanation: ActionExplanation,
-            best_explanation: ActionExplanation,
-            same_choice: bool,
+        actual_explanation: ActionExplanation,
+        best_explanation: ActionExplanation,
+        same_choice: bool,
     ) -> Tuple[float, float]:
         """Prepare display scores for tutor feedback."""
         actual_score = actual_explanation.move_quality
@@ -450,10 +433,8 @@ class TutorEvaluator:
         chosen_action = actual_explanation.chosen_action
         chosen_candidate = actual_explanation.chosen_candidate
 
-        if (
-            chosen_action.type == ActionType.END_TURN
-            and float(getattr(chosen_candidate, "etw_before", 0.0) or 0.0) <= EPSILON
-        ):
+        if (chosen_action.type == ActionType.END_TURN
+                and float(getattr(chosen_candidate, "etw_before", 0.0) or 0.0) <= EPSILON):
             return 1.0, 1.0
 
         floor_score = MOVE_QUALITY_OKAY_THRESHOLD
@@ -482,33 +463,32 @@ class TutorEvaluator:
         return selected
 
     def _build_initial_settlement_explanation(
-            self,
-            player: Player,
-            vertex: Vertex,
-            best_score: float,
-            max_score: float,
+        self,
+        player: Player,
+        vertex: Vertex,
+        best_score: float,
+        max_score: float,
     ) -> ActionExplanation:
         """Build an explanation for an opening settlement choice."""
-        return self.tutor_ai.opening_policy.build_initial_settlement_explanation(
-            player, vertex, best_score, max_score)
+        return self.tutor_ai.opening_policy.build_initial_settlement_explanation(player, vertex, best_score, max_score)
 
     def _build_initial_road_explanation(
-            self,
-            edge: Edge,
-            target_vertex: Optional[Vertex],
-            explanation_kind: RoadExplanationKind,
-            move_quality: float,
+        self,
+        edge: Edge,
+        target_vertex: Optional[Vertex],
+        explanation_kind: RoadExplanationKind,
+        move_quality: float,
     ) -> ActionExplanation:
         """Build an explanation for an opening road option."""
-        return self.tutor_ai.opening_policy.build_initial_road_explanation(
-            edge, target_vertex, explanation_kind, move_quality)
+        return self.tutor_ai.opening_policy.build_initial_road_explanation(edge, target_vertex, explanation_kind,
+                                                                           move_quality)
 
     def _build_initial_road_choice_explanation(
-            self,
-            player: Player,
-            game: Game,
-            available_edges: List[Edge],
-            chosen_edge: Edge,
+        self,
+        player: Player,
+        game: Game,
+        available_edges: List[Edge],
+        chosen_edge: Edge,
     ) -> ActionExplanation:
         """Build an explanation for the chosen opening road."""
         if len(player.settlements) + len(player.cities) >= 2:
@@ -586,10 +566,10 @@ class TutorEvaluator:
         )
 
     def _reason_sentences(
-            self,
-            explanation: ActionExplanation,
-            reasons,
-            limit: int,
+        self,
+        explanation: ActionExplanation,
+        reasons,
+        limit: int,
     ) -> List[str]:
         """Build the positive reason sentences for an explanation."""
         texts: List[str] = []
@@ -608,10 +588,10 @@ class TutorEvaluator:
         return texts
 
     def _weakness_sentences(
-            self,
-            actual_explanation: ActionExplanation,
-            best_explanation: ActionExplanation,
-            limit: int,
+        self,
+        actual_explanation: ActionExplanation,
+        best_explanation: ActionExplanation,
+        limit: int,
     ) -> List[str]:
         """Build the weakness sentences for an explanation."""
         weaknesses = self._reason_sentences(
@@ -631,10 +611,10 @@ class TutorEvaluator:
         return weaknesses
 
     def _better_move_reason_sentences(
-            self,
-            actual_explanation: ActionExplanation,
-            best_explanation: ActionExplanation,
-            limit: int,
+        self,
+        actual_explanation: ActionExplanation,
+        best_explanation: ActionExplanation,
+        limit: int,
     ) -> List[str]:
         """Build the better-move reason sentences for an explanation."""
         actual_labels = {reason.label for reason in actual_explanation.sorted_reasons_for()}
@@ -740,11 +720,7 @@ class TutorEvaluator:
         """Build the recommended visual plan for an explanation."""
         visual_plan = explanation.get_visual_build_plan()
         allowed_buildables = {Buildable.ROAD, Buildable.SETTLEMENT, Buildable.CITY}
-        return [
-            (buildable, position)
-            for buildable, position in visual_plan
-            if buildable in allowed_buildables
-        ]
+        return [(buildable, position) for buildable, position in visual_plan if buildable in allowed_buildables]
 
     def _missed_reason_sentence(self, explanation: ActionExplanation, reason) -> str:
         """Build a sentence describing a missed reason."""

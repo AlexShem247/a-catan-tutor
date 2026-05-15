@@ -1,5 +1,5 @@
 from enum import IntEnum
-from typing import List, Optional, TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from game.Vertex import Vertex
 
@@ -17,6 +17,7 @@ class EdgeDirection(IntEnum):
 
 
 class Edge:
+
     def __init__(self, vertex1: Vertex, vertex2: Vertex, pos: Tuple[int, int, EdgeDirection]):
         self.vertices: List[Vertex] = [vertex1, vertex2]
         self.owner: Optional[Player] = None

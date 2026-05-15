@@ -8,10 +8,10 @@ from typing import Dict, List
 
 from tqdm import tqdm
 
-from controllers.GameController import GameController
 from ai.rule_based_ai.RuleBasedAI import RuleBasedAIDecisionConfig
-from config.StrategyWeights import EVO_STRATEGY_WEIGHTS, ORIGINAL_STRATEGY_WEIGHTS
 from config.player_policies import make_rule_based_policy
+from config.StrategyWeights import EVO_STRATEGY_WEIGHTS, ORIGINAL_STRATEGY_WEIGHTS
+from controllers.GameController import GameController
 from game.Player import PlayerNumber
 from view.HeadlessView import HeadlessView
 
@@ -106,10 +106,7 @@ def _build_player_config(player_policies, order_seed: int):
     if SHUFFLE_ORDER:
         rng.shuffle(ordered_policies)
 
-    return {
-        player_number: policy
-        for player_number, policy in zip(ordered_player_numbers, ordered_policies)
-    }
+    return {player_number: policy for player_number, policy in zip(ordered_player_numbers, ordered_policies)}
 
 
 def run_single_game(job_args):
@@ -130,21 +127,19 @@ def run_single_game(job_args):
             "reason": "ai_action_limit" if controller.ai_action_limit_reached else "round_limit",
         }
 
-    final_vp = {
-        player.player_number: player.calc_victory_points()[1]
-        for player in game.players
-    }
+    final_vp = {player.player_number: player.calc_victory_points()[1] for player in game.players}
     sorted_vps = sorted(final_vp.values(), reverse=True)
 
     player_results: List[PlayerResult] = []
     for player in game.players:
         player_vp = final_vp[player.player_number]
-        player_results.append(PlayerResult(
-            policy_name=_policy_name(player.policy),
-            player_number=player.player_number,
-            victory_points=player_vp,
-            won=player_vp == sorted_vps[0] and sorted_vps.count(sorted_vps[0]) == 1,
-        ))
+        player_results.append(
+            PlayerResult(
+                policy_name=_policy_name(player.policy),
+                player_number=player.player_number,
+                victory_points=player_vp,
+                won=player_vp == sorted_vps[0] and sorted_vps.count(sorted_vps[0]) == 1,
+            ))
 
     return {
         "game_id": game_id,
@@ -156,18 +151,14 @@ def run_single_game(job_args):
 
 def _format_results_table(summary: Dict[str, Dict[str, float]]) -> str:
     headers = ["Policy", "Win Rate (%)", "Avg VP"]
-    rows = [
-        [
-            policy_name,
-            f"{metrics['win_rate']:.2f}",
-            f"{metrics['avg_vp']:.2f}",
-        ]
-        for policy_name, metrics in summary.items()
-    ]
+    rows = [[
+        policy_name,
+        f"{metrics['win_rate']:.2f}",
+        f"{metrics['avg_vp']:.2f}",
+    ] for policy_name, metrics in summary.items()]
 
     widths = [
-        max(len(header), *(len(row[column_index]) for row in rows))
-        for column_index, header in enumerate(headers)
+        max(len(header), *(len(row[column_index]) for row in rows)) for column_index, header in enumerate(headers)
     ]
 
     def fmt(row):
@@ -249,21 +240,16 @@ def run_simulations_parallel(player_policies, num_runs: int = NUM_SIMULATIONS, s
             if remaining_attempt_budget <= 0:
                 if progress is not None:
                     progress.close()
-                raise RuntimeError(
-                    f"Policy evaluation exceeded the retry budget after {aborted_games} aborted games."
-                )
+                raise RuntimeError(f"Policy evaluation exceeded the retry budget after {aborted_games} aborted games.")
 
             batch_size = min(remaining_runs, remaining_attempt_budget)
-            args_list = [
-                (
-                    seed + attempts_started + i,
-                    seed * 10_000 + attempts_started + i,
-                    player_policies,
-                    attempts_started + i,
-                    MAX_EVALUATION_ROUNDS,
-                )
-                for i in range(batch_size)
-            ]
+            args_list = [(
+                seed + attempts_started + i,
+                seed * 10_000 + attempts_started + i,
+                player_policies,
+                attempts_started + i,
+                MAX_EVALUATION_ROUNDS,
+            ) for i in range(batch_size)]
             attempts_started += batch_size
 
             for game_result in pool.imap_unordered(run_single_game, args_list):
@@ -293,15 +279,11 @@ def run_simulations_parallel(player_policies, num_runs: int = NUM_SIMULATIONS, s
     print()
 
     if aborted_games:
-        print(
-            f"Skipped {aborted_games} games that either hit the {MAX_EVALUATION_ROUNDS}-round cap "
-            f"or exceeded the per-turn AI action request limit, and retried them."
-        )
+        print(f"Skipped {aborted_games} games that either hit the {MAX_EVALUATION_ROUNDS}-round cap "
+              f"or exceeded the per-turn AI action request limit, and retried them.")
 
-    print(
-        f"Simulation of {num_runs} games took {elapsed:.1f} seconds "
-        f"({elapsed / num_runs:.2f} seconds/game)."
-    )
+    print(f"Simulation of {num_runs} games took {elapsed:.1f} seconds "
+          f"({elapsed / num_runs:.2f} seconds/game).")
 
     return results, summary
 

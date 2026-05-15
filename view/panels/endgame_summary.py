@@ -1,9 +1,9 @@
 import math
 from typing import Dict, List, Tuple
 
-from controllers.GameController import PlayerScoreSnapshot
 from ai.tutor.feedback import TutorDecisionType, TutorFeedbackExplanation
 from ai.tutor.move_quality import move_quality_label
+from controllers.GameController import PlayerScoreSnapshot
 from game.Player import Player, PlayerNumber
 from game.PlayerAssets import DevelopmentCardType
 from view.rich_text import player_breakdown_html, strip_html_to_plain_text
@@ -16,22 +16,19 @@ def get_player_victory_breakdown(player: Player) -> Dict[str, int]:
         "longest_road": 2 if player.has_longest_road else 0,
         "largest_army": 2 if player.has_largest_army else 0,
         "victory_cards": len(
-            [card for card in player.development_cards if card.card_type == DevelopmentCardType.VICTORY_POINT]
-        ),
+            [card for card in player.development_cards if card.card_type == DevelopmentCardType.VICTORY_POINT]),
     }
 
 
 def format_player_breakdown_text(player: Player) -> str:
     breakdown = get_player_victory_breakdown(player)
     total_vp = player.calc_victory_points()[1]
-    return (
-        f"{player.name} - {total_vp} VP\n\n"
-        f"Cities: {breakdown['cities']} pts\n"
-        f"Settlements: {breakdown['settlements']} pts\n"
-        f"Longest Road: {breakdown['longest_road']} pts\n"
-        f"Largest Army: {breakdown['largest_army']} pts\n"
-        f"Victory Card Points: {breakdown['victory_cards']} pts"
-    )
+    return (f"{player.name} - {total_vp} VP\n\n"
+            f"Cities: {breakdown['cities']} pts\n"
+            f"Settlements: {breakdown['settlements']} pts\n"
+            f"Longest Road: {breakdown['longest_road']} pts\n"
+            f"Largest Army: {breakdown['largest_army']} pts\n"
+            f"Victory Card Points: {breakdown['victory_cards']} pts")
 
 
 def format_player_breakdown_html(player: Player) -> str:
@@ -89,6 +86,7 @@ def feedback_card_title(feedback: TutorFeedbackExplanation) -> str:
 
 
 def endgame_feedback_filter_state_from_owner(owner) -> Dict[str, bool]:
+
     def is_checked(label: str) -> bool:
         checkbox = owner.feedback_filter_checkboxes.get(label)
         return checkbox.isChecked() if checkbox is not None else False
@@ -119,9 +117,8 @@ def format_replay_feedback_details(feedback: TutorFeedbackExplanation, total_tur
     score_text = f"Score: {feedback.assessment.internal_score:.2f} | Gap: +{feedback.assessment.score_gap:.2f}"
     tutor_feedback = feedback.assessment.judgment_sentence.strip()
 
-    if feedback.assessment.better_move and (
-        feedback.assessment.better_move.strip().lower() != action_text.strip().lower()
-    ):
+    if feedback.assessment.better_move and (feedback.assessment.better_move.strip().lower()
+                                            != action_text.strip().lower()):
         advice_text = f"Better move: {feedback.assessment.better_move}"
         better_move_context = getattr(feedback.assessment, "better_move_context", "")
         if better_move_context:
@@ -255,14 +252,11 @@ def overall_performance_summary(
         reverse=True,
     )
     strengths = [
-        performance_line(category, score, True)
-        for category, score, _count in ranked_categories
-        if score >= 0.6
+        performance_line(category, score, True) for category, score, _count in ranked_categories if score >= 0.6
     ][:2]
     weaknesses = [
         performance_line(category, score, False)
-        for category, score, _count in sorted(ranked_categories, key=lambda item: (item[1], -item[2]))
-        if score < 0.55
+        for category, score, _count in sorted(ranked_categories, key=lambda item: (item[1], -item[2])) if score < 0.55
     ][:2]
 
     if not strengths:
@@ -281,12 +275,10 @@ def overall_performance_summary(
 
     score_text = f"Overall: {overall_label} ({overall_score:.2f})"
     if vp_score is not None and win_bonus is not None:
-        score_text = (
-            f"Overall: {overall_label} ({overall_score:.2f})"
-            f" | Moves {weighted_quality:.2f}"
-            f" | VP {vp_score:.2f}"
-            f" | Win {float(win_bonus):.2f}"
-        )
+        score_text = (f"Overall: {overall_label} ({overall_score:.2f})"
+                      f" | Moves {weighted_quality:.2f}"
+                      f" | VP {vp_score:.2f}"
+                      f" | Win {float(win_bonus):.2f}")
 
     return {
         "turn_and_player": "",
@@ -324,27 +316,18 @@ def describe_round_vp_events(
 
         city_gain = current.cities - previous.cities
         if city_gain > 0:
-            events.append(
-                f"- {player_name} built a city"
-                if city_gain == 1
-                else f"- {player_name} built {city_gain} cities"
-            )
+            events.append(f"- {player_name} built a city" if city_gain ==
+                          1 else f"- {player_name} built {city_gain} cities")
 
         settlement_gain = current.settlements - previous.settlements
         if settlement_gain > 0:
-            events.append(
-                f"- {player_name} built a settlement"
-                if settlement_gain == 1
-                else f"- {player_name} built {settlement_gain} settlements"
-            )
+            events.append(f"- {player_name} built a settlement" if settlement_gain ==
+                          1 else f"- {player_name} built {settlement_gain} settlements")
 
         hidden_vp_gain = current.hidden_vp_cards - previous.hidden_vp_cards
         if hidden_vp_gain > 0:
-            events.append(
-                f"- {player_name} bought a Victory Point card"
-                if hidden_vp_gain == 1
-                else f"- {player_name} bought {hidden_vp_gain} Victory Point cards"
-            )
+            events.append(f"- {player_name} bought a Victory Point card" if hidden_vp_gain ==
+                          1 else f"- {player_name} bought {hidden_vp_gain} Victory Point cards")
 
         if not previous.has_longest_road and current.has_longest_road:
             events.append(f"- {player_name} gained Longest Road")
@@ -400,22 +383,18 @@ def build_lead_change_label(
     first_round, _, _ = leaders_by_round[0]
     if len(final_leaders) == 1:
         final_leader = final_leaders[0]
-        sole_lead_round = next(
-            round_num for round_num, leaders, _ in reversed(leaders_by_round) if leaders != [final_leader]
-        ) if any(leaders != [final_leader] for _, leaders, _ in leaders_by_round[:-1]) else None
+        sole_lead_round = next(round_num for round_num, leaders, _ in reversed(leaders_by_round)
+                               if leaders != [final_leader]) if any(
+                                   leaders != [final_leader] for _, leaders, _ in leaders_by_round[:-1]) else None
         if sole_lead_round is None:
             return f"{player_names[final_leader]} led from Round {first_round} to the finish."
         held_from_round = sole_lead_round + 1
-        return (
-            f"{player_names[final_leader]} took the lead in Round {held_from_round} "
-            f"and held it through Round {final_round}."
-        )
+        return (f"{player_names[final_leader]} took the lead in Round {held_from_round} "
+                f"and held it through Round {final_round}.")
 
     final_names = [player_names[player_number] for player_number in final_leaders]
-    return (
-        f"The game finished level at the top in Round {final_round} with "
-        f"{format_endgame_players(final_names)} sharing the lead."
-    )
+    return (f"The game finished level at the top in Round {final_round} with "
+            f"{format_endgame_players(final_names)} sharing the lead.")
 
 
 def build_biggest_swing_label(
@@ -444,10 +423,8 @@ def build_biggest_swing_label(
     if best_round is None or best_player is None:
         return "No player gained victory points between recorded rounds."
     if best_reasons:
-        return (
-            f"Round {best_round}: {player_names[best_player]} "
-            f"{join_reasons(best_reasons)} and jumped by {best_delta} VP."
-        )
+        return (f"Round {best_round}: {player_names[best_player]} "
+                f"{join_reasons(best_reasons)} and jumped by {best_delta} VP.")
     return f"Round {best_round}: {player_names[best_player]} made the biggest move, gaining {best_delta} VP."
 
 
@@ -473,11 +450,8 @@ def build_closest_moment_label(
             second_score = ranked[1][1].total_vp if len(ranked) > 1 else top_score
             gap = top_score - second_score
         runner_up = ranked[len(leaders)][0] if len(leaders) < len(ranked) else None
-        if (
-            gap < best_gap
-            or (gap == best_gap and top_score > best_top_score)
-            or (gap == best_gap and top_score == best_top_score and round_num > best_round)
-        ):
+        if (gap < best_gap or (gap == best_gap and top_score > best_top_score)
+                or (gap == best_gap and top_score == best_top_score and round_num > best_round)):
             best_round = round_num
             best_gap = gap
             best_top_score = top_score
@@ -490,10 +464,8 @@ def build_closest_moment_label(
         return f"Round {best_round}: {format_endgame_players(leader_names)} were tied at {best_top_score} VP."
     if best_runner_up is None:
         return f"Round {best_round}: {player_names[best_leaders[0]]} stood alone at {best_top_score} VP."
-    return (
-        f"Round {best_round}: {player_names[best_leaders[0]]} led "
-        f"{player_names[best_runner_up]} {best_top_score}-{best_runner_up_score}."
-    )
+    return (f"Round {best_round}: {player_names[best_leaders[0]]} led "
+            f"{player_names[best_runner_up]} {best_top_score}-{best_runner_up_score}.")
 
 
 def summarise_endgame_review_labels(

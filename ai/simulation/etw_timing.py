@@ -2,15 +2,16 @@ import math
 from typing import Dict, List, Tuple
 
 from ai.actions import Action
+from ai.simulation.board_sim_utils import get_opponents
 from ai.simulation.SimGame import SimGame
 from ai.simulation.SimPlayerState import SimPlayerState
-from ai.simulation.board_sim_utils import get_opponents
 from ai.utils.resource_utils import calc_step_resources, get_bank_trade_ratio
 from config.StrategyWeights import StrategyWeights
 from game.Resources import Resource, ResourceCount
 
 
 class EtwTiming:
+
     def estimated_time_to_build(
         self,
         player: SimPlayerState,

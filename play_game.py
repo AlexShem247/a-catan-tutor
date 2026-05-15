@@ -5,8 +5,8 @@ from random import randint
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication
 
+from config.player_policies import EVO_VS_RULE_BASED, STANDARD_SINGLEPLAYER
 from controllers.GameController import GameController
-from config.player_policies import STANDARD_SINGLEPLAYER, EVO_VS_RULE_BASED
 from view.MainWindow import MainWindow
 from view.QtView import QtView
 

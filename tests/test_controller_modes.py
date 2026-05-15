@@ -1,7 +1,8 @@
 import unittest
 
-import controllers.GameController as GameControllerModule
+from test_helpers import GameTestMixin, HomeRequestingView, InvalidLoopAI, TutorFollowingView
 
+import controllers.GameController as GameControllerModule
 from ai.actions import Action, ActionType
 from ai.BasicAI import BasicAI
 from config.player_policies import EVO_VS_RULE_BASED, RULE_BASED_VS_BASIC, STANDARD_SINGLEPLAYER
@@ -13,16 +14,11 @@ from game.Vertex import Vertex, VertexDirection
 from view.HeadlessView import HeadlessView
 from view.View import GameMode
 
-from test_helpers import (
-    GameTestMixin,
-    HomeRequestingView,
-    InvalidLoopAI,
-    TutorFollowingView,
-)
-
 
 class TestControllerModes(GameTestMixin, unittest.TestCase):
+
     class _DevBuyView(HeadlessView):
+
         def __init__(self):
             self._actions = [
                 Action(ActionType.BUILD, (Buildable.DEVELOPMENT_CARD, True)),

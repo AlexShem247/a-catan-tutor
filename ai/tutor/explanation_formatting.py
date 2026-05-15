@@ -1,17 +1,9 @@
 from typing import Any, Dict, List
 
 from ai.actions import Action, ActionType
+from ai.tutor.explanations import (ActionExplanation, CandidateExplanation, ExplanationTemplate, Reason, ReasonLabel,
+                                   ReasonType, RoadExplanationKind)
 from game.PlayerAssets import DevelopmentCardType
-
-from ai.tutor.explanations import (
-    ActionExplanation,
-    CandidateExplanation,
-    ExplanationTemplate,
-    Reason,
-    ReasonLabel,
-    ReasonType,
-    RoadExplanationKind,
-)
 
 
 def capitalise(text: str) -> str:
@@ -85,9 +77,8 @@ def trade_concise_reason(candidate: CandidateExplanation, limit: int = 2) -> str
     """Build a concise reason for a trade candidate."""
     ordered: List[Reason] = []
     ordered.extend(reason for reason in candidate.reasons_for if reason.type == ReasonType.REQUIRES_TRADE)
-    ordered.extend(
-        reason for reason in sorted_reasons(candidate.reasons_for) if reason.type != ReasonType.REQUIRES_TRADE
-    )
+    ordered.extend(reason for reason in sorted_reasons(candidate.reasons_for)
+                   if reason.type != ReasonType.REQUIRES_TRADE)
     return reason_sentence_from_ordered(ordered[:limit])
 
 
@@ -229,32 +220,32 @@ def reason_label_text(reason: Reason) -> str:
 def reason_to_detail_phrase(explanation: ActionExplanation, reason: Reason) -> str:
     """Convert a reason into a detailed explanation phrase."""
     if reason.label in (
-        ReasonLabel.INIT_EARLY_PRODUCTION,
-        ReasonLabel.INIT_RESOURCE_DIVERSITY,
-        ReasonLabel.INIT_HIGH_FREQUENCY,
-        ReasonLabel.INIT_PORT_ACCESS,
-        ReasonLabel.INIT_COMPLEMENTS_FIRST,
-        ReasonLabel.INIT_ROAD_CONNECTION,
-        ReasonLabel.INIT_ROAD_TO_SETTLEMENT,
-        ReasonLabel.INIT_ROAD_TO_BALANCE,
-        ReasonLabel.INIT_ROAD_FLEXIBLE,
-        ReasonLabel.TRADE_PARTNER_BEST_ETW,
-        ReasonLabel.TRADE_PARTNER_COUNTER_VALUE,
-        ReasonLabel.TRADE_PARTNER_SAFE_OPPONENT,
-        ReasonLabel.TRADE_RESPONSE_ACCEPT_VALUE,
-        ReasonLabel.TRADE_RESPONSE_COUNTER_VALUE,
-        ReasonLabel.TRADE_RESPONSE_REJECT_NO_GAIN,
-        ReasonLabel.TRADE_RESPONSE_REJECT_RISK,
-        ReasonLabel.ROBBER_BLOCKS_KEY_HEX,
-        ReasonLabel.ROBBER_TARGETS_THREAT,
-        ReasonLabel.ROBBER_AVOIDS_OWN_HEX,
-        ReasonLabel.DISCARD_PROTECTS_PLAN,
-        ReasonLabel.DISCARD_USES_SURPLUS,
-        ReasonLabel.YOP_FILLS_SHORTFALL,
-        ReasonLabel.YOP_SUPPORTS_FOLLOW_UP,
-        ReasonLabel.YOP_FLEXIBLE_PICK,
-        ReasonLabel.MONOPOLY_HIGHEST_DEMAND,
-        ReasonLabel.MONOPOLY_FLEXIBLE_PICK,
+            ReasonLabel.INIT_EARLY_PRODUCTION,
+            ReasonLabel.INIT_RESOURCE_DIVERSITY,
+            ReasonLabel.INIT_HIGH_FREQUENCY,
+            ReasonLabel.INIT_PORT_ACCESS,
+            ReasonLabel.INIT_COMPLEMENTS_FIRST,
+            ReasonLabel.INIT_ROAD_CONNECTION,
+            ReasonLabel.INIT_ROAD_TO_SETTLEMENT,
+            ReasonLabel.INIT_ROAD_TO_BALANCE,
+            ReasonLabel.INIT_ROAD_FLEXIBLE,
+            ReasonLabel.TRADE_PARTNER_BEST_ETW,
+            ReasonLabel.TRADE_PARTNER_COUNTER_VALUE,
+            ReasonLabel.TRADE_PARTNER_SAFE_OPPONENT,
+            ReasonLabel.TRADE_RESPONSE_ACCEPT_VALUE,
+            ReasonLabel.TRADE_RESPONSE_COUNTER_VALUE,
+            ReasonLabel.TRADE_RESPONSE_REJECT_NO_GAIN,
+            ReasonLabel.TRADE_RESPONSE_REJECT_RISK,
+            ReasonLabel.ROBBER_BLOCKS_KEY_HEX,
+            ReasonLabel.ROBBER_TARGETS_THREAT,
+            ReasonLabel.ROBBER_AVOIDS_OWN_HEX,
+            ReasonLabel.DISCARD_PROTECTS_PLAN,
+            ReasonLabel.DISCARD_USES_SURPLUS,
+            ReasonLabel.YOP_FILLS_SHORTFALL,
+            ReasonLabel.YOP_SUPPORTS_FOLLOW_UP,
+            ReasonLabel.YOP_FLEXIBLE_PICK,
+            ReasonLabel.MONOPOLY_HIGHEST_DEMAND,
+            ReasonLabel.MONOPOLY_FLEXIBLE_PICK,
     ):
         return normalise_reason_label(reason_label_text(reason))
     if reason.type == ReasonType.FASTEST_PROGRESS:
@@ -294,8 +285,7 @@ def final_benefit_text(explanation: ActionExplanation, candidate: CandidateExpla
         return card_benefit
 
     top_reasons = [
-        reason for reason in sorted_reasons(candidate.reasons_for)
-        if reason.type != ReasonType.REQUIRES_TRADE
+        reason for reason in sorted_reasons(candidate.reasons_for) if reason.type != ReasonType.REQUIRES_TRADE
     ][:3]
     if not top_reasons:
         return "This final move is the strongest option here."
@@ -351,8 +341,7 @@ def vertex_intersection_text(vertex: Any) -> str:
     if vertex is None or not getattr(vertex, "hexes", None):
         return "the available tiles"
     descriptions = [
-        hex_description(hex_tile)
-        for hex_tile in sorted(
+        hex_description(hex_tile) for hex_tile in sorted(
             [hex_tile for hex_tile in vertex.hexes if getattr(hex_tile, "resource", None) is not None],
             key=lambda hex_tile: dice_probability(hex_tile.production_number),
             reverse=True,
@@ -403,10 +392,8 @@ def follow_up_action_text(action: Any) -> str:
         article = "a"
         if hasattr(buildable, "name"):
             article = "an" if buildable.name.lower()[0] in "aeiou" else "a"
-        return (
-            f"the next thing we want to build: {article} "
-            f"{buildable.name.lower()}"
-        )
+        return (f"the next thing we want to build: {article} "
+                f"{buildable.name.lower()}")
     if action.type == ActionType.BUY_DEV_CARD:
         return "the next thing we want to do: buy a development card"
     if action.type == ActionType.PLAY_DEV_CARD:
@@ -464,10 +451,8 @@ def discard_protected_plan_text(explanation: ActionExplanation) -> str:
         if isinstance(trade_follow_up_action, Action):
             follow_up_text = follow_up_action_text(trade_follow_up_action)
             if resource_text and follow_up_text:
-                return (
-                    f"This keeps your plan to trade for {resource_text} available "
-                    f"so you can work toward {follow_up_text}."
-                )
+                return (f"This keeps your plan to trade for {resource_text} available "
+                        f"so you can work toward {follow_up_text}.")
         if resource_text:
             return f"This keeps your plan to trade for {resource_text} available."
     next_text = follow_up_action_text(protected_action)
@@ -483,10 +468,8 @@ def initial_road_target_sentence(explanation: ActionExplanation) -> str:
     if kind == RoadExplanationKind.CONNECTION:
         return "Place your road back toward your other settlement to keep the opening connected."
     if kind == RoadExplanationKind.EXPANSION and target_vertex is not None:
-        return (
-            f"Place your road so you can expand toward the "
-            f"{vertex_intersection_text(target_vertex)} settlement spot."
-        )
+        return (f"Place your road so you can expand toward the "
+                f"{vertex_intersection_text(target_vertex)} settlement spot.")
     return "Place your road where it keeps your opening flexible."
 
 
@@ -576,8 +559,16 @@ def port_reason_text(port: Any) -> str:
 def dice_probability(number: Any) -> float:
     """Return the roll probability for a dice number."""
     probs = {
-        2: 1 / 36, 3: 2 / 36, 4: 3 / 36, 5: 4 / 36, 6: 5 / 36,
-        8: 5 / 36, 9: 4 / 36, 10: 3 / 36, 11: 2 / 36, 12: 1 / 36,
+        2: 1 / 36,
+        3: 2 / 36,
+        4: 3 / 36,
+        5: 4 / 36,
+        6: 5 / 36,
+        8: 5 / 36,
+        9: 4 / 36,
+        10: 3 / 36,
+        11: 2 / 36,
+        12: 1 / 36,
     }
     return probs.get(number, 0.0)
 
@@ -635,10 +626,8 @@ def trade_opening_text(plan: List[Action]) -> str:
     target_name = buildable_name(plan[-1])
     if target_name:
         article = "an" if target_name[0].lower() in "aeiou" else "a"
-        return (
-            f"The plan starts by {gerund_phrase(first_action, first_text)} "
-            f"to save up for {article} {target_name.lower()}."
-        )
+        return (f"The plan starts by {gerund_phrase(first_action, first_text)} "
+                f"to save up for {article} {target_name.lower()}.")
     return f"The plan starts by {gerund_phrase(first_action, first_text)}."
 
 
@@ -656,10 +645,8 @@ def plan_linking_text(plan: List[Action]) -> str:
                 if name == "settlement":
                     return "The earlier steps matter because they create access to that settlement opportunity."
                 if name == "city":
-                    return (
-                        "The earlier steps matter because they support a stronger city "
-                        "upgrade at the end of the plan."
-                    )
+                    return ("The earlier steps matter because they support a stronger city "
+                            "upgrade at the end of the plan.")
                 if name == "road":
                     return "The earlier steps matter because they improve your position before committing to that road."
     if final_action.type == ActionType.BUY_DEV_CARD:
@@ -702,29 +689,19 @@ def development_card_benefit_text(candidate: CandidateExplanation) -> str:
     card_type = candidate.action.payload
     if card_type == DevelopmentCardType.KNIGHT:
         if any(reason.type == ReasonType.ADVANCES_LARGEST_ARMY for reason in candidate.reasons_for):
-            return (
-                "This is strong because playing the Knight moves the robber now "
-                "and strengthens your push toward Largest Army."
-            )
-        return (
-            "This is strong because playing the Knight moves the robber now and "
-            "adds to your army count for future Largest Army pressure."
-        )
+            return ("This is strong because playing the Knight moves the robber now "
+                    "and strengthens your push toward Largest Army.")
+        return ("This is strong because playing the Knight moves the robber now and "
+                "adds to your army count for future Largest Army pressure.")
     if card_type == DevelopmentCardType.ROAD_BUILDING:
-        return (
-            "This is strong because Road Building creates an immediate two-road "
-            "swing and can open new expansion lines without spending resources."
-        )
+        return ("This is strong because Road Building creates an immediate two-road "
+                "swing and can open new expansion lines without spending resources.")
     if card_type == DevelopmentCardType.YEAR_OF_PLENTY:
-        return (
-            "This is strong because Year of Plenty turns the card into the exact "
-            "two resources you need right now."
-        )
+        return ("This is strong because Year of Plenty turns the card into the exact "
+                "two resources you need right now.")
     if card_type == DevelopmentCardType.MONOPOLY:
-        return (
-            "This is strong because Monopoly can create a large resource swing if "
-            "opponents are holding the resource you call."
-        )
+        return ("This is strong because Monopoly can create a large resource swing if "
+                "opponents are holding the resource you call.")
     return ""
 
 

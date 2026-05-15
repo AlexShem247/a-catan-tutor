@@ -1,19 +1,21 @@
-from abc import ABC, abstractmethod
 import math
 import time
+from abc import ABC, abstractmethod
 from collections import Counter
 from typing import Dict
 
-from PyQt6.QtCore import QPointF, Qt, QPoint
-from PyQt6.QtGui import QPolygonF, QPixmap, QPen, QColor, QFontMetrics
+from PyQt6.QtCore import QPoint, QPointF, Qt
+from PyQt6.QtGui import QColor, QFontMetrics, QPen, QPixmap, QPolygonF
 
-from config.view_constants import TERRAIN_COLORS, TOKEN_COMMON_COLOR, TOKEN_COLOR, TOKEN_OUTLINE_COLOR, EDGE_COLOR, \
-    hex_to_filepath, SETTLEMENT_ICONS, PLAYER_COLORS, ROBBER_ICON, HIGHLIGHT_ANIMATION
+from config.view_constants import (EDGE_COLOR, HIGHLIGHT_ANIMATION, PLAYER_COLORS, ROBBER_ICON, SETTLEMENT_ICONS,
+                                   TERRAIN_COLORS, TOKEN_COLOR, TOKEN_COMMON_COLOR, TOKEN_OUTLINE_COLOR,
+                                   hex_to_filepath)
 from game.HexTile import HexTile
 from game.Vertex import Vertex
 
 
 class Shape(ABC):
+
     @abstractmethod
     def draw(self, painter, scale, offset):
         """Draw this shape using the current painter state."""
@@ -21,6 +23,7 @@ class Shape(ABC):
 
 
 class Circle(Shape):
+
     def __init__(self, x: float, y: float, r: float, color: QColor, outline_color=None):
         self.x = int(x)
         self.y = int(y)
@@ -47,6 +50,7 @@ class Circle(Shape):
 
 
 class LineShape(Shape):
+
     def __init__(self, x1: float, y1: float, x2: float, y2: float, thickness: float, color: QColor):
         """
         x1, y1 = start point
@@ -77,6 +81,7 @@ class LineShape(Shape):
 
 
 class Rectangle(Shape):
+
     def __init__(self, x: float, y: float, w: float, h: float, color: QColor):
         self.x = int(x)
         self.y = int(y)
@@ -96,8 +101,9 @@ class Rectangle(Shape):
 
 
 class TextShape(Shape):
-    def __init__(self, x: float, y: float, text: str, color: QColor, font_size=20,
-                 outline_color=QColor("black"), outline_width=0, bold=False):
+
+    def __init__(self, x: float, y: float, text: str, color: QColor, font_size=20, outline_color=QColor("black"),
+                 outline_width=0, bold=False):
         self.x = int(x)
         self.y = int(y)
         self.text = text
@@ -143,6 +149,7 @@ class TextShape(Shape):
 
 
 class Hexagon(Shape):
+
     def __init__(self, x: float, y: float, radius: float, color: QColor):
         """
         x, y = center of the hexagon in world coordinates
@@ -178,6 +185,7 @@ class Hexagon(Shape):
 
 
 class PixmapShape(Shape):
+
     def __init__(self, x: float, y: float, width: float, height: float, pixmap: QPixmap):
         """
         x, y = center of the pixmap in world coordinates
@@ -202,20 +210,15 @@ class PixmapShape(Shape):
 
         # Draw scaled pixmap
         painter.drawPixmap(
-            int(px),
-            int(py),
-            self.pixmap.scaled(
-                int(w),
-                int(h),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation
-            )
-        )
+            int(px), int(py),
+            self.pixmap.scaled(int(w), int(h), Qt.AspectRatioMode.KeepAspectRatio,
+                               Qt.TransformationMode.SmoothTransformation))
 
 
 class PulsingPixmapShape(Shape):
-    def __init__(self, x: float, y: float, width: float, height: float, pixmap: QPixmap,
-                 min_alpha=70, max_alpha=255, pulse_speed=1.2):
+
+    def __init__(self, x: float, y: float, width: float, height: float, pixmap: QPixmap, min_alpha=70, max_alpha=255,
+                 pulse_speed=1.2):
         self.x = int(x)
         self.y = int(y)
         self.width = int(width)
@@ -244,21 +247,16 @@ class PulsingPixmapShape(Shape):
         painter.save()
         painter.setOpacity(self.current_alpha() / 255.0)
         painter.drawPixmap(
-            int(px),
-            int(py),
-            self.pixmap.scaled(
-                int(w),
-                int(h),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation
-            )
-        )
+            int(px), int(py),
+            self.pixmap.scaled(int(w), int(h), Qt.AspectRatioMode.KeepAspectRatio,
+                               Qt.TransformationMode.SmoothTransformation))
         painter.restore()
 
 
 class PulsingLineShape(Shape):
-    def __init__(self, x1: float, y1: float, x2: float, y2: float, thickness: float, color: QColor,
-                 min_alpha=70, max_alpha=255, pulse_speed=1.2):
+
+    def __init__(self, x1: float, y1: float, x2: float, y2: float, thickness: float, color: QColor, min_alpha=70,
+                 max_alpha=255, pulse_speed=1.2):
         self.x1 = x1
         self.y1 = y1
         self.x2 = x2
@@ -296,6 +294,7 @@ class PulsingLineShape(Shape):
 
 
 class HexTileShape(Shape):
+
     def __init__(self, x: float, y: float, radius: float, tile: HexTile, icons: Dict[str, QPixmap]):
         """
         x, y = center of hex
@@ -334,10 +333,7 @@ class HexTileShape(Shape):
                 self.shapes.append(TextShape(cx, cy - 5, str(tile.production_number), colour))
 
                 # Frequency dots
-                dots_map = {
-                    2: 1, 3: 2, 4: 3, 5: 4, 6: 5,
-                    8: 5, 9: 4, 10: 3, 11: 2, 12: 1
-                }
+                dots_map = {2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 8: 5, 9: 4, 10: 3, 11: 2, 12: 1}
                 dots = dots_map.get(tile.production_number, 0)
                 if dots > 0:
                     spacing = 0.2 * token_radius
@@ -355,6 +351,7 @@ class HexTileShape(Shape):
 
 
 class VertexShape(Shape):
+
     def __init__(self, x: float, y: float, radius: float, vertex: Vertex, icons: Dict):
         self.shapes = []
 
@@ -363,11 +360,8 @@ class VertexShape(Shape):
             icon_size = 4.0 * radius
             self.shapes.append(PixmapShape(x, y, icon_size, icon_size, pixmap))
         else:
-            color = next(
-                (PLAYER_COLORS[p.player_number] for p, c in Counter(e.owner for e in vertex.edges if e.owner).items() if
-                 c >= 2),
-                EDGE_COLOR
-            )
+            color = next((PLAYER_COLORS[p.player_number]
+                          for p, c in Counter(e.owner for e in vertex.edges if e.owner).items() if c >= 2), EDGE_COLOR)
             self.shapes.append(Circle(x, y, radius, color))
 
     def draw(self, painter, scale, offset):
@@ -377,6 +371,7 @@ class VertexShape(Shape):
 
 
 class InteractiveShape(Shape, ABC):
+
     def __init__(self, payload=None):
         self.payload = payload
         self.hovered = False
@@ -392,8 +387,9 @@ class InteractiveShape(Shape, ABC):
 
 
 class InteractiveCircle(InteractiveShape):
-    def __init__(self, x: float, y: float, r: float, color: QColor, outline_color=None, payload=None,
-                 normal_alpha=90, hover_alpha=180):
+
+    def __init__(self, x: float, y: float, r: float, color: QColor, outline_color=None, payload=None, normal_alpha=90,
+                 hover_alpha=180):
         super().__init__(payload)
 
         self.x = float(x)
@@ -412,7 +408,7 @@ class InteractiveCircle(InteractiveShape):
 
         # Animation parameters
         self.pulse_amplitude = 0.10  # fraction of size to pulse
-        self.pulse_speed = 0.5       # cycles per second
+        self.pulse_speed = 0.5  # cycles per second
         self._start_time = time.time()
 
     def current_radius(self):
@@ -454,8 +450,9 @@ class InteractiveCircle(InteractiveShape):
 
 
 class InteractivePixmap(InteractiveShape):
-    def __init__(self, x: float, y: float, width: float, height: float, pixmap: QPixmap,
-                 payload=None, normal_alpha=255, hover_alpha=255):
+
+    def __init__(self, x: float, y: float, width: float, height: float, pixmap: QPixmap, payload=None, normal_alpha=255,
+                 hover_alpha=255):
         super().__init__(payload)
         self.x, self.y = float(x), float(y)
         self.base_width, self.base_height = float(width), float(height)
@@ -504,16 +501,17 @@ class InteractivePixmap(InteractiveShape):
 
         painter.save()
         painter.setOpacity(self.current_alpha() / 255.0)
-        painter.drawPixmap(int(px), int(py),
-                           self.pixmap.scaled(int(w), int(h),
-                                              Qt.AspectRatioMode.KeepAspectRatio,
-                                              Qt.TransformationMode.SmoothTransformation))
+        painter.drawPixmap(
+            int(px), int(py),
+            self.pixmap.scaled(int(w), int(h), Qt.AspectRatioMode.KeepAspectRatio,
+                               Qt.TransformationMode.SmoothTransformation))
         painter.restore()
 
 
 class InteractiveRoadOverlay(InteractiveShape):
-    def __init__(self, x1: float, y1: float, x2: float, y2: float, thickness: float, color: QColor,
-                 payload=None, solid=False, normal_alpha=180, hover_alpha=255):
+
+    def __init__(self, x1: float, y1: float, x2: float, y2: float, thickness: float, color: QColor, payload=None,
+                 solid=False, normal_alpha=180, hover_alpha=255):
         super().__init__(payload)
         self.x1, self.y1 = float(x1), float(y1)
         self.x2, self.y2 = float(x2), float(y2)
@@ -547,7 +545,7 @@ class InteractiveRoadOverlay(InteractiveShape):
         px, py = self.x1 + t * dx, self.y1 + t * dy
 
         hit_r = self.base_thickness * 1.2
-        return (wx - px) ** 2 + (wy - py) ** 2 <= hit_r ** 2
+        return (wx - px)**2 + (wy - py)**2 <= hit_r**2
 
     def set_hover(self, hovered: bool):
         """Update the hover state for this shape."""
@@ -577,8 +575,8 @@ class InteractiveRoadOverlay(InteractiveShape):
 
 
 class InteractiveRoadVertexOverlay(InteractiveShape):
-    def __init__(self, x: float, y: float, r: float, color: QColor,
-                 payload=None, normal_alpha=100, hover_alpha=255):
+
+    def __init__(self, x: float, y: float, r: float, color: QColor, payload=None, normal_alpha=100, hover_alpha=255):
         super().__init__(payload)
         self.x, self.y, self.r = float(x), float(y), float(r)
         self.base_color = QColor(color)

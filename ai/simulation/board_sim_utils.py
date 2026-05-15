@@ -1,7 +1,7 @@
-from typing import List, Set, Dict, Optional
+from typing import Dict, List, Optional, Set
 
-from ai.simulation.SimPlayerState import SimPlayerState, dice_probability
 from ai.simulation.SimGame import SimGame
+from ai.simulation.SimPlayerState import SimPlayerState, dice_probability
 from game.Edge import Edge
 from game.HexTile import HexTile
 from game.Player import PlayerNumber
@@ -150,13 +150,8 @@ def score_hex_for_opponent(opponent_number: PlayerNumber, sim_game: SimGame, hex
 
     imp = importance[resource]
 
-    production = (
-        dice_probability(hex_tile.production_number)
-        * sim_game.game.count_player_buildings(
-            next(p for p in sim_game.game.players if p.player_number == opponent_number),
-            hex_tile
-        )
-    )
+    production = (dice_probability(hex_tile.production_number) * sim_game.game.count_player_buildings(
+        next(p for p in sim_game.game.players if p.player_number == opponent_number), hex_tile))
 
     return imp * production
 
@@ -185,7 +180,4 @@ def get_legal_settlement_vertices(sim_game: SimGame) -> List[Vertex]:
 
 def get_opponents(sim_game: SimGame, player_number) -> List[SimPlayerState]:
     """Return opponent SimPlayerStates from the overlay."""
-    return [
-        sp for num, sp in sim_game.overlay.sim_players.items()
-        if num != player_number
-    ]
+    return [sp for num, sp in sim_game.overlay.sim_players.items() if num != player_number]

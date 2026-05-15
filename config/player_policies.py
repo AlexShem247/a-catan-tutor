@@ -22,11 +22,9 @@ class PolicyFactory:
         return policy
 
 
-def make_rule_based_policy(
-        name: str,
-        weights: StrategyWeights,
-        decision_config: Optional[RuleBasedAIDecisionConfig] = None,
-        use_difficulty_randomness: bool = False) -> PolicyFactory:
+def make_rule_based_policy(name: str, weights: StrategyWeights,
+                           decision_config: Optional[RuleBasedAIDecisionConfig] = None,
+                           use_difficulty_randomness: bool = False) -> PolicyFactory:
     return PolicyFactory(
         ai_cls=RuleBasedAI,
         name=name,

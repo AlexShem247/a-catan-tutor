@@ -3,28 +3,23 @@ import unittest
 from random import Random
 from types import SimpleNamespace
 
+from test_helpers import GameTestMixin
+
 from ai.actions import Action, ActionType, Phase
 from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.simulation.EtwEstimator import EtwEstimator
 from ai.simulation.SimGame import make_sim_game_for_player
-from ai.tutor.move_quality import (
-    initial_road_connection_move_quality,
-    initial_road_flexible_move_quality,
-    initial_settlement_move_quality,
-    move_quality_from_margin,
-    move_quality_from_ratio,
-    move_quality_label,
-    strategic_turn_move_quality,
-)
+from ai.tutor.move_quality import (initial_road_connection_move_quality, initial_road_flexible_move_quality,
+                                   initial_settlement_move_quality, move_quality_from_margin, move_quality_from_ratio,
+                                   move_quality_label, strategic_turn_move_quality)
 from game.Game import Game
 from game.PlayerAssets import Buildable
 from game.Resources import Resource
 from game.Vertex import VertexDirection
 
-from test_helpers import GameTestMixin
-
 
 class TestAiEtwAndQuality(GameTestMixin, unittest.TestCase):
+
     def test_move_quality_ratio_is_clamped_to_zero_to_one(self):
         self.assertEqual(move_quality_from_ratio(8.0, 10.0), 0.8)
         self.assertEqual(move_quality_from_ratio(15.0, 10.0), 1.0)

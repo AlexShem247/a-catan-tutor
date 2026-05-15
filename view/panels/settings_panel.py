@@ -1,20 +1,17 @@
 import re
-from typing import Any, Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict
 
 from PyQt6.QtWidgets import QWidget
 
-from config.settings import (
-    load_default_settings,
-    load_effective_settings,
-    reset_applied_settings,
-    save_applied_settings,
-)
+from config.settings import (load_default_settings, load_effective_settings, reset_applied_settings,
+                             save_applied_settings)
 
 if TYPE_CHECKING:
     from view.MainWindow import MainWindow
 
 
 class SettingsPanel:
+
     def __init__(self, window: "MainWindow"):
         self.window = window
 

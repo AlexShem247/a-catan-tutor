@@ -1,25 +1,25 @@
 import math
 from typing import Dict, List, Tuple
 
-from PyQt6.QtCore import Qt, QRect, QPointF, QSize, pyqtSignal, QTimer
-from PyQt6.QtGui import QPainter, QCursor, QPixmap, QFontMetrics
+from PyQt6.QtCore import QPointF, QRect, QSize, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QCursor, QFontMetrics, QPainter, QPixmap
 from PyQt6.QtWidgets import QWidget
 
+from config.view_constants import (BOARD_BG_COLOR, CANVAS_ANIMATION_INTERVAL_MS, CANVAS_ZOOM_HINT_FONT_SIZE_PX,
+                                   CANVAS_ZOOM_HINT_PADDING_PX, CITY_OUTLINE, EDGE_COLOR, HEX_TILE_RADIUS,
+                                   HIGHLIGHT_COLOR, OUTLINE_COLOR, PLAN_OUTLINE_COLOR, PLAYER_COLORS, PORT_EDGE_COLOR,
+                                   PORT_ICONS, ROAD_THICKNESS, ROBBER_ICON, SEA_BACKGROUND, SETTLEMENT_ICONS,
+                                   SETTLEMENT_OUTLINE, SETTLEMENT_OUTLINE_SOLID, TITLE_COLOR, VERTEX_SIZE,
+                                   WINDOW_HEIGHT, hex_to_filepath)
 from game.Edge import Edge
 from game.HexTile import HexTile
-from game.PlayerAssets import Buildable
+from game.PlayerAssets import Buildable, Building
 from game.Resources import HexType
 from view.canvas.board_display_source import BoardDisplaySource
 from view.canvas.board_geometry import hex_center, vertex_xy
-from config.view_constants import WINDOW_HEIGHT, BOARD_BG_COLOR, CANVAS_ANIMATION_INTERVAL_MS, \
-    CANVAS_ZOOM_HINT_FONT_SIZE_PX, CANVAS_ZOOM_HINT_PADDING_PX, HEX_TILE_RADIUS, SETTLEMENT_ICONS, \
-    hex_to_filepath, EDGE_COLOR, PLAYER_COLORS, ROAD_THICKNESS, VERTEX_SIZE, ROBBER_ICON, HIGHLIGHT_COLOR, \
-    OUTLINE_COLOR, PORT_EDGE_COLOR, PORT_ICONS, TITLE_COLOR, SEA_BACKGROUND, SETTLEMENT_OUTLINE, \
-    SETTLEMENT_OUTLINE_SOLID, CITY_OUTLINE, PLAN_OUTLINE_COLOR
-from view.canvas.shapes import HexTileShape, VertexShape, LineShape, InteractiveShape, InteractiveCircle, PixmapShape, \
-    TextShape, InteractivePixmap, InteractiveRoadOverlay, InteractiveRoadVertexOverlay, PulsingPixmapShape, \
-    PulsingLineShape
-from game.PlayerAssets import Building
+from view.canvas.shapes import (HexTileShape, InteractiveCircle, InteractivePixmap, InteractiveRoadOverlay,
+                                InteractiveRoadVertexOverlay, InteractiveShape, LineShape, PixmapShape,
+                                PulsingLineShape, PulsingPixmapShape, TextShape, VertexShape)
 
 
 class SquareCanvas(QWidget):
@@ -119,8 +119,7 @@ class SquareCanvas(QWidget):
                         return
 
             # Manage zoom-in
-            if (self.zoom > self.min_zoom
-                    and self.square_rect.contains(event.position().toPoint())):
+            if self.zoom > self.min_zoom and self.square_rect.contains(event.position().toPoint()):
                 self.dragging = True
                 self.last_mouse_pos = event.position()
                 self.setCursor(QCursor(Qt.CursorShape.ClosedHandCursor))
@@ -327,8 +326,8 @@ class SquareCanvas(QWidget):
         for vertex in vertices:
             x, y = vertex_xy(vertex, cx, cy, HEX_TILE_RADIUS)
 
-            shape = InteractiveCircle(x, y, VERTEX_SIZE * 1.5, HIGHLIGHT_COLOR,
-                                      outline_color=OUTLINE_COLOR, payload=vertex)
+            shape = InteractiveCircle(x, y, VERTEX_SIZE * 1.5, HIGHLIGHT_COLOR, outline_color=OUTLINE_COLOR,
+                                      payload=vertex)
 
             self.interactive_shapes.append(shape)
             self.add_shape(shape)
@@ -347,8 +346,8 @@ class SquareCanvas(QWidget):
             x = (x1 + x2) / 2
             y = (y1 + y2) / 2
 
-            shape = InteractiveCircle(x, y, VERTEX_SIZE * 1.25, HIGHLIGHT_COLOR,
-                                      outline_color=OUTLINE_COLOR, payload=edge)
+            shape = InteractiveCircle(x, y, VERTEX_SIZE * 1.25, HIGHLIGHT_COLOR, outline_color=OUTLINE_COLOR,
+                                      payload=edge)
 
             self.interactive_shapes.append(shape)
             self.add_shape(shape)
@@ -360,8 +359,7 @@ class SquareCanvas(QWidget):
         for tile in tiles:
             x, y = hex_center(tile.q, tile.r, cx, cy, HEX_TILE_RADIUS)
             radius = 0.4 * HEX_TILE_RADIUS
-            shape = InteractiveCircle(x, y, radius, HIGHLIGHT_COLOR,
-                                      outline_color=OUTLINE_COLOR, payload=tile)
+            shape = InteractiveCircle(x, y, radius, HIGHLIGHT_COLOR, outline_color=OUTLINE_COLOR, payload=tile)
 
             self.interactive_shapes.append(shape)
             self.add_shape(shape)
@@ -383,7 +381,7 @@ class SquareCanvas(QWidget):
 
     def get_world_centre(self) -> Tuple[int, int]:
         """Return the board world centre point."""
-        return int(self.world_size * 0.5), int(self.world_size * (21/40))
+        return int(self.world_size * 0.5), int(self.world_size * (21 / 40))
 
     def display_start_screen(self):
         """Render the start screen artwork on the canvas."""
@@ -396,15 +394,15 @@ class SquareCanvas(QWidget):
 
         self.background_image = self.icons[SEA_BACKGROUND]
 
-        self.add_shape(TextShape(w * 0.5, h * 0.35, "Catan",
-                                 TITLE_COLOR, 200, outline_width=2, bold=True))
+        self.add_shape(TextShape(w * 0.5, h * 0.35, "Catan", TITLE_COLOR, 200, outline_width=2, bold=True))
 
-        self.add_shape(TextShape(w * 0.5, h * 0.55, "Explainable AI Tutor",
-                                 TITLE_COLOR.lighter(150), 40, outline_width=1, bold=True))
+        self.add_shape(
+            TextShape(w * 0.5, h * 0.55, "Explainable AI Tutor", TITLE_COLOR.lighter(150), 40, outline_width=1,
+                      bold=True))
 
-        self.add_shape(TextShape(w * 0.5, h * 0.65,
-                                 "Your AI guide to smart moves and strategic insights in Catan.",
-                                 TITLE_COLOR.lighter(150), 25, bold=True))
+        self.add_shape(
+            TextShape(w * 0.5, h * 0.65, "Your AI guide to smart moves and strategic insights in Catan.",
+                      TITLE_COLOR.lighter(150), 25, bold=True))
 
     def render_planned_builds(self, builds: List[Tuple]):
         """Render the planned build overlays."""
@@ -430,56 +428,46 @@ class SquareCanvas(QWidget):
                 x1, y1 = vertex_xy(v1, cx, cy, HEX_TILE_RADIUS)
                 x2, y2 = vertex_xy(v2, cx, cy, HEX_TILE_RADIUS)
 
-                road_overlay = InteractiveRoadOverlay(
-                    x1, y1, x2, y2, ROAD_THICKNESS * 1.5, PLAN_OUTLINE_COLOR,
-                    payload=(buildable, position), solid=False,
-                    normal_alpha=100, hover_alpha=255
-                )
+                road_overlay = InteractiveRoadOverlay(x1, y1, x2, y2, ROAD_THICKNESS * 1.5, PLAN_OUTLINE_COLOR,
+                                                      payload=(buildable, position), solid=False, normal_alpha=100,
+                                                      hover_alpha=255)
                 self.planned_overlay_shapes.append(road_overlay)
                 self.add_shape(road_overlay)
 
                 for vertex in (v1, v2):
                     if vertex.owner is None and vertex.building is None:
                         x, y = vertex_xy(vertex, cx, cy, HEX_TILE_RADIUS)
-                        vertex_overlay = InteractiveRoadVertexOverlay(
-                            x, y, VERTEX_SIZE, PLAN_OUTLINE_COLOR,
-                            payload=(buildable, vertex), normal_alpha=100, hover_alpha=255
-                        )
+                        vertex_overlay = InteractiveRoadVertexOverlay(x, y, VERTEX_SIZE, PLAN_OUTLINE_COLOR,
+                                                                      payload=(buildable, vertex), normal_alpha=100,
+                                                                      hover_alpha=255)
                         self.planned_overlay_shapes.append(vertex_overlay)
                         self.add_shape(vertex_overlay)
 
             elif buildable == Buildable.SETTLEMENT and position is not None:
                 x, y = vertex_xy(position, cx, cy, HEX_TILE_RADIUS)
 
-                settlement_outline = InteractivePixmap(
-                    x, y, VERTEX_SIZE * 4, VERTEX_SIZE * 4,
-                    self.icons[SETTLEMENT_OUTLINE], payload=(buildable, position)
-                )
+                settlement_outline = InteractivePixmap(x, y, VERTEX_SIZE * 4, VERTEX_SIZE * 4,
+                                                       self.icons[SETTLEMENT_OUTLINE], payload=(buildable, position))
                 self.planned_overlay_shapes.append(settlement_outline)
                 self.add_shape(settlement_outline)
 
-                settlement_fill = InteractivePixmap(
-                    x, y, VERTEX_SIZE * 4, VERTEX_SIZE * 4,
-                    self.icons[SETTLEMENT_OUTLINE_SOLID], payload=(buildable, position), normal_alpha=150
-                )
+                settlement_fill = InteractivePixmap(x, y, VERTEX_SIZE * 4, VERTEX_SIZE * 4,
+                                                    self.icons[SETTLEMENT_OUTLINE_SOLID], payload=(buildable, position),
+                                                    normal_alpha=150)
                 self.planned_overlay_shapes.append(settlement_fill)
                 self.add_shape(settlement_fill)
 
             elif buildable == Buildable.CITY and position is not None:
                 x, y = vertex_xy(position, cx, cy, HEX_TILE_RADIUS)
 
-                city_overlay = InteractivePixmap(
-                    x, y, VERTEX_SIZE * 4, VERTEX_SIZE * 4,
-                    self.icons[CITY_OUTLINE], payload=(buildable, position)
-                )
+                city_overlay = InteractivePixmap(x, y, VERTEX_SIZE * 4, VERTEX_SIZE * 4, self.icons[CITY_OUTLINE],
+                                                 payload=(buildable, position))
                 self.planned_overlay_shapes.append(city_overlay)
                 self.add_shape(city_overlay)
             elif buildable == "ROBBER_HEX" and isinstance(position, HexTile):
                 x, y = hex_center(position.q, position.r, cx, cy, HEX_TILE_RADIUS)
-                robber_overlay = InteractiveCircle(
-                    x, y, HEX_TILE_RADIUS * 0.4, PLAN_OUTLINE_COLOR,
-                    outline_color=OUTLINE_COLOR, payload=(buildable, position)
-                )
+                robber_overlay = InteractiveCircle(x, y, HEX_TILE_RADIUS * 0.4, PLAN_OUTLINE_COLOR,
+                                                   outline_color=OUTLINE_COLOR, payload=(buildable, position))
                 self.planned_overlay_shapes.append(robber_overlay)
                 self.add_shape(robber_overlay)
 
@@ -492,9 +480,7 @@ class SquareCanvas(QWidget):
                 v1, v2 = position.vertices
                 x1, y1 = vertex_xy(v1, cx, cy, HEX_TILE_RADIUS)
                 x2, y2 = vertex_xy(v2, cx, cy, HEX_TILE_RADIUS)
-                road_shape = PulsingLineShape(
-                    x1, y1, x2, y2, ROAD_THICKNESS, PLAYER_COLORS[player_number]
-                )
+                road_shape = PulsingLineShape(x1, y1, x2, y2, ROAD_THICKNESS, PLAYER_COLORS[player_number])
                 self.feedback_overlay_shapes.append(road_shape)
                 self.add_shape(road_shape)
             elif buildable == Buildable.SETTLEMENT and position is not None:

@@ -1,11 +1,11 @@
 from collections import Counter
 from functools import lru_cache
-from typing import List, TYPE_CHECKING, Dict, Tuple
+from typing import TYPE_CHECKING, Dict, List, Tuple
 
 from game.Board import Board
 from game.Edge import Edge
 from game.PlayerAssets import DevelopmentCardType
-from game.Resources import ResourceCount, Resource
+from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
 
 if TYPE_CHECKING:
@@ -15,8 +15,18 @@ if TYPE_CHECKING:
 @lru_cache(maxsize=128)
 def dice_probability_cached(number: int) -> float:
     """Return the probability of rolling the given dice number on two six-sided dice."""
-    dice_probs = {2: 1 / 36, 3: 2 / 36, 4: 3 / 36, 5: 4 / 36, 6: 5 / 36,
-                  8: 5 / 36, 9: 4 / 36, 10: 3 / 36, 11: 2 / 36, 12: 1 / 36}
+    dice_probs = {
+        2: 1 / 36,
+        3: 2 / 36,
+        4: 3 / 36,
+        5: 4 / 36,
+        6: 5 / 36,
+        8: 5 / 36,
+        9: 4 / 36,
+        10: 3 / 36,
+        11: 2 / 36,
+        12: 1 / 36
+    }
     return dice_probs.get(number, 0)
 
 
@@ -45,9 +55,7 @@ class SimPlayerState:
             # We do not know development cards
             self.dev_cards: Counter[DevelopmentCardType] = Counter()
         else:
-            self.dev_cards: Counter[DevelopmentCardType] = Counter(
-                c.card_type for c in player.development_cards
-            )
+            self.dev_cards: Counter[DevelopmentCardType] = Counter(c.card_type for c in player.development_cards)
 
         # Achievements
         self.longest_road_length: int = player.longest_road_length

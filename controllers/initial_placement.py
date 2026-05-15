@@ -4,24 +4,22 @@ from typing import Callable, Optional
 from ai.actions import ActionType
 from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.tutor.tutor import TutorStage
+from controllers.controller_support import ControllerSupport
 from game.Edge import Edge
 from game.Player import Player
 from game.PlayerAssets import Buildable
 from game.Vertex import Vertex
-from controllers.controller_support import ControllerSupport
 
 
 class InitialPlacementController(ControllerSupport, ABC):
+
     def run_initial_placement(self):
         """Run the initial settlement and road placement sequence."""
         import controllers.GameController as GameControllerModule
 
         players = self._game.players
-        first, second = (
-            (reversed(players), players)
-            if GameControllerModule.START_LAST
-            else (players, reversed(players))
-        )
+        first, second = ((reversed(players), players) if GameControllerModule.START_LAST else
+                         (players, reversed(players)))
         players_order = ([(p, False) for p in first] + [(p, True) for p in second])
 
         for player, gain_resource in players_order:
@@ -33,15 +31,13 @@ class InitialPlacementController(ControllerSupport, ABC):
                             player,
                             self._game,
                             vertices,
-                        )
-                    )
+                        ))
                     self.view.display_tutor_init(player, TutorStage.INITIAL_SETTLEMENT, explanation)
                 self.view.display_board(player, "Select a position to build your settlement")
 
                 def select_tutor_initial_settlement() -> Optional[Vertex]:
                     return self._run_tutor_decision(
-                        lambda: self.tutor_ai.select_initial_settlement_location(player, self._game, vertices)
-                    )
+                        lambda: self.tutor_ai.select_initial_settlement_location(player, self._game, vertices))
 
                 self._set_tutor_shortcut_handlers(select_tutor_initial_settlement)
                 try:
@@ -93,15 +89,13 @@ class InitialPlacementController(ControllerSupport, ABC):
                             player,
                             self._game,
                             available_edges,
-                        )
-                    )
+                        ))
                     self.view.display_tutor_init(player, TutorStage.INITIAL_ROAD, explanation)
                 edge = self.get_road_choice(
                     player,
                     vertex,
                     selector=lambda candidate_edges: self.tutor_ai.select_initial_road_location(
-                        player, self._game, candidate_edges
-                    ),
+                        player, self._game, candidate_edges),
                 )
             else:
                 edge = self.get_road_choice_ai(player, vertex)
@@ -118,10 +112,10 @@ class InitialPlacementController(ControllerSupport, ABC):
             self._show_tutor_action_feedback(player, opening_road_feedback)
 
     def get_road_choice(
-            self,
-            player: Player,
-            settlement: Optional[Vertex] = None,
-            selector: Optional[Callable[[list[Edge]], Optional[Edge]]] = None,
+        self,
+        player: Player,
+        settlement: Optional[Vertex] = None,
+        selector: Optional[Callable[[list[Edge]], Optional[Edge]]] = None,
     ) -> Edge:
         """Return the selected road choice for the current flow."""
         edges = self._game.get_available_edges(player)
@@ -131,8 +125,7 @@ class InitialPlacementController(ControllerSupport, ABC):
         self.view.display_board(player, "Select a position to build your road")
         if selector is None:
             selector = lambda candidate_edges: self.tutor_ai.select_initial_road_location(
-                player, self._game, candidate_edges
-            )
+                player, self._game, candidate_edges)
 
         def select_tutor_initial_road() -> Optional[Edge]:
             return self._run_tutor_decision(lambda: selector(edges))

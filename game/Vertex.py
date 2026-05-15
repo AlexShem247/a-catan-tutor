@@ -1,13 +1,13 @@
-from enum import IntEnum, Enum
-from typing import List, Optional, TYPE_CHECKING, Tuple, Set
+from enum import Enum, IntEnum
+from typing import TYPE_CHECKING, List, Optional, Set, Tuple
 
 from game.HexTile import HexTile
 from game.PlayerAssets import Building
 from game.Resources import Resource
 
 if TYPE_CHECKING:
-    from game.Player import Player
     from game.Edge import Edge
+    from game.Player import Player
 
 
 class VertexDirection(IntEnum):
@@ -41,6 +41,7 @@ class Port(Enum):
 
 
 class Vertex:
+
     def __init__(self, pos: Tuple[int, int, VertexDirection]):
         self.hexes: List[HexTile] = []
         self.edges: List[Edge] = []

@@ -2,8 +2,8 @@ import unittest
 from random import Random
 from types import SimpleNamespace
 
-from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.actions import Action, ActionType
+from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.tutor.evaluator import TutorEvaluator
 from ai.tutor.explanations import ActionExplanation, CandidateExplanation, Reason, ReasonLabel, ReasonType
 from ai.tutor.feedback import TutorAssessment, TutorDecisionType, TutorFeedbackExplanation
@@ -12,6 +12,7 @@ from game.PlayerAssets import Buildable
 
 
 class TestTutorFeedback(unittest.TestCase):
+
     def setUp(self):
         self.evaluator = TutorEvaluator(RuleBasedAI(Random(0)))
 

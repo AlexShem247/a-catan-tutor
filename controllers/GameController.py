@@ -3,11 +3,14 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from ai.tutor.evaluator import TutorEvaluator
 from ai.tutor.feedback import TutorFeedbackExplanation
-from config.view_constants import (
-    AI_DECISION_ANIMATION_DELAY,
-    AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE,
-    SHOW_AI_BUILT_LOCATIONS,
-)
+from config.view_constants import (AI_DECISION_ANIMATION_DELAY, AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE,
+                                   SHOW_AI_BUILT_LOCATIONS)
+from controllers.action_handlers import ActionHandlers
+from controllers.controller_support import (MAX_AI_ACTION_REQUESTS_PER_TURN, START_LAST, AITurnActionLimitExceeded,
+                                            PlayerScoreSnapshot, ReturnToStart)
+from controllers.initial_placement import InitialPlacementController
+from controllers.turn_controller import TurnController
+from controllers.tutor_controller import TutorController
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game, PlayerConfig
 from game.HexTile import HexTile
@@ -15,27 +18,16 @@ from game.Player import Player, PlayerNumber
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Port, Vertex, VertexDirection
-from view.View import GameMode, View
 from view.canvas.board_display_source import BoardDisplaySource
-from controllers.action_handlers import ActionHandlers
-from controllers.controller_support import (
-    AITurnActionLimitExceeded,
-    MAX_AI_ACTION_REQUESTS_PER_TURN,
-    PlayerScoreSnapshot,
-    ReturnToStart,
-    START_LAST,
-)
-from controllers.initial_placement import InitialPlacementController
-from controllers.tutor_controller import TutorController
-from controllers.turn_controller import TurnController
+from view.View import GameMode, View
 
 
 class GameController(
-    BoardDisplaySource,
-    TutorController,
-    InitialPlacementController,
-    TurnController,
-    ActionHandlers,
+        BoardDisplaySource,
+        TutorController,
+        InitialPlacementController,
+        TurnController,
+        ActionHandlers,
 ):
     _game: Game
     game_mode = GameMode.PLAY
@@ -113,10 +105,8 @@ class GameController(
         self._game = Game(self._resolve_player_config(), self.game_rng)
 
         if self.view:
-            self.view.ai_decision_animation_delay = (
-                AI_DECISION_ANIMATION_DELAY if uses_interactive_delay
-                else AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE
-            )
+            self.view.ai_decision_animation_delay = (AI_DECISION_ANIMATION_DELAY if uses_interactive_delay else
+                                                     AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE)
             self.view.open_tutor_menu(is_tutor_mode)
 
     def start_game(self, max_rounds: Optional[int] = None):
@@ -202,12 +192,12 @@ class GameController(
         return self._game.get_vertex(q, r, corner_index)
 
     def try_build_settlement(
-            self,
-            player: Player,
-            vertex: Vertex,
-            build: bool = True,
-            use_resources: bool = True,
-            road_restriction: bool = True,
+        self,
+        player: Player,
+        vertex: Vertex,
+        build: bool = True,
+        use_resources: bool = True,
+        road_restriction: bool = True,
     ) -> tuple[bool, str]:
         """Try to build a settlement through the controller workflow."""
         result = self._game.try_build_settlement(player, vertex, build, use_resources, road_restriction)
@@ -221,12 +211,12 @@ class GameController(
         return self._game.get_edge(q, r, edge_index)
 
     def try_build_road(
-            self,
-            player: Player,
-            edge: Edge,
-            on_vertex: Optional[Vertex] = None,
-            build: bool = True,
-            use_resources: bool = True,
+        self,
+        player: Player,
+        edge: Edge,
+        on_vertex: Optional[Vertex] = None,
+        build: bool = True,
+        use_resources: bool = True,
     ) -> tuple[bool, str]:
         """Try to build a road through the controller workflow."""
         result = self._game.try_build_road(player, edge, on_vertex, build, use_resources)
@@ -240,11 +230,11 @@ class GameController(
         return self._game.get_buildable_options(player)
 
     def try_build_city(
-            self,
-            player: Player,
-            vertex: Vertex,
-            build: bool = True,
-            use_resources: bool = True,
+        self,
+        player: Player,
+        vertex: Vertex,
+        build: bool = True,
+        use_resources: bool = True,
     ) -> tuple[bool, str]:
         """Try to build a city through the controller workflow."""
         result = self._game.try_build_city(player, vertex, build, use_resources)
@@ -253,9 +243,8 @@ class GameController(
             self._refresh_tutor_turn_explanation(player)
         return result
 
-    def try_trade_with_bank(
-            self, player: Player, selling: ResourceCount, buying: ResourceCount, use_resources: bool = True
-    ) -> bool:
+    def try_trade_with_bank(self, player: Player, selling: ResourceCount, buying: ResourceCount,
+                            use_resources: bool = True) -> bool:
         """Try to perform a bank trade through the controller workflow."""
         success = self._game.try_trade_with_bank(player, selling, buying, use_resources)
         if success and use_resources:
@@ -263,19 +252,19 @@ class GameController(
         return success
 
     def trade_between_players(
-            self,
-            player: Player,
-            selling: ResourceCount,
-            buying_player: Player,
-            buying: ResourceCount,
+        self,
+        player: Player,
+        selling: ResourceCount,
+        buying_player: Player,
+        buying: ResourceCount,
     ):
         """Run the trade flow between two players."""
         result = self._game.trade_between_players(player, selling, buying_player, buying)
         self._refresh_tutor_turn_explanation(player)
         return result
 
-    def get_available_vertices(
-            self, player: Player, building_type: Buildable, road_restriction: bool = True) -> List[Vertex]:
+    def get_available_vertices(self, player: Player, building_type: Buildable,
+                               road_restriction: bool = True) -> List[Vertex]:
         """Return the currently available build vertices."""
         return self._game.get_available_vertices(player, building_type, road_restriction)
 

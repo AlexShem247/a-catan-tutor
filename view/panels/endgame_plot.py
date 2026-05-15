@@ -6,26 +6,18 @@ from PyQt6.QtCore import QPoint, QPointF, Qt
 from PyQt6.QtGui import QBrush, QCursor, QPainter, QPen
 from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
+from config.view_constants import (ENDGAME_PLOT_BACKGROUND_COLOR, ENDGAME_PLOT_HOVER_DISTANCE_THRESHOLD_PX,
+                                   ENDGAME_PLOT_LAYOUT_MARGINS, ENDGAME_PLOT_LEGEND_OFFSET,
+                                   ENDGAME_PLOT_TARGET_TICK_PIXEL_SPACING, ENDGAME_PLOT_TARGET_VICTORY_POINTS,
+                                   ENDGAME_PLOT_TOOLTIP_BORDER_RADIUS_PX, ENDGAME_PLOT_TOOLTIP_OFFSET_PX, PLAYER_COLORS,
+                                   TOOLTIP_BACKGROUND_COLOR, TOOLTIP_BORDER_COLOR, TOOLTIP_TEXT_COLOR)
 from controllers.GameController import GameController, PlayerScoreSnapshot
-from config.view_constants import (
-    ENDGAME_PLOT_BACKGROUND_COLOR,
-    ENDGAME_PLOT_HOVER_DISTANCE_THRESHOLD_PX,
-    ENDGAME_PLOT_LAYOUT_MARGINS,
-    ENDGAME_PLOT_LEGEND_OFFSET,
-    ENDGAME_PLOT_TARGET_TICK_PIXEL_SPACING,
-    ENDGAME_PLOT_TARGET_VICTORY_POINTS,
-    ENDGAME_PLOT_TOOLTIP_BORDER_RADIUS_PX,
-    ENDGAME_PLOT_TOOLTIP_OFFSET_PX,
-    PLAYER_COLORS,
-    TOOLTIP_BACKGROUND_COLOR,
-    TOOLTIP_BORDER_COLOR,
-    TOOLTIP_TEXT_COLOR,
-)
 from game.Player import Player, PlayerNumber
 from view.panels.endgame_summary import describe_round_vp_events, format_endgame_players
 
 
 class IntegerAxisItem(pg.AxisItem):
+
     def tickSpacing(self, minVal: float, maxVal: float, size: float) -> List[Tuple[float, float]]:
         """Calculate sensible tick spacing for the integer axis."""
         value_range = abs(maxVal - minVal)
@@ -34,7 +26,7 @@ class IntegerAxisItem(pg.AxisItem):
 
         target_tick_count = max(2, int(size / ENDGAME_PLOT_TARGET_TICK_PIXEL_SPACING))
         raw_spacing = max(1.0, value_range / target_tick_count)
-        magnitude = 10 ** math.floor(math.log10(raw_spacing))
+        magnitude = 10**math.floor(math.log10(raw_spacing))
 
         for multiplier in (1, 2, 5, 10):
             spacing = magnitude * multiplier
@@ -104,12 +96,10 @@ class HoverTooltip(QFrame):
 
 
 def create_victory_points_plot() -> pg.PlotWidget:
-    plot = pg.PlotWidget(
-        axisItems={
-            "bottom": IntegerAxisItem(orientation="bottom"),
-            "left": IntegerAxisItem(orientation="left"),
-        }
-    )
+    plot = pg.PlotWidget(axisItems={
+        "bottom": IntegerAxisItem(orientation="bottom"),
+        "left": IntegerAxisItem(orientation="left"),
+    })
     plot.setObjectName("victoryPointsPlot")
     plot.setBackground(ENDGAME_PLOT_BACKGROUND_COLOR)
     plot.setMinimumSize(0, 0)
@@ -137,16 +127,13 @@ def handle_plot_hover(owner, scene_pos: QPointF) -> None:
     nearest_distance: float | None = None
     for round_num, x_value, y_value in owner.plot_points:
         point_scene = view_box.mapViewToScene(QPointF(x_value, y_value))
-        distance = (point_scene.x() - scene_pos.x()) ** 2 + (point_scene.y() - scene_pos.y()) ** 2
+        distance = (point_scene.x() - scene_pos.x())**2 + (point_scene.y() - scene_pos.y())**2
         if nearest_distance is None or distance < nearest_distance:
             nearest_round = round_num
             nearest_distance = distance
 
-    if (
-        nearest_round is None
-        or nearest_distance is None
-        or nearest_distance > ENDGAME_PLOT_HOVER_DISTANCE_THRESHOLD_PX
-    ):
+    if (nearest_round is None or nearest_distance is None
+            or nearest_distance > ENDGAME_PLOT_HOVER_DISTANCE_THRESHOLD_PX):
         reset_hover_state(owner)
         return
 
@@ -176,8 +163,7 @@ def build_endgame_plot_tooltips(
         ranked_players = sorted(snapshot.items(), key=lambda item: item[0].value)
         top_score = max(player_snapshot.total_vp for player_snapshot in snapshot.values())
         leaders = [
-            player_names[player_number]
-            for player_number, player_snapshot in ranked_players
+            player_names[player_number] for player_number, player_snapshot in ranked_players
             if player_snapshot.total_vp == top_score
         ]
         leader_text = format_endgame_players(leaders)

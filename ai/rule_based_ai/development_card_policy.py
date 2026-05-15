@@ -1,18 +1,11 @@
 from typing import Dict, List, Optional, Tuple
 
-from ai.RandomAI import RandomAI
 from ai.actions import Action, ActionType, Phase
-from ai.simulation.SimGame import make_sim_game_for_player
+from ai.RandomAI import RandomAI
 from ai.simulation.board_sim_utils import get_opponents
-from ai.tutor.explanations import (
-    ActionExplanation,
-    AssumptionCode,
-    CandidateExplanation,
-    ExplanationTemplate,
-    Reason,
-    ReasonLabel,
-    ReasonType,
-)
+from ai.simulation.SimGame import make_sim_game_for_player
+from ai.tutor.explanations import (ActionExplanation, AssumptionCode, CandidateExplanation, ExplanationTemplate, Reason,
+                                   ReasonLabel, ReasonType)
 from ai.tutor.move_quality import monopoly_move_quality, strategic_turn_move_quality, year_of_plenty_move_quality
 from ai.utils.action_utils import play_development_card_action
 from ai.utils.resource_utils import calc_step_resources
@@ -23,15 +16,9 @@ from game.Resources import Resource, ResourceCount
 
 
 class DevelopmentCardPolicy:
-    def __init__(
-            self,
-            rng,
-            random_ai: RandomAI,
-            etw_estimator,
-            decision_config,
-            use_strategic_move,
-            planner_kwargs,
-            etw_kwargs):
+
+    def __init__(self, rng, random_ai: RandomAI, etw_estimator, decision_config, use_strategic_move, planner_kwargs,
+                 etw_kwargs):
         self.rng = rng
         self.random_ai = random_ai
         self.etw_estimator = etw_estimator
@@ -79,12 +66,8 @@ class DevelopmentCardPolicy:
         for resource in picked:
             selected[resource] += 1
 
-        clearly_supports_follow_up = (
-            target_action is not None
-            and 0 < sum(selected.values()) == sum(
-                min(selected[resource], target_shortfalls[resource]) for resource in Resource
-            )
-        )
+        clearly_supports_follow_up = (target_action is not None and 0 < sum(selected.values()) == sum(
+            min(selected[resource], target_shortfalls[resource]) for resource in Resource))
         explanation = self._build_year_of_plenty_explanation(
             selected,
             primary_action,
@@ -95,8 +78,7 @@ class DevelopmentCardPolicy:
         )
         return selected, explanation
 
-    def explain_year_of_plenty_choice(
-            self, player: Player, game: Game, selected: ResourceCount) -> ActionExplanation:
+    def explain_year_of_plenty_choice(self, player: Player, game: Game, selected: ResourceCount) -> ActionExplanation:
         """Handle explain year of plenty choice."""
         normalized_selected = {resource: int(selected.get(resource, 0)) for resource in Resource}
         sim_game = make_sim_game_for_player(game, player)
@@ -108,12 +90,8 @@ class DevelopmentCardPolicy:
         )
         primary_action, target_action, target_shortfalls, already_had_next_step = self._year_of_plenty_plan_target(
             player, best_plan_explanation)
-        clearly_supports_follow_up = (
-            target_action is not None
-            and 0 < sum(normalized_selected.values()) == sum(
-                min(normalized_selected[resource], target_shortfalls[resource]) for resource in Resource
-            )
-        )
+        clearly_supports_follow_up = (target_action is not None and 0 < sum(normalized_selected.values()) == sum(
+            min(normalized_selected[resource], target_shortfalls[resource]) for resource in Resource))
         return self._build_year_of_plenty_explanation(
             normalized_selected,
             primary_action,
@@ -128,8 +106,8 @@ class DevelopmentCardPolicy:
         resource, _ = self.select_monopoly_resource_with_explanation(player, game)
         return resource
 
-    def select_monopoly_resource_with_explanation(
-            self, player: Player, game: Game) -> Tuple[Resource, Optional[ActionExplanation]]:
+    def select_monopoly_resource_with_explanation(self, player: Player,
+                                                  game: Game) -> Tuple[Resource, Optional[ActionExplanation]]:
         """Select the monopoly resource with explanation."""
         if not self._use_strategic_move():
             chosen = self.random_ai.select_monopoly_resource(player, game)
@@ -228,8 +206,8 @@ class DevelopmentCardPolicy:
             leader_share,
         )
 
-    def select_pre_roll_action_with_explanation(
-            self, player: Player, game: Game, dev_played: bool) -> Optional[Tuple[Action, ActionExplanation]]:
+    def select_pre_roll_action_with_explanation(self, player: Player, game: Game,
+                                                dev_played: bool) -> Optional[Tuple[Action, ActionExplanation]]:
         """Select the pre roll action with explanation."""
         if dev_played or not self.decision_config.use_development_cards:
             return None
@@ -244,8 +222,8 @@ class DevelopmentCardPolicy:
         opponents_etw_before: Dict[PlayerNumber, float] = {}
         if self.decision_config.use_opponent_interference:
             opponents_etw_before = {
-                opp.player_number: self.etw_estimator.estimated_time_to_win(
-                    opp.copy(), sim_game, False, **self._etw_kwargs())
+                opp.player_number: self.etw_estimator.estimated_time_to_win(opp.copy(), sim_game, False,
+                                                                            **self._etw_kwargs())
                 for opp in get_opponents(sim_game, player.player_number)
             }
 
@@ -282,8 +260,8 @@ class DevelopmentCardPolicy:
         )
         return best_candidate.action, explanation
 
-    def explain_pre_roll_dev_choice(
-            self, player: Player, game: Game, card_type: DevelopmentCardType) -> ActionExplanation:
+    def explain_pre_roll_dev_choice(self, player: Player, game: Game,
+                                    card_type: DevelopmentCardType) -> ActionExplanation:
         """Handle explain pre roll dev choice."""
         sim_game = make_sim_game_for_player(game, player)
         sim_us = sim_game.overlay.get_sim_player(player.player_number)
@@ -292,8 +270,8 @@ class DevelopmentCardPolicy:
         opponents_etw_before: Dict[PlayerNumber, float] = {}
         if self.decision_config.use_opponent_interference:
             opponents_etw_before = {
-                opp.player_number: self.etw_estimator.estimated_time_to_win(
-                    opp.copy(), sim_game, False, **self._etw_kwargs())
+                opp.player_number: self.etw_estimator.estimated_time_to_win(opp.copy(), sim_game, False,
+                                                                            **self._etw_kwargs())
                 for opp in get_opponents(sim_game, player.player_number)
             }
         explained_candidates = self.etw_estimator.evaluate_candidates_with_explanations(
@@ -308,10 +286,9 @@ class DevelopmentCardPolicy:
             use_planning=self.decision_config.use_etw_planning,
             use_time_discount=self.decision_config.use_time_discount,
         )
-        chosen_candidate = next((
-            candidate for candidate in explained_candidates
-            if candidate.action.type == ActionType.PLAY_DEV_CARD and candidate.action.payload == card_type
-        ), None)
+        chosen_candidate = next(
+            (candidate for candidate in explained_candidates
+             if candidate.action.type == ActionType.PLAY_DEV_CARD and candidate.action.payload == card_type), None)
         if chosen_candidate is None:
             chosen_candidate = CandidateExplanation(
                 action=Action(ActionType.PLAY_DEV_CARD, card_type),
@@ -332,39 +309,42 @@ class DevelopmentCardPolicy:
             metadata={"phase": Phase.PRE_ROLL.name.lower()},
         )
 
-    def _build_year_of_plenty_explanation(
-            self, selected: ResourceCount, primary_action: Optional[Action], target_action: Optional[Action],
-            clearly_supports_follow_up: bool, already_had_next_step: bool,
-            best_plan_explanation: ActionExplanation) -> ActionExplanation:
+    def _build_year_of_plenty_explanation(self, selected: ResourceCount, primary_action: Optional[Action],
+                                          target_action: Optional[Action], clearly_supports_follow_up: bool,
+                                          already_had_next_step: bool,
+                                          best_plan_explanation: ActionExplanation) -> ActionExplanation:
         """Build the year of plenty explanation."""
         reasons_for: List[Reason] = []
         if clearly_supports_follow_up and target_action is not None:
-            reasons_for.append(Reason(
-                ReasonType.QUICK_TO_EXECUTE,
-                ReasonLabel.YOP_FILLS_SHORTFALL,
-                float(sum(selected.values())),
-            ))
-            reasons_for.append(Reason(
-                ReasonType.HEURISTIC_CHOICE,
-                ReasonLabel.YOP_SUPPORTS_FOLLOW_UP,
-                1.0,
-                {
-                    "primary_action": primary_action,
-                    "follow_up_action": target_action,
-                    "already_had_next_step": already_had_next_step,
-                },
-            ))
+            reasons_for.append(
+                Reason(
+                    ReasonType.QUICK_TO_EXECUTE,
+                    ReasonLabel.YOP_FILLS_SHORTFALL,
+                    float(sum(selected.values())),
+                ))
+            reasons_for.append(
+                Reason(
+                    ReasonType.HEURISTIC_CHOICE,
+                    ReasonLabel.YOP_SUPPORTS_FOLLOW_UP,
+                    1.0,
+                    {
+                        "primary_action": primary_action,
+                        "follow_up_action": target_action,
+                        "already_had_next_step": already_had_next_step,
+                    },
+                ))
         elif target_action is not None:
-            reasons_for.append(Reason(
-                ReasonType.HEURISTIC_CHOICE,
-                ReasonLabel.YOP_SUPPORTS_FOLLOW_UP,
-                1.0,
-                {
-                    "primary_action": primary_action,
-                    "follow_up_action": target_action,
-                    "already_had_next_step": already_had_next_step,
-                },
-            ))
+            reasons_for.append(
+                Reason(
+                    ReasonType.HEURISTIC_CHOICE,
+                    ReasonLabel.YOP_SUPPORTS_FOLLOW_UP,
+                    1.0,
+                    {
+                        "primary_action": primary_action,
+                        "follow_up_action": target_action,
+                        "already_had_next_step": already_had_next_step,
+                    },
+                ))
         else:
             reasons_for.append(Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.YOP_FLEXIBLE_PICK, 1.0))
 
@@ -394,17 +374,17 @@ class DevelopmentCardPolicy:
         )
 
     @staticmethod
-    def _build_monopoly_resource_explanation(
-            selected_resource: Resource, total_resource_count: int, self_gain_efficiency: float,
-            leader_share: float) -> ActionExplanation:
+    def _build_monopoly_resource_explanation(selected_resource: Resource, total_resource_count: int,
+                                             self_gain_efficiency: float, leader_share: float) -> ActionExplanation:
         """Build the monopoly resource explanation."""
         reasons_for: List[Reason] = []
         if total_resource_count > 0:
-            reasons_for.append(Reason(
-                ReasonType.SLOWS_LEADING_OPPONENT,
-                ReasonLabel.MONOPOLY_HIGHEST_DEMAND,
-                float(total_resource_count),
-            ))
+            reasons_for.append(
+                Reason(
+                    ReasonType.SLOWS_LEADING_OPPONENT,
+                    ReasonLabel.MONOPOLY_HIGHEST_DEMAND,
+                    float(total_resource_count),
+                ))
         else:
             reasons_for.append(Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.MONOPOLY_FLEXIBLE_PICK, 1.0))
 
@@ -416,7 +396,9 @@ class DevelopmentCardPolicy:
             metadata={
                 "template": ExplanationTemplate.MONOPOLY_RESOURCE,
                 "selected_resource": selected_resource,
-                "selected_resources": {selected_resource: 1},
+                "selected_resources": {
+                    selected_resource: 1
+                },
             },
         )
         return ActionExplanation(
@@ -428,8 +410,8 @@ class DevelopmentCardPolicy:
 
     @staticmethod
     def _year_of_plenty_plan_target(
-            player: Player, explanation: ActionExplanation
-    ) -> Tuple[Optional[Action], Optional[Action], ResourceCount, bool]:
+            player: Player,
+            explanation: ActionExplanation) -> Tuple[Optional[Action], Optional[Action], ResourceCount, bool]:
         """Handle year of plenty plan target."""
         if explanation.chosen_action.type == ActionType.END_TURN and explanation.chosen_candidate.next_plan:
             plan = explanation.chosen_candidate.next_plan
@@ -451,7 +433,8 @@ class DevelopmentCardPolicy:
                 primary_action = action
 
             shortfalls = {
-                resource: max(0, cost.get(resource, 0) - simulated_resources[resource])
+                resource: max(0,
+                              cost.get(resource, 0) - simulated_resources[resource])
                 for resource in Resource
             }
             if sum(shortfalls.values()) > 0:

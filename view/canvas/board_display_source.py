@@ -3,6 +3,7 @@ from typing import Any
 
 
 class BoardDisplaySource(ABC):
+
     @abstractmethod
     def get_ports(self) -> Any:
         """Return the board ports for display."""

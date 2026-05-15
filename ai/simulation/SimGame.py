@@ -1,12 +1,11 @@
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
-from game.Game import Game
-from game.Player import PlayerNumber, Player
-from game.Vertex import Vertex
-from game.Edge import Edge
-
 from ai.simulation.SimPlayerState import SimPlayerState
+from game.Edge import Edge
+from game.Game import Game
+from game.Player import Player, PlayerNumber
+from game.Vertex import Vertex
 
 
 @dataclass

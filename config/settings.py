@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
-
 CONFIG_DIR = Path(__file__).resolve().parent
 DEFAULT_SETTINGS_PATH = CONFIG_DIR / "default_settings.json"
 APPLIED_SETTINGS_PATH = CONFIG_DIR / "applied_settings.json"
@@ -36,11 +35,7 @@ def load_effective_settings() -> Dict[str, Any]:
 
 def save_applied_settings(settings: Dict[str, Any]) -> None:
     default_settings = load_default_settings()
-    overrides = {
-        key: value
-        for key, value in settings.items()
-        if default_settings.get(key) != value
-    }
+    overrides = {key: value for key, value in settings.items() if default_settings.get(key) != value}
 
     if not overrides:
         reset_applied_settings()

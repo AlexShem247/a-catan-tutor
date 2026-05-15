@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import Enum, auto
-from typing import List, Tuple, Dict, Optional, Callable, Any
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ai.actions import Action
 from ai.tutor.explanations import ActionExplanation
@@ -51,8 +51,13 @@ class View(ABC):
         ...
 
     @abstractmethod
-    def display_board_turn_ai(self, player: Player, dice_info: Tuple[int, int, int], msg: str, increase_delay=False,
-                              ) -> None:
+    def display_board_turn_ai(
+        self,
+        player: Player,
+        dice_info: Tuple[int, int, int],
+        msg: str,
+        increase_delay=False,
+    ) -> None:
         """Display the board during an AI turn."""
         ...
 
@@ -99,18 +104,18 @@ class View(ABC):
         ...
 
     @abstractmethod
-    def display_trade_manager(self, player: Player, selling: ResourceCount,
-                              buying: ResourceCount, selling_player: Player) -> Tuple[bool, Optional[ResourceCount]]:
+    def display_trade_manager(self, player: Player, selling: ResourceCount, buying: ResourceCount,
+                              selling_player: Player) -> Tuple[bool, Optional[ResourceCount]]:
         """Display the trade manager widget."""
         ...
 
     @abstractmethod
     def select_player_trade_offer(
-            self,
-            player: Player,
-            selling: ResourceCount,
-            buying: ResourceCount,
-            willing_players: List[Tuple[Player, Optional[ResourceCount]]],
+        self,
+        player: Player,
+        selling: ResourceCount,
+        buying: ResourceCount,
+        willing_players: List[Tuple[Player, Optional[ResourceCount]]],
     ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
         """Handle select player trade offer."""
         ...

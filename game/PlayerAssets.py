@@ -101,18 +101,12 @@ class DevelopmentDeck:
 
         self._played[ctype] += 1
 
-    def get_probability(
-            self,
-            ctype: DevelopmentCardType,
-            private_cards: Dict[DevelopmentCardType, int] | None = None
-    ) -> float:
+    def get_probability(self, ctype: DevelopmentCardType,
+                        private_cards: Dict[DevelopmentCardType, int] | None = None) -> float:
         """Return the probability of drawing a card of the given type."""
 
         # Unknown = initial - publicly played
-        unknown = max(
-            0,
-            self.INITIAL_COUNTS[ctype] - self._played[ctype]
-        )
+        unknown = max(0, self.INITIAL_COUNTS[ctype] - self._played[ctype])
 
         # Subtract any private cards of this type
         if private_cards is not None:
@@ -120,10 +114,7 @@ class DevelopmentDeck:
             unknown = max(0, unknown)
 
         # Total unknown across all types
-        total_unknown = sum(
-            max(0, self.INITIAL_COUNTS[t] - self._played[t])
-            for t in DevelopmentCardType
-        )
+        total_unknown = sum(max(0, self.INITIAL_COUNTS[t] - self._played[t]) for t in DevelopmentCardType)
 
         if private_cards is not None:
             total_unknown -= sum(private_cards.values())

@@ -1,10 +1,10 @@
 from typing import List, Optional, Tuple
 
 from ai.actions import Action, ActionType
-from ai.simulation.SimGame import SimGame
-from ai.simulation.SimPlayerState import SimPlayerState
 from ai.simulation.board_sim_utils import get_opponents
 from ai.simulation.etw_evaluation import sim_game_with_replaced_player
+from ai.simulation.SimGame import SimGame
+from ai.simulation.SimPlayerState import SimPlayerState
 from ai.tutor.explanations import CandidateExplanation, Reason, ReasonLabel, ReasonType
 from ai.utils.action_utils import get_bank_trade_for_action
 from ai.utils.resource_utils import calc_step_resources
@@ -12,6 +12,7 @@ from ai.utils.trade_utils import propose_trade
 
 
 class EtwSelection:
+
     def __init__(self, timing, evaluator, last_trade_rejected, estimator):
         self.timing = timing
         self.evaluator = evaluator
@@ -49,8 +50,8 @@ class EtwSelection:
                 if missing is not None:
                     sim_game_for_trade = sim_game_with_replaced_player(sim_game, player)
                     opponents = get_opponents(sim_game_for_trade, player.player_number)
-                    trade_action = propose_trade(
-                        player, sim_game_for_trade, missing, player_excesses, opponents, self.estimator)
+                    trade_action = propose_trade(player, sim_game_for_trade, missing, player_excesses, opponents,
+                                                 self.estimator)
                     if trade_action and utility > best_utility:
                         best_utility = utility
                         best_action = trade_action
@@ -122,8 +123,8 @@ class EtwSelection:
                 if missing is not None:
                     sim_game_for_trade = sim_game_with_replaced_player(sim_game, player)
                     opponents = get_opponents(sim_game_for_trade, player.player_number)
-                    trade_action = propose_trade(
-                        player, sim_game_for_trade, missing, player_excesses, opponents, self.estimator)
+                    trade_action = propose_trade(player, sim_game_for_trade, missing, player_excesses, opponents,
+                                                 self.estimator)
                     if trade_action and utility > best_utility:
                         best_utility = utility
                         best_action = trade_action

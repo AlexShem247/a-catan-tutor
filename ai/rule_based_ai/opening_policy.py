@@ -1,33 +1,17 @@
 from random import Random
 from typing import List, Optional, Tuple
 
-from ai.RandomAI import RandomAI
 from ai.actions import Action, ActionType
+from ai.RandomAI import RandomAI
+from ai.simulation.board_sim_utils import (find_edge_toward_vertex, find_edge_toward_vertex_from_any,
+                                           find_gap_connection, get_legal_settlement_vertices, get_reachable_vertices,
+                                           moves_toward_vertex)
 from ai.simulation.SimGame import make_sim_game_for_player
 from ai.simulation.SimPlayerState import dice_probability
-from ai.simulation.board_sim_utils import (
-    find_edge_toward_vertex,
-    find_edge_toward_vertex_from_any,
-    find_gap_connection,
-    get_legal_settlement_vertices,
-    get_reachable_vertices,
-    moves_toward_vertex,
-)
-from ai.tutor.explanations import (
-    ActionExplanation,
-    CandidateExplanation,
-    ExplanationTemplate,
-    Reason,
-    ReasonLabel,
-    ReasonType,
-    RoadExplanationKind,
-)
-from ai.tutor.move_quality import (
-    initial_road_connection_move_quality,
-    initial_road_expansion_move_quality,
-    initial_road_flexible_move_quality,
-    initial_settlement_move_quality,
-)
+from ai.tutor.explanations import (ActionExplanation, CandidateExplanation, ExplanationTemplate, Reason, ReasonLabel,
+                                   ReasonType, RoadExplanationKind)
+from ai.tutor.move_quality import (initial_road_connection_move_quality, initial_road_expansion_move_quality,
+                                   initial_road_flexible_move_quality, initial_settlement_move_quality)
 from config.StrategyWeights import StrategyWeights
 from game.Edge import Edge
 from game.Game import Game
@@ -37,20 +21,20 @@ from game.Vertex import Vertex
 
 
 class OpeningPolicy:
+
     def __init__(self, rng: Random, random_ai: RandomAI, decision_config, use_strategic_move):
         self.rng = rng
         self.random_ai = random_ai
         self.decision_config = decision_config
         self._use_strategic_move = use_strategic_move
 
-    def select_initial_settlement_location(
-            self, player: Player, game: Game, available_vertices: List[Vertex]) -> Optional[Vertex]:
+    def select_initial_settlement_location(self, player: Player, game: Game,
+                                           available_vertices: List[Vertex]) -> Optional[Vertex]:
         """Select the initial settlement location."""
         vertex, _ = self.select_initial_settlement_location_with_explanation(player, game, available_vertices)
         return vertex
 
-    def select_initial_road_location(
-            self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
+    def select_initial_road_location(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
         """Select the initial road location."""
         edge, _ = self.select_initial_road_location_with_explanation(player, game, available_edges)
         return edge
@@ -69,20 +53,17 @@ class OpeningPolicy:
 
         first_settlement = len(player.settlements) == 0
         scored_vertices = sorted(
-            [
-                (
+            [(
+                vertex,
+                self.vertex_utility(
                     vertex,
-                    self.vertex_utility(
-                        vertex,
-                        player,
-                        game,
-                        available_vertices,
-                        first_settlement,
-                        use_opponent_interference=self.decision_config.use_opponent_interference,
-                    ),
-                )
-                for vertex in available_vertices
-            ],
+                    player,
+                    game,
+                    available_vertices,
+                    first_settlement,
+                    use_opponent_interference=self.decision_config.use_opponent_interference,
+                ),
+            ) for vertex in available_vertices],
             key=lambda item: item[1],
             reverse=True,
         )
@@ -91,9 +72,8 @@ class OpeningPolicy:
         explanation = self._build_initial_settlement_explanation(player, best_vertex, best_score, max_score)
         return best_vertex, explanation
 
-    def explain_initial_settlement_choice(
-            self, player: Player, game: Game,
-            available_vertices: List[Vertex], chosen_vertex: Vertex) -> ActionExplanation:
+    def explain_initial_settlement_choice(self, player: Player, game: Game, available_vertices: List[Vertex],
+                                          chosen_vertex: Vertex) -> ActionExplanation:
         """Handle explain initial settlement choice."""
         first_settlement = len(player.settlements) == 0
         vertex_scores = {
@@ -111,8 +91,8 @@ class OpeningPolicy:
         max_score = max(vertex_scores.values(), default=0.0)
         return self._build_initial_settlement_explanation(player, chosen_vertex, chosen_score, max_score)
 
-    def score_initial_settlement_choice(
-            self, player: Player, game: Game, available_vertices: List[Vertex], chosen_vertex: Vertex) -> float:
+    def score_initial_settlement_choice(self, player: Player, game: Game, available_vertices: List[Vertex],
+                                        chosen_vertex: Vertex) -> float:
         """Score the initial settlement choice."""
         if chosen_vertex not in available_vertices:
             return 0.0
@@ -225,8 +205,8 @@ class OpeningPolicy:
         )
         return edge, explanation
 
-    def explain_initial_road_choice(
-            self, player: Player, game: Game, available_edges: List[Edge], chosen_edge: Edge) -> ActionExplanation:
+    def explain_initial_road_choice(self, player: Player, game: Game, available_edges: List[Edge],
+                                    chosen_edge: Edge) -> ActionExplanation:
         """Handle explain initial road choice."""
         if len(player.settlements) + len(player.cities) >= 2:
             return self._build_initial_road_explanation(
@@ -309,8 +289,8 @@ class OpeningPolicy:
             move_quality=initial_road_flexible_move_quality(),
         )
 
-    def score_initial_road_choice(
-            self, player: Player, game: Game, available_edges: List[Edge], chosen_edge: Edge) -> float:
+    def score_initial_road_choice(self, player: Player, game: Game, available_edges: List[Edge],
+                                  chosen_edge: Edge) -> float:
         """Score the initial road choice."""
         if chosen_edge not in available_edges:
             return 0.0
@@ -334,8 +314,7 @@ class OpeningPolicy:
 
         if len(player.settlements) == 1:
             target_utilities = [
-                vertex_scores[vertex]
-                for vertex in legal_vertices
+                vertex_scores[vertex] for vertex in legal_vertices
                 if find_edge_toward_vertex(current_settlement, vertex, available_edges) == chosen_edge
             ]
             if target_utilities:
@@ -350,8 +329,7 @@ class OpeningPolicy:
             return initial_road_connection_move_quality(len(connection_edges))
 
         target_utilities = [
-            vertex_scores[vertex]
-            for vertex in legal_vertices
+            vertex_scores[vertex] for vertex in legal_vertices
             if find_edge_toward_vertex(current_settlement, vertex, available_edges) == chosen_edge
         ]
         if target_utilities:
@@ -359,9 +337,8 @@ class OpeningPolicy:
         return initial_road_flexible_move_quality()
 
     @staticmethod
-    def vertex_utility(
-            vertex: Vertex, player: Player, game: Game, available_vertices: List[Vertex],
-            first_settlement: bool = True, use_opponent_interference: bool = True) -> float:
+    def vertex_utility(vertex: Vertex, player: Player, game: Game, available_vertices: List[Vertex],
+                       first_settlement: bool = True, use_opponent_interference: bool = True) -> float:
         """Handle vertex utility."""
         if not vertex.hexes:
             return float("-inf")
@@ -391,11 +368,8 @@ class OpeningPolicy:
                 if blocking_penalty == 0.0:
                     break
 
-        utility = (
-            StrategyWeights.INIT_PLACE_YIELD * dice_sum
-            + StrategyWeights.INIT_PLACE_DIVERSITY * diversity
-            - StrategyWeights.INIT_PLACE_BLOCK * blocking_penalty
-        )
+        utility = (StrategyWeights.INIT_PLACE_YIELD * dice_sum + StrategyWeights.INIT_PLACE_DIVERSITY * diversity -
+                   StrategyWeights.INIT_PLACE_BLOCK * blocking_penalty)
 
         if not first_settlement:
             first_resources = {h.resource for s in player.settlements for h in s.hexes if h.resource is not None}
@@ -404,8 +378,7 @@ class OpeningPolicy:
 
         return utility
 
-    def road_building_placement(
-            self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
+    def road_building_placement(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
         """Handle road building placement."""
         sim_game = make_sim_game_for_player(game, player)
         connecting_edge = find_gap_connection(player.player_number, sim_game, available_edges)
@@ -431,23 +404,23 @@ class OpeningPolicy:
 
         return self.rng.choice(available_edges) if available_edges else None
 
-    def build_initial_settlement_explanation(
-            self, player: Player, vertex: Vertex, best_score: float, max_score: float) -> ActionExplanation:
+    def build_initial_settlement_explanation(self, player: Player, vertex: Vertex, best_score: float,
+                                             max_score: float) -> ActionExplanation:
         """Build the initial settlement explanation."""
         return self._build_initial_settlement_explanation(player, vertex, best_score, max_score)
 
     def build_initial_road_explanation(
-            self,
-            edge: Edge,
-            target_vertex: Optional[Vertex],
-            explanation_kind: RoadExplanationKind,
-            move_quality: float,
+        self,
+        edge: Edge,
+        target_vertex: Optional[Vertex],
+        explanation_kind: RoadExplanationKind,
+        move_quality: float,
     ) -> ActionExplanation:
         """Build the initial road explanation."""
         return self._build_initial_road_explanation(edge, target_vertex, explanation_kind, move_quality)
 
-    def _build_initial_settlement_explanation(
-            self, player: Player, vertex: Vertex, best_score: float, max_score: float) -> ActionExplanation:
+    def _build_initial_settlement_explanation(self, player: Player, vertex: Vertex, best_score: float,
+                                              max_score: float) -> ActionExplanation:
         """Build the initial settlement explanation."""
         first_settlement = len(player.settlements) == 0
         reasons_for = self._initial_settlement_reasons(player, vertex, first_settlement)
@@ -468,9 +441,9 @@ class OpeningPolicy:
             move_quality=initial_settlement_move_quality(best_score, max_score),
         )
 
-    def _build_initial_road_explanation(
-            self, edge: Edge, target_vertex: Optional[Vertex],
-            explanation_kind: RoadExplanationKind, move_quality: float) -> ActionExplanation:
+    def _build_initial_road_explanation(self, edge: Edge, target_vertex: Optional[Vertex],
+                                        explanation_kind: RoadExplanationKind,
+                                        move_quality: float) -> ActionExplanation:
         """Build the initial road explanation."""
         reasons_for = self._initial_road_reasons(target_vertex, explanation_kind)
         visual_plan: List[Tuple[Buildable, object]] = [(Buildable.ROAD, edge)]
@@ -495,8 +468,7 @@ class OpeningPolicy:
             move_quality=move_quality,
         )
 
-    def _initial_settlement_reasons(
-            self, player: Player, vertex: Vertex, first_settlement: bool) -> List[Reason]:
+    def _initial_settlement_reasons(self, player: Player, vertex: Vertex, first_settlement: bool) -> List[Reason]:
         """Handle initial settlement reasons."""
         reasons: List[Reason] = []
         resources = {hex_tile.resource for hex_tile in vertex.hexes if hex_tile.resource is not None}
@@ -507,48 +479,50 @@ class OpeningPolicy:
             reasons.append(Reason(ReasonType.IMPROVES_PRODUCTION, ReasonLabel.INIT_EARLY_PRODUCTION, total_yield))
 
         if len(resources) >= 2:
-            reasons.append(Reason(
-                ReasonType.IMPROVES_RESOURCE_DIVERSITY,
-                ReasonLabel.INIT_RESOURCE_DIVERSITY,
-                float(len(resources)),
-            ))
+            reasons.append(
+                Reason(
+                    ReasonType.IMPROVES_RESOURCE_DIVERSITY,
+                    ReasonLabel.INIT_RESOURCE_DIVERSITY,
+                    float(len(resources)),
+                ))
 
         if high_yield_count > 0:
-            reasons.append(Reason(
-                ReasonType.FASTEST_PROGRESS,
-                ReasonLabel.INIT_HIGH_FREQUENCY,
-                float(high_yield_count),
-            ))
+            reasons.append(
+                Reason(
+                    ReasonType.FASTEST_PROGRESS,
+                    ReasonLabel.INIT_HIGH_FREQUENCY,
+                    float(high_yield_count),
+                ))
 
         if vertex.port is not None:
-            reasons.append(Reason(
-                ReasonType.HEURISTIC_CHOICE,
-                ReasonLabel.INIT_PORT_ACCESS,
-                1.0,
-                {"port": vertex.port},
-            ))
+            reasons.append(
+                Reason(
+                    ReasonType.HEURISTIC_CHOICE,
+                    ReasonLabel.INIT_PORT_ACCESS,
+                    1.0,
+                    {"port": vertex.port},
+                ))
 
         if not first_settlement:
             first_resources = {
                 hex_tile.resource
                 for settlement in player.settlements
-                for hex_tile in settlement.hexes
-                if hex_tile.resource is not None
+                for hex_tile in settlement.hexes if hex_tile.resource is not None
             }
             combined_resources = resources | first_resources
             if len(combined_resources) > len(first_resources):
-                reasons.append(Reason(
-                    ReasonType.IMPROVES_RESOURCE_DIVERSITY,
-                    ReasonLabel.INIT_COMPLEMENTS_FIRST,
-                    float(len(combined_resources)),
-                ))
+                reasons.append(
+                    Reason(
+                        ReasonType.IMPROVES_RESOURCE_DIVERSITY,
+                        ReasonLabel.INIT_COMPLEMENTS_FIRST,
+                        float(len(combined_resources)),
+                    ))
 
         reasons.sort(key=lambda reason: reason.value, reverse=True)
         return reasons
 
     @staticmethod
-    def _initial_road_reasons(
-            target_vertex: Optional[Vertex], explanation_kind: RoadExplanationKind) -> List[Reason]:
+    def _initial_road_reasons(target_vertex: Optional[Vertex], explanation_kind: RoadExplanationKind) -> List[Reason]:
         """Handle initial road reasons."""
         reasons: List[Reason] = []
         if explanation_kind == RoadExplanationKind.CONNECTION:

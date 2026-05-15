@@ -208,7 +208,6 @@ class ActionExplanation:
             source_plan = self.chosen_candidate.next_plan
 
         return [
-            action.payload
-            for action in source_plan
+            action.payload for action in source_plan
             if action.type == ActionType.BUILD and action.payload[0] != Buildable.DEVELOPMENT_CARD
         ]

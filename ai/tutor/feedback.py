@@ -1,8 +1,8 @@
+import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from html import escape
-import re
 from typing import Any, List, Optional, Tuple
 
 from game.PlayerAssets import Buildable
@@ -132,8 +132,8 @@ class TutorAssessment:
         ]
         if self.move_context:
             parts.append(f"<b>Resources:</b> {escape(self.move_context)}")
-        if (self.better_move and self._normalise_display_text(self.better_move) !=
-                self._normalise_display_text(self.your_move)):
+        if (self.better_move
+                and self._normalise_display_text(self.better_move) != self._normalise_display_text(self.your_move)):
             parts.append(f"<b>Better move:</b> {escape(self.better_move)}")
             if self.better_move_context:
                 parts.append(f"<b>Better move resources:</b> {escape(self.better_move_context)}")
@@ -144,8 +144,8 @@ class TutorAssessment:
         parts = [f"<b>Your move:</b> {escape(self.your_move)}"]
         if self.move_context:
             parts.append(f"<b>Resources:</b> {escape(self.move_context)}")
-        if (self.better_move and self._normalise_display_text(self.better_move) !=
-                self._normalise_display_text(self.your_move)):
+        if (self.better_move
+                and self._normalise_display_text(self.better_move) != self._normalise_display_text(self.your_move)):
             parts.append(f"<b>Better move:</b> {escape(self.better_move)}")
             if self.better_move_context:
                 parts.append(f"<b>Better move resources:</b> {escape(self.better_move_context)}")
@@ -195,11 +195,11 @@ class TutorFeedbackExplanation:
 
     @classmethod
     def from_assessment(
-            cls,
-            title: str,
-            assessment: TutorAssessment,
-            game_state: Any,
-            visual_build_plan: Optional[List[Tuple[Any, Any, Any]]] = None,
+        cls,
+        title: str,
+        assessment: TutorAssessment,
+        game_state: Any,
+        visual_build_plan: Optional[List[Tuple[Any, Any, Any]]] = None,
     ) -> "TutorFeedbackExplanation":
         """Create a feedback explanation from an assessment."""
         return cls(

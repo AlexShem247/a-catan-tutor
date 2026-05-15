@@ -1,30 +1,13 @@
 from typing import List, Tuple
 
 from ai.actions import Action, ActionType
-
-from ai.tutor.explanation_formatting import (
-    action_to_text,
-    capitalise,
-    detail_sentence_from_reasons,
-    discard_protected_plan_text,
-    end_turn_concise_reason,
-    explanation_template,
-    final_benefit_text,
-    follow_up_action_text,
-    initial_road_target_sentence,
-    plan_linking_text,
-    plan_timing_text,
-    port_reason_text,
-    resource_count_text,
-    sorted_reasons,
-    top_reason_sentence,
-    trade_concise_reason,
-    trade_detail_sentence_from_reasons,
-    trade_exchange_text,
-    trade_opening_text,
-    vertex_intersection_text,
-    gerund_phrase,
-)
+from ai.tutor.explanation_formatting import (action_to_text, capitalise, detail_sentence_from_reasons,
+                                             discard_protected_plan_text, end_turn_concise_reason, explanation_template,
+                                             final_benefit_text, follow_up_action_text, gerund_phrase,
+                                             initial_road_target_sentence, plan_linking_text, plan_timing_text,
+                                             port_reason_text, resource_count_text, sorted_reasons, top_reason_sentence,
+                                             trade_concise_reason, trade_detail_sentence_from_reasons,
+                                             trade_exchange_text, trade_opening_text, vertex_intersection_text)
 from ai.tutor.explanations import ActionExplanation, CandidateExplanation, ExplanationTemplate
 
 
@@ -131,9 +114,7 @@ def end_turn_plan_text(explanation: ActionExplanation, candidate: CandidateExpla
 
     final_action = next_plan[-1]
     if final_action != next_step:
-        parts.append(
-            f"The current milestone after saving is {action_to_text(final_action, short=False)}."
-        )
+        parts.append(f"The current milestone after saving is {action_to_text(final_action, short=False)}.")
 
     waiting_text = resource_count_text(candidate.waiting_resources)
     if waiting_text:
@@ -309,9 +290,7 @@ def year_of_plenty_detail(explanation: ActionExplanation) -> str:
     supports_follow_up = bool(explanation.chosen_candidate.metadata.get("supports_follow_up"))
     already_had_next_step = bool(explanation.chosen_candidate.metadata.get("already_had_next_step"))
     parts = [
-        f"Take {selected_text} from the bank."
-        if selected_text
-        else "Take the highlighted resources from the bank."
+        f"Take {selected_text} from the bank." if selected_text else "Take the highlighted resources from the bank."
     ]
 
     primary_text = follow_up_action_text(primary_action)
@@ -320,20 +299,14 @@ def year_of_plenty_detail(explanation: ActionExplanation) -> str:
         parts.append(f"This supports {follow_up_text}.")
     elif already_had_next_step:
         if primary_text and follow_up_text and primary_text != follow_up_text:
-            parts.append(
-                f"We already have enough resources for {primary_text}. "
-                f"These picks prepare {follow_up_text}."
-            )
+            parts.append(f"We already have enough resources for {primary_text}. "
+                         f"These picks prepare {follow_up_text}.")
         elif primary_text:
-            parts.append(
-                f"We already have enough resources for {primary_text}. "
-                "These picks prepare what comes after that."
-            )
+            parts.append(f"We already have enough resources for {primary_text}. "
+                         "These picks prepare what comes after that.")
         elif follow_up_text:
-            parts.append(
-                "We already have enough resources for the next step. "
-                f"These picks prepare {follow_up_text}."
-            )
+            parts.append("We already have enough resources for the next step. "
+                         f"These picks prepare {follow_up_text}.")
     elif follow_up_text:
         parts.append(f"These resources work toward {follow_up_text}.")
     else:

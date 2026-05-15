@@ -3,17 +3,17 @@ from types import SimpleNamespace
 from typing import cast
 
 from PyQt6.QtWidgets import QCheckBox
+from test_helpers import GameTestMixin, ReplayMarker
 
 from ai.tutor.feedback import TutorDecisionType, TutorFeedbackExplanation
 from controllers.GameController import PlayerScoreSnapshot
 from game.Player import PlayerNumber
-from view.panels.TutorPanel import TutorPanel
 from view.panels.endgame_review_panel import EndgameReviewPanel
-
-from test_helpers import GameTestMixin, ReplayMarker
+from view.panels.TutorPanel import TutorPanel
 
 
 class TestTutorEndgame(GameTestMixin, unittest.TestCase):
+
     def test_endgame_review_labels_use_round_history(self):
         p1 = PlayerNumber.P1
         p2 = PlayerNumber.P2
@@ -81,8 +81,7 @@ class TestTutorEndgame(GameTestMixin, unittest.TestCase):
         tooltips = EndgameReviewPanel.build_endgame_plot_tooltips(history, players)
 
         self.assertEqual(
-            tooltips[18],
-            "\n".join([
+            tooltips[18], "\n".join([
                 "Turn 18",
                 "",
                 "P1: 6 VP",
@@ -94,8 +93,7 @@ class TestTutorEndgame(GameTestMixin, unittest.TestCase):
                 "Event:",
                 "- P1 built a city",
                 "- P4 lost Longest Road",
-            ])
-        )
+            ]))
 
     def test_endgame_plot_tooltip_marks_tied_leader(self):
         p1 = PlayerNumber.P1
@@ -199,35 +197,35 @@ class TestTutorEndgame(GameTestMixin, unittest.TestCase):
         self.assertEqual(title, "Turn 18 - Built Road")
 
     def test_feedback_filter_maps_labels_to_requested_groups(self):
-        owner = SimpleNamespace(feedback_filter_checkboxes=cast(dict[str, QCheckBox], {
-            "biggest mistakes": self.fake_checkbox(True),
-            "okay moves": self.fake_checkbox(False),
-            "good moves": self.fake_checkbox(True),
-            "excellent moves": self.fake_checkbox(False),
-        }))
+        owner = SimpleNamespace(feedback_filter_checkboxes=cast(
+            dict[str, QCheckBox], {
+                "biggest mistakes": self.fake_checkbox(True),
+                "okay moves": self.fake_checkbox(False),
+                "good moves": self.fake_checkbox(True),
+                "excellent moves": self.fake_checkbox(False),
+            }))
 
         self.assertTrue(EndgameReviewPanel.feedback_matches_filter_from_owner(owner, self.fake_feedback(label="Poor")))
         self.assertFalse(
             EndgameReviewPanel.feedback_matches_filter_from_owner(
                 owner,
                 self.fake_feedback(label="Okay"),
-            )
-        )
+            ))
         self.assertTrue(EndgameReviewPanel.feedback_matches_filter_from_owner(owner, self.fake_feedback(label="Good")))
         self.assertFalse(
             EndgameReviewPanel.feedback_matches_filter_from_owner(
                 owner,
                 self.fake_feedback(label="Excellent"),
-            )
-        )
+            ))
 
     def test_feedback_filter_maps_poor_okay_good_and_excellent(self):
-        owner = SimpleNamespace(feedback_filter_checkboxes=cast(dict[str, QCheckBox], {
-            "biggest mistakes": self.fake_checkbox(True),
-            "okay moves": self.fake_checkbox(False),
-            "good moves": self.fake_checkbox(True),
-            "excellent moves": self.fake_checkbox(False),
-        }))
+        owner = SimpleNamespace(feedback_filter_checkboxes=cast(
+            dict[str, QCheckBox], {
+                "biggest mistakes": self.fake_checkbox(True),
+                "okay moves": self.fake_checkbox(False),
+                "good moves": self.fake_checkbox(True),
+                "excellent moves": self.fake_checkbox(False),
+            }))
 
         poor_feedback = self.fake_feedback(label="Poor")
         okay_feedback = self.fake_feedback(label="Okay")
@@ -241,18 +239,14 @@ class TestTutorEndgame(GameTestMixin, unittest.TestCase):
 
     def test_overall_performance_summary_uses_final_summary_format(self):
         feedbacks = cast(list[TutorFeedbackExplanation], [
-            self.fake_feedback(assessment=self.fake_assessment(
-                decision_type=TutorDecisionType.ROBBER, your_move="Move the robber", internal_score=0.9
-            )),
-            self.fake_feedback(assessment=self.fake_assessment(
-                decision_type=TutorDecisionType.MAIN_TURN, your_move="Ending the turn", internal_score=0.75
-            )),
-            self.fake_feedback(assessment=self.fake_assessment(
-                decision_type=TutorDecisionType.DISCARD, your_move="Discard resources", internal_score=0.2
-            )),
-            self.fake_feedback(assessment=self.fake_assessment(
-                decision_type=TutorDecisionType.MAIN_TURN, your_move="Upgrading to a city", internal_score=0.3
-            )),
+            self.fake_feedback(assessment=self.fake_assessment(decision_type=TutorDecisionType.ROBBER,
+                                                               your_move="Move the robber", internal_score=0.9)),
+            self.fake_feedback(assessment=self.fake_assessment(decision_type=TutorDecisionType.MAIN_TURN,
+                                                               your_move="Ending the turn", internal_score=0.75)),
+            self.fake_feedback(assessment=self.fake_assessment(decision_type=TutorDecisionType.DISCARD,
+                                                               your_move="Discard resources", internal_score=0.2)),
+            self.fake_feedback(assessment=self.fake_assessment(decision_type=TutorDecisionType.MAIN_TURN,
+                                                               your_move="Upgrading to a city", internal_score=0.3)),
         ])
 
         final_snapshot = PlayerScoreSnapshot(3, 3, 3, 0, 0, 3, 0, False, False)

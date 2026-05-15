@@ -1,67 +1,39 @@
-from typing import Dict, Tuple, List, Callable, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from PyQt6 import uic
-from PyQt6.QtCore import Qt, pyqtSignal, QEvent, QObject
+from PyQt6.QtCore import QEvent, QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QIcon, QKeyEvent
-from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QHBoxLayout, QSplitter, QLabel, QToolButton, QSpacerItem,
-    QSizePolicy, QPushButton, QLayout,
-    QButtonGroup
-)
+from PyQt6.QtWidgets import (QButtonGroup, QHBoxLayout, QLabel, QLayout, QMainWindow, QPushButton, QSizePolicy,
+                             QSpacerItem, QSplitter, QToolButton, QWidget)
 
-from controllers.GameController import GameController
 from ai.actions import Action, ActionType
 from ai.tutor.explanations import ActionExplanation
 from ai.tutor.feedback import TutorFeedbackExplanation
 from ai.tutor.tutor import TutorStage
+from config.view_constants import (
+    APP_ICON, APP_WINDOW_TITLE, CROWN_SYM, HOME_ICON, MAIN_WINDOW_BOARD_PANEL_DEFAULT_WIDTH,
+    MAIN_WINDOW_HEADER_ICON_SIZE, MAIN_WINDOW_SIDE_PANEL_MAX_WIDTH, MAIN_WINDOW_SIDE_PANEL_WIDTH,
+    OPPONENT_BADGE_PADDING_PX, PLAYER_BADGE_FONT_SIZE_PX, PLAYER_BADGE_LIGHTER_FACTOR, PLAYER_COLORS,
+    PLAYER_INDICATOR_BADGE_PADDING_PX, RULES_ICON, SETTINGS_ICON, TURN_LABEL_BADGE_PADDING_PX,
+    TUTOR_PANEL_DEFAULT_WIDTH_RATIO, UI_DEVELOPMENT_MANAGER_PATH, UI_ENDGAME_REVIEW_PATH, UI_MAIN_MENU_PATH,
+    UI_RESOURCE_SELECTOR_PATH, UI_RESULTS_MENU_PATH, UI_RULES_WINDOW_PATH, UI_SELECT_TRADE_PATH,
+    UI_SETTINGS_WINDOW_PATH, UI_START_MENU_PATH, UI_TRADE_DESIGNER_PATH, UI_TRADE_MANAGER_PATH, UI_TUTOR_MENU_PATH)
+from controllers.GameController import GameController
 from game.Edge import Edge
-from game.Player import PlayerNumber, Player
+from game.Player import Player, PlayerNumber
 from game.PlayerAssets import Buildable
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
 from view.canvas.board_display_source import BoardDisplaySource
-from view.canvas.SquareCanvas import SquareCanvas
 from view.canvas.display_utils import format_counter_offer, get_player_lead_status
+from view.canvas.SquareCanvas import SquareCanvas
 from view.panels.development_panel import DevelopmentPanel
 from view.panels.endgame_review_panel import EndgameReviewPanel
 from view.panels.settings_panel import SettingsPanel
 from view.panels.TradePanel import TradePanel
 from view.panels.TutorPanel import TutorPanel
-from config.view_constants import (
-    APP_ICON,
-    APP_WINDOW_TITLE,
-    CROWN_SYM,
-    HOME_ICON,
-    MAIN_WINDOW_BOARD_PANEL_DEFAULT_WIDTH,
-    MAIN_WINDOW_HEADER_ICON_SIZE,
-    MAIN_WINDOW_SIDE_PANEL_MAX_WIDTH,
-    MAIN_WINDOW_SIDE_PANEL_WIDTH,
-    OPPONENT_BADGE_PADDING_PX,
-    PLAYER_COLORS,
-    PLAYER_BADGE_FONT_SIZE_PX,
-    PLAYER_BADGE_LIGHTER_FACTOR,
-    PLAYER_INDICATOR_BADGE_PADDING_PX,
-    RULES_ICON,
-    SETTINGS_ICON,
-    TUTOR_PANEL_DEFAULT_WIDTH_RATIO,
-    TURN_LABEL_BADGE_PADDING_PX,
-    UI_DEVELOPMENT_MANAGER_PATH,
-    UI_ENDGAME_REVIEW_PATH,
-    UI_MAIN_MENU_PATH,
-    UI_RESOURCE_SELECTOR_PATH,
-    UI_RESULTS_MENU_PATH,
-    UI_RULES_WINDOW_PATH,
-    UI_SELECT_TRADE_PATH,
-    UI_SETTINGS_WINDOW_PATH,
-    UI_START_MENU_PATH,
-    UI_TRADE_DESIGNER_PATH,
-    UI_TRADE_MANAGER_PATH,
-    UI_TUTOR_MENU_PATH,
-)
 from view.rich_text import tutor_window_title_html
-from view.styles import (
-    player_badge_stylesheet,
-)
+from view.styles import player_badge_stylesheet
 from view.View import GameMode
 
 
@@ -119,13 +91,8 @@ class MainWindow(QMainWindow):
         self.endgame_review_menu = self._load_ui(UI_ENDGAME_REVIEW_PATH)
         self.start_menu = self._load_ui(UI_START_MENU_PATH)
         self.tutor_panel = TutorPanel(self, self.tutor_menu)
-        self.trade_panel = TradePanel(
-            self,
-            self.resource_selector_widget,
-            self.trade_designer_widget,
-            self.select_trade_widget,
-            self.trade_manager_widget,
-        )
+        self.trade_panel = TradePanel(self, self.resource_selector_widget, self.trade_designer_widget,
+                                      self.select_trade_widget, self.trade_manager_widget)
         self.endgame_review_panel = EndgameReviewPanel(self, self.results_menu, self.endgame_review_menu)
         self.development_panel = DevelopmentPanel(self, self.development_manager_widget)
         self.settings_panel = SettingsPanel(self)
@@ -234,27 +201,19 @@ class MainWindow(QMainWindow):
         player_label_map = {
             PlayerNumber.P2: self.main_menu.p2_label,
             PlayerNumber.P3: self.main_menu.p3_label,
-            PlayerNumber.P4: self.main_menu.p4_label,
+            PlayerNumber.P4: self.main_menu.p4_label
         }
         for player_number, label in player_label_map.items():
-            self._set_player_badge(
-                label,
-                label.text(),
-                player_number,
-                vertical_padding_px=PLAYER_INDICATOR_BADGE_PADDING_PX[0],
-                horizontal_padding_px=PLAYER_INDICATOR_BADGE_PADDING_PX[1],
-                font_size_px=PLAYER_BADGE_FONT_SIZE_PX,
-            )
+            self._set_player_badge(label, label.text(), player_number,
+                                   vertical_padding_px=PLAYER_INDICATOR_BADGE_PADDING_PX[0],
+                                   horizontal_padding_px=PLAYER_INDICATOR_BADGE_PADDING_PX[1],
+                                   font_size_px=PLAYER_BADGE_FONT_SIZE_PX)
 
     def _set_turn_label(self, player: Player) -> None:
         """Update the turn label for the active player."""
-        self._set_player_badge(
-            self.main_menu.turn_label,
-            f"{player.name}'s turn",
-            player.player_number,
-            vertical_padding_px=TURN_LABEL_BADGE_PADDING_PX[0],
-            horizontal_padding_px=TURN_LABEL_BADGE_PADDING_PX[1],
-        )
+        self._set_player_badge(self.main_menu.turn_label, f"{player.name}'s turn", player.player_number,
+                               vertical_padding_px=TURN_LABEL_BADGE_PADDING_PX[0],
+                               horizontal_padding_px=TURN_LABEL_BADGE_PADDING_PX[1])
 
     def _resolve_turn_label_player(self, player: Player, explanation: ActionExplanation | None = None) -> Player:
         """Resolve which player should be shown in the turn label."""
@@ -280,23 +239,12 @@ class MainWindow(QMainWindow):
 
         return player
 
-    def _set_player_badge(
-            self,
-            label: QLabel,
-            text: str,
-            player_number: PlayerNumber,
-            vertical_padding_px: int,
-            horizontal_padding_px: int,
-            font_size_px: int | None = None,
-    ) -> None:
+    def _set_player_badge(self, label: QLabel, text: str, player_number: PlayerNumber, vertical_padding_px: int,
+                          horizontal_padding_px: int, font_size_px: int | None = None) -> None:
         """Apply the styled player badge text to a label."""
         colour = PLAYER_COLORS[player_number].lighter(PLAYER_BADGE_LIGHTER_FACTOR).name()
-        label.setStyleSheet(player_badge_stylesheet(
-            colour,
-            vertical_padding_px,
-            horizontal_padding_px,
-            font_size_px=font_size_px,
-        ))
+        label.setStyleSheet(
+            player_badge_stylesheet(colour, vertical_padding_px, horizontal_padding_px, font_size_px=font_size_px))
         label.setText(text)
 
     def find_last_vertical_spacer(self) -> QSpacerItem | None:
@@ -320,12 +268,8 @@ class MainWindow(QMainWindow):
 
         spacer = self.verticalSpacer
         if not hasattr(spacer, "_original_size"):
-            spacer._original_size = (
-                spacer.geometry().width(),
-                spacer.geometry().height(),
-                spacer.sizePolicy().horizontalPolicy(),
-                spacer.sizePolicy().verticalPolicy()
-            )
+            spacer._original_size = (spacer.geometry().width(), spacer.geometry().height(),
+                                     spacer.sizePolicy().horizontalPolicy(), spacer.sizePolicy().verticalPolicy())
 
         spacer.changeSize(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         if self.main_menu.frame.layout() is not None:
@@ -505,10 +449,18 @@ class MainWindow(QMainWindow):
         self.main_menu.bank_dev_label.setText(str(controller.get_development_deck().size()))
 
         # Fill in opponent labels
-        stat_suffixes = {"name": "", "victory_points": "vic_", "num_resources": "res_",
-                         "development_cards": "dev_", "army_size": "army_", "longest_road": "road_"}
+        stat_suffixes = {
+            "name": "",
+            "victory_points": "vic_",
+            "num_resources": "res_",
+            "development_cards": "dev_",
+            "army_size": "army_",
+            "longest_road": "road_"
+        }
         opponent_prefixes: Dict[PlayerNumber, str] = {
-            PlayerNumber.P2: "p2", PlayerNumber.P3: "p3", PlayerNumber.P4: "p4"
+            PlayerNumber.P2: "p2",
+            PlayerNumber.P3: "p3",
+            PlayerNumber.P4: "p4"
         }
 
         opponent_labels: Dict[PlayerNumber, Dict[str, QLabel]] = {
@@ -537,14 +489,9 @@ class MainWindow(QMainWindow):
                 lead_status = get_player_lead_status(player)
 
                 self.main_menu.longest_road_label.setText(
-                    f"Longest Road:\t{player.longest_road_length} {longest_road_crown}"
-                )
-                self.main_menu.army_size_label.setText(
-                    f"Army Size:\t{player.army_size} {army_crown}"
-                )
-                self.main_menu.victory_points_label.setText(
-                    f"Victory Points:\t{visible_vp}{true_vp_str} {lead_status}"
-                )
+                    f"Longest Road:\t{player.longest_road_length} {longest_road_crown}")
+                self.main_menu.army_size_label.setText(f"Army Size:\t{player.army_size} {army_crown}")
+                self.main_menu.victory_points_label.setText(f"Victory Points:\t{visible_vp}{true_vp_str} {lead_status}")
             else:
                 labels = opponent_labels[num]
                 status = get_player_lead_status(player)
@@ -554,14 +501,10 @@ class MainWindow(QMainWindow):
                 else:
                     name_text = player.name
                     labels["name"].setToolTip(None)
-                self._set_player_badge(
-                    labels["name"],
-                    name_text,
-                    player.player_number,
-                    vertical_padding_px=OPPONENT_BADGE_PADDING_PX[0],
-                    horizontal_padding_px=OPPONENT_BADGE_PADDING_PX[1],
-                    font_size_px=PLAYER_BADGE_FONT_SIZE_PX,
-                )
+                self._set_player_badge(labels["name"], name_text, player.player_number,
+                                       vertical_padding_px=OPPONENT_BADGE_PADDING_PX[0],
+                                       horizontal_padding_px=OPPONENT_BADGE_PADDING_PX[1],
+                                       font_size_px=PLAYER_BADGE_FONT_SIZE_PX)
                 labels["victory_points"].setText(str(player.calc_victory_points()[0]))
                 labels["num_resources"].setText(str(sum(player.resources.values())))
                 labels["development_cards"].setText(str(len(player.development_cards)))
@@ -606,16 +549,17 @@ class MainWindow(QMainWindow):
         can_afford_card = controller.get_buildable_options(player)[Buildable.DEVELOPMENT_CARD]
         self.main_menu.dev_btn.setEnabled(can_afford_card or len(player.development_cards) > 0)
         self.main_menu.trade_btn.setEnabled(sum(player.resources.values()) > 0)
-        self.safe_connect(self.main_menu.trade_btn, lambda: self.display_trade_menu(
-            controller, player, lambda: self.display_round_info(controller, player, dice_info, played_dev_card)))
-        self.safe_connect(self.main_menu.dev_btn, lambda: self.development_panel.show_development_menu(
-            controller, player, played_dev_card,
-            lambda played: self.display_round_info(controller, player, dice_info, played)))
+        self.safe_connect(
+            self.main_menu.trade_btn, lambda: self.display_trade_menu(
+                controller, player, lambda: self.display_round_info(controller, player, dice_info, played_dev_card)))
+        self.safe_connect(
+            self.main_menu.dev_btn, lambda: self.development_panel.show_development_menu(
+                controller, player, played_dev_card, lambda played: self.display_round_info(
+                    controller, player, dice_info, played)))
         self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(Action(ActionType.END_TURN)))
         self.tutor_panel.set_restore_tutor_menu_callback(
             lambda: self.display_round_info(controller, player, dice_info, played_dev_card),
-            controller.game_mode == GameMode.TUTOR and player.is_human,
-        )
+            controller.game_mode == GameMode.TUTOR and player.is_human)
         self.set_restore_board_state_callback(None)
 
     def configure_tutor_panel(self, game_mode: GameMode):
@@ -633,8 +577,7 @@ class MainWindow(QMainWindow):
             self.tutor_menu.show()
             self.splitter_layout.setSizes([
                 int(MAIN_WINDOW_SIDE_PANEL_WIDTH * TUTOR_PANEL_DEFAULT_WIDTH_RATIO),
-                MAIN_WINDOW_BOARD_PANEL_DEFAULT_WIDTH,
-                MAIN_WINDOW_SIDE_PANEL_WIDTH,
+                MAIN_WINDOW_BOARD_PANEL_DEFAULT_WIDTH, MAIN_WINDOW_SIDE_PANEL_WIDTH
             ])
 
         else:
@@ -688,18 +631,18 @@ class MainWindow(QMainWindow):
         self.tutor_menu.explain_btn.setEnabled(False)
         self.tutor_menu.continue_btn.setEnabled(False)
 
-    def show_resource_chooser(self, player, num_resources: int, title: str,
-                              resource_caps: ResourceCount | None = None):
+    def show_resource_chooser(self, player, num_resources: int, title: str, resource_caps: ResourceCount | None = None):
         """Display the resource chooser widget."""
         self.trade_panel.show_resource_chooser(player, num_resources, title, resource_caps)
 
-    def display_trade_manager(self, player: Player, selling: ResourceCount,
-                              buying: ResourceCount, selling_player: Player):
+    def display_trade_manager(self, player: Player, selling: ResourceCount, buying: ResourceCount,
+                              selling_player: Player):
         """Display the trade manager widget."""
         self.trade_panel.display_trade_manager(player, selling, buying, selling_player)
 
     def draw_buildables_if_can_build(self, controller, player):
         """Draw buildable board options when the player can build."""
+
         def build(selected_buildable: Vertex | Edge):
             match selected_buildable:
                 case Edge():
@@ -780,12 +723,8 @@ class MainWindow(QMainWindow):
         self.start_menu.lab_mode_btn.setChecked(False)
         update_lab_mode(False)
 
-        self.safe_connect(
-            self.start_menu.standard_mode_btn,
-            lambda: play(GameMode.SIMULATION if is_lab_mode() else GameMode.PLAY)
-        )
-        self.safe_connect(
-            self.start_menu.tutor_mode_btn,
-            lambda: play(GameMode.GUIDED if is_lab_mode() else GameMode.TUTOR)
-        )
+        self.safe_connect(self.start_menu.standard_mode_btn, lambda: play(GameMode.SIMULATION
+                                                                          if is_lab_mode() else GameMode.PLAY))
+        self.safe_connect(self.start_menu.tutor_mode_btn, lambda: play(GameMode.GUIDED
+                                                                       if is_lab_mode() else GameMode.TUTOR))
         self.start_menu.lab_mode_btn.toggled.connect(update_lab_mode)

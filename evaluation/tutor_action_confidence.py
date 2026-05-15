@@ -7,24 +7,16 @@ from typing import Dict, List, Optional, Tuple
 
 from tqdm import tqdm
 
-from controllers.GameController import GameController
-from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.actions import Action, ActionType, Phase
+from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
+from ai.simulation.board_sim_utils import (find_edge_toward_vertex, get_legal_settlement_vertices, moves_toward_vertex,
+                                           score_hex_for_opponent)
 from ai.simulation.SimGame import make_sim_game_for_player
-from ai.simulation.board_sim_utils import (
-    find_edge_toward_vertex,
-    get_legal_settlement_vertices,
-    moves_toward_vertex,
-    score_hex_for_opponent,
-)
 from ai.tutor.move_quality import initial_settlement_move_quality, move_quality_from_margin
 from ai.utils.action_utils import calc_step_resources
-from config.StrategyWeights import (
-    EVO_STRATEGY_WEIGHTS,
-    ORIGINAL_STRATEGY_WEIGHTS,
-    StrategyWeights,
-)
 from config.player_policies import PolicyFactory, make_rule_based_policy
+from config.StrategyWeights import EVO_STRATEGY_WEIGHTS, ORIGINAL_STRATEGY_WEIGHTS, StrategyWeights
+from controllers.GameController import GameController
 from game.Edge import Edge
 from game.HexTile import HexTile
 from game.Player import Player, PlayerNumber
@@ -76,6 +68,7 @@ def _empty_move_stats() -> Dict[str, MoveCategoryStats]:
 
 
 class InstrumentedTutorAI(RuleBasedAI):
+
     def __init__(self, rng: Random, **kwargs):
         super().__init__(rng, **kwargs)
         self._move_stats = _empty_move_stats()
@@ -87,8 +80,7 @@ class InstrumentedTutorAI(RuleBasedAI):
                 "move_quality_total": stats.move_quality_total,
                 "utility_gap_total": stats.utility_gap_total,
             }
-            for category, stats in self._move_stats.items()
-            if stats.count > 0
+            for category, stats in self._move_stats.items() if stats.count > 0
         }
 
     def _record(self, category: Optional[str], move_quality: float, utility_gap: float) -> None:
@@ -113,8 +105,10 @@ class InstrumentedTutorAI(RuleBasedAI):
         else:
             second_utility = chosen_utility
         worst_utility = min(
-            [chosen_utility, *(float(getattr(candidate, "utility_total", chosen_utility) or 0.0)
-                               for candidate in explanation.alternatives)],
+            [
+                chosen_utility, *(float(getattr(candidate, "utility_total", chosen_utility) or 0.0)
+                                  for candidate in explanation.alternatives)
+            ],
             default=chosen_utility,
         )
         return move_quality_from_margin(chosen_utility, second_utility, worst_utility)
@@ -186,8 +180,7 @@ class InstrumentedTutorAI(RuleBasedAI):
                 baseline_vertices,
                 first_settlement,
                 use_opponent_interference=self.decision_config.use_opponent_interference,
-            )
-            for vertex in baseline_vertices
+            ) for vertex in baseline_vertices
         ]
         return baseline_vertices, scores
 
@@ -245,14 +238,10 @@ class InstrumentedTutorAI(RuleBasedAI):
         if len(player.settlements) == 1:
             edge_scores = [
                 max(
-                    (
-                        vertex_scores[vertex]
-                        for vertex in legal_vertices
-                        if find_edge_toward_vertex(current_settlement, vertex, available_edges) == edge
-                    ),
+                    (vertex_scores[vertex] for vertex in legal_vertices
+                     if find_edge_toward_vertex(current_settlement, vertex, available_edges) == edge),
                     default=0.0,
-                )
-                for edge in available_edges
+                ) for edge in available_edges
             ]
             return self._normalised_gap_from_scores(edge_scores)
 
@@ -265,14 +254,10 @@ class InstrumentedTutorAI(RuleBasedAI):
 
         edge_scores = [
             max(
-                (
-                    vertex_scores[vertex]
-                    for vertex in legal_vertices
-                    if find_edge_toward_vertex(current_settlement, vertex, available_edges) == edge
-                ),
+                (vertex_scores[vertex] for vertex in legal_vertices
+                 if find_edge_toward_vertex(current_settlement, vertex, available_edges) == edge),
                 default=0.0,
-            )
-            for edge in available_edges
+            ) for edge in available_edges
         ]
         return self._normalised_gap_from_scores(edge_scores)
 
@@ -306,10 +291,10 @@ class InstrumentedTutorAI(RuleBasedAI):
             )
             required = calc_step_resources(best_action)
             total = sum(required.values())
-            opponent_importance[opponent.player_number] = (
-                {res: amt / total for res, amt in required.items() if amt > 0}
-                if total > 0 else {}
-            )
+            opponent_importance[opponent.player_number] = ({
+                res: amt / total
+                for res, amt in required.items() if amt > 0
+            } if total > 0 else {})
 
         scores: List[float] = []
         for hex_tile in valid_hexes:
@@ -509,10 +494,7 @@ def _build_player_config(player_policies, order_seed: int):
     if SHUFFLE_ORDER:
         rng.shuffle(ordered_policies)
 
-    return {
-        player_number: policy
-        for player_number, policy in zip(ordered_player_numbers, ordered_policies)
-    }
+    return {player_number: policy for player_number, policy in zip(ordered_player_numbers, ordered_policies)}
 
 
 def _collect_game_move_stats(controller: GameController) -> Dict[str, Dict[str, float]]:
@@ -530,8 +512,7 @@ def _collect_game_move_stats(controller: GameController) -> Dict[str, Dict[str, 
             "move_quality_total": stats.move_quality_total,
             "utility_gap_total": stats.utility_gap_total,
         }
-        for category, stats in aggregate.items()
-        if stats.count > 0
+        for category, stats in aggregate.items() if stats.count > 0
     }
 
 
@@ -556,9 +537,7 @@ def run_single_game(job_args):
         None,
     )
     winning_score = max((player.calc_victory_points()[1] for player in game.players), default=0)
-    tutor_won = (
-        tutor_player is not None and tutor_player.calc_victory_points()[1] >= winning_score
-    )
+    tutor_won = (tutor_player is not None and tutor_player.calc_victory_points()[1] >= winning_score)
 
     return {
         "game_id": game_id,
@@ -591,10 +570,7 @@ def _format_move_table(summary: Dict[str, MoveCategoryStats]) -> str:
             avg_utility_gap = "N/A"
         rows.append([category, avg_move_quality, avg_utility_gap])
 
-    widths = [
-        max(len(header), *(len(row[index]) for row in rows))
-        for index, header in enumerate(headers)
-    ]
+    widths = [max(len(header), *(len(row[index]) for row in rows)) for index, header in enumerate(headers)]
 
     def fmt(row):
         return " | ".join(cell.ljust(widths[index]) for index, cell in enumerate(row))
@@ -650,21 +626,16 @@ def run_simulations_parallel(player_policies, num_runs: int = NUM_SIMULATIONS, s
             if remaining_attempt_budget <= 0:
                 if progress is not None:
                     progress.close()
-                raise RuntimeError(
-                    f"Policy evaluation exceeded the retry budget after {aborted_games} aborted games."
-                )
+                raise RuntimeError(f"Policy evaluation exceeded the retry budget after {aborted_games} aborted games.")
 
             batch_size = min(remaining_runs, remaining_attempt_budget)
-            args_list = [
-                (
-                    seed + attempts_started + i,
-                    seed * 10_000 + attempts_started + i,
-                    player_policies,
-                    attempts_started + i,
-                    MAX_EVALUATION_ROUNDS,
-                )
-                for i in range(batch_size)
-            ]
+            args_list = [(
+                seed + attempts_started + i,
+                seed * 10_000 + attempts_started + i,
+                player_policies,
+                attempts_started + i,
+                MAX_EVALUATION_ROUNDS,
+            ) for i in range(batch_size)]
             attempts_started += batch_size
 
             for game_result in pool.imap_unordered(run_single_game, args_list):
@@ -696,15 +667,11 @@ def run_simulations_parallel(player_policies, num_runs: int = NUM_SIMULATIONS, s
     print()
 
     if aborted_games:
-        print(
-            f"Skipped {aborted_games} games that either hit the {MAX_EVALUATION_ROUNDS}-round cap "
-            f"or exceeded the per-turn AI action request limit, and retried them."
-        )
+        print(f"Skipped {aborted_games} games that either hit the {MAX_EVALUATION_ROUNDS}-round cap "
+              f"or exceeded the per-turn AI action request limit, and retried them.")
 
-    print(
-        f"Simulation of {num_runs} games took {elapsed:.1f} seconds "
-        f"({elapsed / num_runs:.2f} seconds/game)."
-    )
+    print(f"Simulation of {num_runs} games took {elapsed:.1f} seconds "
+          f"({elapsed / num_runs:.2f} seconds/game).")
 
     return results, summary
 

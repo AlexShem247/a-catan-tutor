@@ -1,12 +1,12 @@
 from dataclasses import dataclass
 from random import Random
 from types import SimpleNamespace
-from typing import cast, Any
+from typing import Any, cast
 
 from PyQt6.QtWidgets import QCheckBox
 
-from ai.BasicAI import BasicAI
 from ai.actions import Action, ActionType, Phase
+from ai.BasicAI import BasicAI
 from ai.tutor.feedback import TutorDecisionType, TutorFeedbackExplanation
 from config.player_policies import STANDARD_SINGLEPLAYER
 from controllers.GameController import GameController
@@ -21,11 +21,13 @@ from view.HeadlessView import HeadlessView
 
 
 class InvalidLoopAI(BasicAI):
+
     def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:
         return Action(ActionType.BUILD, (Buildable.CITY, None))
 
 
 class HomeRequestingView(HeadlessView):
+
     def __init__(self):
         self._return_home_requested = False
 
@@ -39,6 +41,7 @@ class HomeRequestingView(HeadlessView):
 
 
 class TutorFollowingView(HeadlessView):
+
     def __init__(self, controller: GameController):
         self.controller = controller
         self.current_player: Player | None = None
@@ -65,20 +68,17 @@ class TutorFollowingView(HeadlessView):
                         return building
 
         return self.controller.run_tutor_decision(
-            lambda: self.controller.tutor_ai.select_initial_settlement_location(player, game, vertices)
-        )
+            lambda: self.controller.tutor_ai.select_initial_settlement_location(player, game, vertices))
 
     def draw_selectable_edges(self, edges, disable_interactivity: bool = False):
         player = self.current_player
         if player is None:
             return edges[0]
-        return self.controller.run_tutor_decision(
-            lambda: self.controller.tutor_ai.select_initial_road_location(
-                player,
-                self.controller.get_game_state(),
-                edges,
-            )
-        )
+        return self.controller.run_tutor_decision(lambda: self.controller.tutor_ai.select_initial_road_location(
+            player,
+            self.controller.get_game_state(),
+            edges,
+        ))
 
     def draw_selectable_tiles(self, tiles):
         player = self.current_player
@@ -92,50 +92,41 @@ class TutorFollowingView(HeadlessView):
         title_lower = title.lower()
         if "robber has been rolled" in title_lower:
             return self.controller.run_tutor_decision(
-                lambda: self.controller.tutor_ai.select_discard_resources(player, game, num_resources)
-            )
+                lambda: self.controller.tutor_ai.select_discard_resources(player, game, num_resources))
         if "year of plenty" in title_lower:
             return self.controller.run_tutor_decision(
-                lambda: self.controller.tutor_ai.select_year_of_plenty_resources(player, game)
-            )
+                lambda: self.controller.tutor_ai.select_year_of_plenty_resources(player, game))
         if "monopoly" in title_lower:
             chosen_resource = self.controller.run_tutor_decision(
-                lambda: self.controller.tutor_ai.select_monopoly_resource(player, game)
-            )
+                lambda: self.controller.tutor_ai.select_monopoly_resource(player, game))
             return {chosen_resource: 1}
         return {}
 
     def display_trade_manager(self, player: Player, selling, buying, selling_player: Player):
-        return self.controller.run_tutor_decision(
-            lambda: self.controller.tutor_ai.respond_to_trade(
-                player,
-                self.controller.get_game_state(),
-                selling_player,
-                selling,
-                buying,
-            )
-        )
+        return self.controller.run_tutor_decision(lambda: self.controller.tutor_ai.respond_to_trade(
+            player,
+            self.controller.get_game_state(),
+            selling_player,
+            selling,
+            buying,
+        ))
 
     def select_player_trade_offer(self, player: Player, selling, buying, willing_players):
-        return self.controller.run_tutor_decision(
-            lambda: self.controller.tutor_ai.choose_trade_partner(
-                player,
-                self.controller.get_game_state(),
-                selling,
-                buying,
-                willing_players,
-            )
-        )
+        return self.controller.run_tutor_decision(lambda: self.controller.tutor_ai.choose_trade_partner(
+            player,
+            self.controller.get_game_state(),
+            selling,
+            buying,
+            willing_players,
+        ))
 
     def pre_roll(self, player: Player):
-        action: Any = self.controller.run_tutor_decision(
-            lambda: self.controller.tutor_ai.next_action(
-                player,
-                self.controller.get_game_state(),
-                Phase.PRE_ROLL,
-                False,
-            )
-        )
+        action: Any = self.controller.run_tutor_decision(lambda: self.controller.tutor_ai.next_action(
+            player,
+            self.controller.get_game_state(),
+            Phase.PRE_ROLL,
+            False,
+        ))
         if action.type == ActionType.PLAY_DEV_CARD:
             return action.payload
         return False
@@ -189,6 +180,7 @@ class GameTestMixin:
 
     @staticmethod
     def controller_state_snapshot(controller: GameController, include_roles: bool = True):
+
         def normalize_pos(position):
             return tuple(getattr(part, "value", part) for part in position)
 
@@ -196,29 +188,24 @@ class GameTestMixin:
         robber_tile = next((tile for tile in game.get_all_hexes() if tile.robber), None)
         robber_pos = None if robber_tile is None else (robber_tile.q, robber_tile.r)
 
-        player_snapshots = tuple(
-            (
-                player.player_number.name,
-                player.is_human if include_roles else None,
-                (None if player.policy is None else player.policy.policy_name) if include_roles else None,
-                tuple((resource.name, player.resources.get(resource, 0)) for resource in Resource),
-                tuple(sorted(normalize_pos(vertex.pos) for vertex in player.settlements)),
-                tuple(sorted(normalize_pos(vertex.pos) for vertex in player.cities)),
-                tuple(sorted(normalize_pos(edge.pos) for edge in player.roads)),
-                tuple(sorted((card.card_type.name, card.playable) for card in player.development_cards)),
-                player.army_size,
-                player.longest_road_length,
-                player.has_longest_road,
-                player.has_largest_army,
-            )
-            for player in game.players
-        )
+        player_snapshots = tuple((
+            player.player_number.name,
+            player.is_human if include_roles else None,
+            (None if player.policy is None else player.policy.policy_name) if include_roles else None,
+            tuple((resource.name, player.resources.get(resource, 0)) for resource in Resource),
+            tuple(sorted(normalize_pos(vertex.pos) for vertex in player.settlements)),
+            tuple(sorted(normalize_pos(vertex.pos) for vertex in player.cities)),
+            tuple(sorted(normalize_pos(edge.pos) for edge in player.roads)),
+            tuple(sorted((card.card_type.name, card.playable) for card in player.development_cards)),
+            player.army_size,
+            player.longest_road_length,
+            player.has_longest_road,
+            player.has_largest_army,
+        ) for player in game.players)
         bank_resources = tuple((resource.name, game.bank_resources[resource]) for resource in Resource)
         development_deck = tuple(card.card_type.name for card in game.development_deck.cards())
-        played_cards = tuple(
-            (card_type.name, count)
-            for card_type, count in sorted(game.development_deck.played_counts().items(), key=lambda item: item[0].name)
-        )
+        played_cards = tuple((card_type.name, count) for card_type, count in sorted(
+            game.development_deck.played_counts().items(), key=lambda item: item[0].name))
 
         return (
             game.round_num,

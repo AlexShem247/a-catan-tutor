@@ -1,19 +1,13 @@
 from random import Random
 from typing import Dict, List, Optional, Tuple
 
-from ai.RandomAI import RandomAI
 from ai.actions import Action, ActionType
+from ai.RandomAI import RandomAI
+from ai.simulation.board_sim_utils import score_hex_for_opponent
 from ai.simulation.SimGame import make_sim_game_for_player
 from ai.simulation.SimPlayerState import dice_probability
-from ai.simulation.board_sim_utils import score_hex_for_opponent
-from ai.tutor.explanations import (
-    ActionExplanation,
-    CandidateExplanation,
-    ExplanationTemplate,
-    Reason,
-    ReasonLabel,
-    ReasonType,
-)
+from ai.tutor.explanations import (ActionExplanation, CandidateExplanation, ExplanationTemplate, Reason, ReasonLabel,
+                                   ReasonType)
 from ai.tutor.move_quality import robber_move_quality
 from ai.utils.resource_utils import calc_step_resources
 from config.StrategyWeights import StrategyWeights
@@ -24,6 +18,7 @@ from game.Resources import Resource
 
 
 class RobberPolicy:
+
     def __init__(self, rng: Random, random_ai: RandomAI, etw_estimator, decision_config, use_strategic_move,
                  planner_kwargs):
         self.rng = rng
@@ -33,8 +28,8 @@ class RobberPolicy:
         self._use_strategic_move = use_strategic_move
         self._planner_kwargs = planner_kwargs
 
-    def select_robber_target(
-            self, player: Player, game: Game, valid_hexes: List[HexTile]) -> Tuple[HexTile, Optional[Player]]:
+    def select_robber_target(self, player: Player, game: Game,
+                             valid_hexes: List[HexTile]) -> Tuple[HexTile, Optional[Player]]:
         """Select the robber target hex and victim."""
         tile, steal_from, _ = self.select_robber_target_with_explanation(player, game, valid_hexes)
         return tile, steal_from
@@ -60,11 +55,9 @@ class RobberPolicy:
             if best_hex in our_resource_tiles:
                 self_harm = sum(
                     dice_probability(best_hex.production_number) * (2.0 if vertex in player.cities else 1.0)
-                    for vertex in (player.settlements + player.cities)
-                    if best_hex in vertex.hexes
-                )
-            explanation = self._build_robber_explanation(
-                best_hex, best_player, 0.0, best_hex in our_resource_tiles, self_harm, 0.0)
+                    for vertex in (player.settlements + player.cities) if best_hex in vertex.hexes)
+            explanation = self._build_robber_explanation(best_hex, best_player, 0.0, best_hex in our_resource_tiles,
+                                                         self_harm, 0.0)
             return best_hex, best_player, explanation
 
         sim_game_for_robber = make_sim_game_for_player(game, player)
@@ -88,9 +81,10 @@ class RobberPolicy:
             )
             required = calc_step_resources(best_action)
             total = sum(required.values())
-            opponent_importance[opponent.player_number] = (
-                {res: amt / total for res, amt in required.items() if amt > 0} if total > 0 else {}
-            )
+            opponent_importance[opponent.player_number] = ({
+                res: amt / total
+                for res, amt in required.items() if amt > 0
+            } if total > 0 else {})
 
         for hex_tile in valid_hexes:
             players_on_h = [p for p in game.get_players_on_hex(hex_tile) if p != player]
@@ -120,14 +114,12 @@ class RobberPolicy:
         if best_hex in our_resource_tiles:
             self_harm = sum(
                 dice_probability(best_hex.production_number) * (2.0 if vertex in player.cities else 1.0)
-                for vertex in (player.settlements + player.cities)
-                if best_hex in vertex.hexes
-            )
+                for vertex in (player.settlements + player.cities) if best_hex in vertex.hexes)
 
         players_on_best_hex = [p for p in game.get_players_on_hex(best_hex) if p != player]
         if not players_on_best_hex:
-            explanation = self._build_robber_explanation(
-                best_hex, None, best_score, best_hex in our_resource_tiles, self_harm, 0.0)
+            explanation = self._build_robber_explanation(best_hex, None, best_score, best_hex in our_resource_tiles,
+                                                         self_harm, 0.0)
             return best_hex, None, explanation
 
         best_player = max(players_on_best_hex, key=lambda pl: sum(pl.resources.values()) * pl.calc_victory_points()[0])
@@ -144,9 +136,8 @@ class RobberPolicy:
         )
         return best_hex, best_player, explanation
 
-    def explain_robber_choice(
-            self, player: Player, game: Game, _valid_hexes: List[HexTile], chosen_hex: HexTile,
-            chosen_player: Optional[Player]) -> ActionExplanation:
+    def explain_robber_choice(self, player: Player, game: Game, _valid_hexes: List[HexTile], chosen_hex: HexTile,
+                              chosen_player: Optional[Player]) -> ActionExplanation:
         """Handle explain robber choice."""
         our_resource_tiles = {h for v in (player.settlements + player.cities) for h in v.hexes}
         if not self.decision_config.use_opponent_interference:
@@ -154,11 +145,9 @@ class RobberPolicy:
             if chosen_hex in our_resource_tiles:
                 self_harm = sum(
                     dice_probability(chosen_hex.production_number) * (2.0 if vertex in player.cities else 1.0)
-                    for vertex in (player.settlements + player.cities)
-                    if chosen_hex in vertex.hexes
-                )
-            return self._build_robber_explanation(
-                chosen_hex, chosen_player, 0.0, chosen_hex in our_resource_tiles, self_harm, 0.0)
+                    for vertex in (player.settlements + player.cities) if chosen_hex in vertex.hexes)
+            return self._build_robber_explanation(chosen_hex, chosen_player, 0.0, chosen_hex in our_resource_tiles,
+                                                  self_harm, 0.0)
         sim_game_for_robber = make_sim_game_for_player(game, player)
         our_vp = player.calc_victory_points()[0]
         opp_vps = [p.calc_victory_points()[0] for p in game.players if p != player]
@@ -179,9 +168,10 @@ class RobberPolicy:
             )
             required = calc_step_resources(best_action)
             total = sum(required.values())
-            opponent_importance[opponent.player_number] = (
-                {res: amt / total for res, amt in required.items() if amt > 0} if total > 0 else {}
-            )
+            opponent_importance[opponent.player_number] = ({
+                res: amt / total
+                for res, amt in required.items() if amt > 0
+            } if total > 0 else {})
 
         chosen_score = 0.0
         players_on_hex = [p for p in game.get_players_on_hex(chosen_hex) if p != player]
@@ -199,9 +189,7 @@ class RobberPolicy:
         if chosen_hex in our_resource_tiles:
             self_harm = sum(
                 dice_probability(chosen_hex.production_number) * (2.0 if vertex in player.cities else 1.0)
-                for vertex in (player.settlements + player.cities)
-                if chosen_hex in vertex.hexes
-            )
+                for vertex in (player.settlements + player.cities) if chosen_hex in vertex.hexes)
         target_player = chosen_player
         if target_player is None and players_on_hex:
             target_player = max(players_on_hex, key=lambda pl: sum(pl.resources.values()) * pl.calc_victory_points()[0])
@@ -217,23 +205,24 @@ class RobberPolicy:
             leader_vp_ratio,
         )
 
-    def _build_robber_explanation(
-            self, hex_tile: HexTile, target_player: Optional[Player], best_score: float,
-            blocks_own_hex: bool, self_harm: float, leader_vp_ratio: float) -> ActionExplanation:
+    def _build_robber_explanation(self, hex_tile: HexTile, target_player: Optional[Player], best_score: float,
+                                  blocks_own_hex: bool, self_harm: float, leader_vp_ratio: float) -> ActionExplanation:
         """Build the robber explanation."""
         reasons_for: List[Reason] = []
         if best_score > float("-inf"):
-            reasons_for.append(Reason(
-                ReasonType.SLOWS_LEADING_OPPONENT,
-                ReasonLabel.ROBBER_BLOCKS_KEY_HEX,
-                max(0.0, best_score),
-            ))
+            reasons_for.append(
+                Reason(
+                    ReasonType.SLOWS_LEADING_OPPONENT,
+                    ReasonLabel.ROBBER_BLOCKS_KEY_HEX,
+                    max(0.0, best_score),
+                ))
         if target_player is not None:
-            reasons_for.append(Reason(
-                ReasonType.SLOWS_LEADING_OPPONENT,
-                ReasonLabel.ROBBER_TARGETS_THREAT,
-                float(target_player.calc_victory_points()[0]),
-            ))
+            reasons_for.append(
+                Reason(
+                    ReasonType.SLOWS_LEADING_OPPONENT,
+                    ReasonLabel.ROBBER_TARGETS_THREAT,
+                    float(target_player.calc_victory_points()[0]),
+                ))
         if not blocks_own_hex:
             reasons_for.append(Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.ROBBER_AVOIDS_OWN_HEX, 1.0))
 

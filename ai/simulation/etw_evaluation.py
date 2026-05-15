@@ -4,23 +4,12 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 from ai.actions import Action, ActionType
 from ai.simulation.SimGame import SimGame
 from ai.simulation.SimPlayerState import SimPlayerState
-from ai.tutor.explanations import (
-    CandidateExplanation,
-    Reason,
-    ReasonLabel,
-    ReasonType,
-)
+from ai.tutor.explanations import CandidateExplanation, Reason, ReasonLabel, ReasonType
 from ai.utils.action_utils import compute_k_la
 from ai.utils.resource_utils import calc_step_resources
+from config.performance_constants import (EPSILON, ETW_ETB_THRESHOLD, ETW_MAX_DEPTH_OFFSET, EVAL_UTIL_MAX_DEPTH,
+                                          MAX_ETB_THRESHOLD, MAX_EVALUATIONS)
 from config.StrategyWeights import StrategyWeights
-from config.performance_constants import (
-    EPSILON,
-    ETW_ETB_THRESHOLD,
-    ETW_MAX_DEPTH_OFFSET,
-    EVAL_UTIL_MAX_DEPTH,
-    MAX_ETB_THRESHOLD,
-    MAX_EVALUATIONS,
-)
 from game.Game import Game
 from game.Player import PlayerNumber
 from game.PlayerAssets import Buildable, DevelopmentCardType
@@ -34,6 +23,7 @@ def sim_game_with_replaced_player(sim_game: SimGame, sim_player: SimPlayerState)
 
 
 class EtwEvaluation:
+
     def __init__(self, timing, candidates, eval_stats: Dict[str, int]):
         self.timing = timing
         self.candidates = candidates
@@ -46,7 +36,7 @@ class EtwEvaluation:
         if not use_time_discount:
             return utility
         discount_rate = StrategyWeights.TIME_DISCOUNT_RATE
-        return utility / ((1.0 + discount_rate) ** max(1.0, etb))
+        return utility / ((1.0 + discount_rate)**max(1.0, etb))
 
     def estimated_time_to_win(
         self,
@@ -243,16 +233,12 @@ class EtwEvaluation:
         reasons_against: List[Reason] = []
         if deferred_candidate is not None:
             next_plan = list(deferred_candidate.next_plan or deferred_candidate.full_plan)
-            waiting_resources = dict(
-                deferred_candidate.waiting_resources or self._plan_waiting_resources(player, next_plan)
-            )
+            waiting_resources = dict(deferred_candidate.waiting_resources
+                                     or self._plan_waiting_resources(player, next_plan))
             reasons_against = list(deferred_candidate.reasons_against)
             immediate_step = next_plan[0] if next_plan else None
-            if (
-                immediate_step is not None
-                and immediate_step.type != ActionType.END_TURN
-                and player.can_afford(calc_step_resources(immediate_step))
-            ):
+            if (immediate_step is not None and immediate_step.type != ActionType.END_TURN
+                    and player.can_afford(calc_step_resources(immediate_step))):
                 utility_total = min(utility_total, deferred_candidate.utility_total - EPSILON)
 
         action = Action(ActionType.END_TURN)
@@ -379,10 +365,8 @@ class EtwEvaluation:
         )
         etw_delta = etw_before - etw_after
         utility_self = 0.0 if etw_before <= 0 else max(0.0, etw_delta / etw_before * 100.0)
-        affects_board = any(
-            step.type == ActionType.BUILD and step.payload[0] in (Buildable.ROAD, Buildable.SETTLEMENT)
-            for step in actions
-        )
+        affects_board = any(step.type == ActionType.BUILD and step.payload[0] in (Buildable.ROAD, Buildable.SETTLEMENT)
+                            for step in actions)
 
         utility_opponent = 0.0
         blocks_opponent = False
@@ -424,10 +408,9 @@ class EtwEvaluation:
             utility_attention -= StrategyWeights.ATTENTION_LR_EARLY_PENALTY
 
         utility_total = self._apply_time_discount(
-            StrategyWeights.BUILD_SELF_UTILITY * utility_self
-            + StrategyWeights.BUILD_OPPONENT_UTILITY * utility_opponent
-            + StrategyWeights.BUILD_SPECIAL_UTILITY * utility_special
-            + utility_attention,
+            StrategyWeights.BUILD_SELF_UTILITY * utility_self +
+            StrategyWeights.BUILD_OPPONENT_UTILITY * utility_opponent +
+            StrategyWeights.BUILD_SPECIAL_UTILITY * utility_special + utility_attention,
             etb,
             use_time_discount,
         )
@@ -438,60 +421,68 @@ class EtwEvaluation:
         if final_step.type == ActionType.BUILD:
             building, _ = final_step.payload
             if building == Buildable.SETTLEMENT:
-                reasons_for.append(Reason(
-                    type=ReasonType.ENABLES_EXPANSION,
-                    label=ReasonLabel.PLAN_SETTLEMENT_VALUE,
-                    value=max(utility_self * 0.9, 1.0),
-                ))
+                reasons_for.append(
+                    Reason(
+                        type=ReasonType.ENABLES_EXPANSION,
+                        label=ReasonLabel.PLAN_SETTLEMENT_VALUE,
+                        value=max(utility_self * 0.9, 1.0),
+                    ))
             elif building == Buildable.CITY:
-                reasons_for.append(Reason(
-                    type=ReasonType.IMPROVES_PRODUCTION,
-                    label=ReasonLabel.PLAN_CITY_VALUE,
-                    value=max(utility_self * 0.8, 1.0),
-                ))
+                reasons_for.append(
+                    Reason(
+                        type=ReasonType.IMPROVES_PRODUCTION,
+                        label=ReasonLabel.PLAN_CITY_VALUE,
+                        value=max(utility_self * 0.8, 1.0),
+                    ))
             elif building == Buildable.ROAD:
-                reasons_for.append(Reason(
-                    type=ReasonType.ENABLES_EXPANSION,
-                    label=ReasonLabel.PLAN_ROAD_VALUE,
-                    value=max(utility_self * 0.7, 1.0),
-                ))
+                reasons_for.append(
+                    Reason(
+                        type=ReasonType.ENABLES_EXPANSION,
+                        label=ReasonLabel.PLAN_ROAD_VALUE,
+                        value=max(utility_self * 0.7, 1.0),
+                    ))
 
         if etb <= 2.5:
             quick_label, quick_meta = self._quick_reason_label(next_step, final_step)
-            reasons_for.append(Reason(
-                type=ReasonType.QUICK_TO_EXECUTE,
-                label=quick_label,
-                metadata=quick_meta,
-                value=max(0.0, 5.0 - etb),
-            ))
+            reasons_for.append(
+                Reason(
+                    type=ReasonType.QUICK_TO_EXECUTE,
+                    label=quick_label,
+                    metadata=quick_meta,
+                    value=max(0.0, 5.0 - etb),
+                ))
         if blocks_opponent and utility_opponent > 0:
-            reasons_for.append(Reason(
-                type=ReasonType.SLOWS_LEADING_OPPONENT,
-                label=ReasonLabel.SLOWS_LEADER,
-                value=utility_opponent,
-            ))
+            reasons_for.append(
+                Reason(
+                    type=ReasonType.SLOWS_LEADING_OPPONENT,
+                    label=ReasonLabel.SLOWS_LEADER,
+                    value=utility_opponent,
+                ))
         if improves_longest_road:
-            reasons_for.append(Reason(
-                type=ReasonType.ADVANCES_LONGEST_ROAD,
-                label=ReasonLabel.ADVANCES_LONGEST_ROAD,
-                value=utility_special,
-            ))
+            reasons_for.append(
+                Reason(
+                    type=ReasonType.ADVANCES_LONGEST_ROAD,
+                    label=ReasonLabel.ADVANCES_LONGEST_ROAD,
+                    value=utility_special,
+                ))
         if improves_largest_army:
-            reasons_for.append(Reason(
-                type=ReasonType.ADVANCES_LARGEST_ARMY,
-                label=ReasonLabel.ADVANCES_LARGEST_ARMY,
-                value=utility_special,
-            ))
+            reasons_for.append(
+                Reason(
+                    type=ReasonType.ADVANCES_LARGEST_ARMY,
+                    label=ReasonLabel.ADVANCES_LARGEST_ARMY,
+                    value=utility_special,
+                ))
         if next_step.type in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER):
             reasons_for.append(Reason(type=ReasonType.REQUIRES_TRADE, label=ReasonLabel.REQUIRES_TRADE, value=1.0))
         if next_step.type == ActionType.BUY_DEV_CARD and vp_inc > 0:
             reasons_for.append(Reason(type=ReasonType.HIDDEN_VALUE, label=ReasonLabel.HIDDEN_DEV_VALUE, value=vp_inc))
         if utility_attention < 0:
-            reasons_against.append(Reason(
-                type=ReasonType.AVOIDS_EARLY_ATTENTION,
-                label=ReasonLabel.EARLY_ATTENTION_RISK,
-                value=abs(utility_attention),
-            ))
+            reasons_against.append(
+                Reason(
+                    type=ReasonType.AVOIDS_EARLY_ATTENTION,
+                    label=ReasonLabel.EARLY_ATTENTION_RISK,
+                    value=abs(utility_attention),
+                ))
         reasons_for.sort(key=lambda reason: reason.value, reverse=True)
         reasons_against.sort(key=lambda reason: reason.value, reverse=True)
 
@@ -600,8 +591,7 @@ class EtwEvaluation:
             utility_self = 0.0 if etw_before <= 0 else max(0.0, (etw_before - etw_after) / etw_before * 100.0)
             affects_board = any(
                 step.type == ActionType.BUILD and step.payload[0] in (Buildable.ROAD, Buildable.SETTLEMENT)
-                for step in action_plan
-            )
+                for step in action_plan)
 
             utility_opponent = 0.0
             if affects_board and leader_etw is not None:
@@ -636,10 +626,9 @@ class EtwEvaluation:
                 utility_attention -= StrategyWeights.ATTENTION_LR_EARLY_PENALTY
 
             utility_total = self._apply_time_discount(
-                StrategyWeights.BUILD_SELF_UTILITY * utility_self
-                + StrategyWeights.BUILD_OPPONENT_UTILITY * utility_opponent
-                + StrategyWeights.BUILD_SPECIAL_UTILITY * utility_special
-                + utility_attention,
+                StrategyWeights.BUILD_SELF_UTILITY * utility_self +
+                StrategyWeights.BUILD_OPPONENT_UTILITY * utility_opponent +
+                StrategyWeights.BUILD_SPECIAL_UTILITY * utility_special + utility_attention,
                 etb,
                 use_time_discount,
             )
@@ -697,16 +686,17 @@ class EtwEvaluation:
             key=lambda explained_candidate: explained_candidate.utility_total,
             default=None,
         )
-        explained.append(self._build_end_turn_candidate(
-            player,
-            sim_game,
-            etw_before,
-            deferred_candidate,
-            include_player_trades=include_player_trades,
-            allow_development_cards=allow_development_cards,
-            use_planning=use_planning,
-            use_time_discount=use_time_discount,
-        ))
+        explained.append(
+            self._build_end_turn_candidate(
+                player,
+                sim_game,
+                etw_before,
+                deferred_candidate,
+                include_player_trades=include_player_trades,
+                allow_development_cards=allow_development_cards,
+                use_planning=use_planning,
+                use_time_discount=use_time_discount,
+            ))
         explained.sort(key=lambda explained_candidate: explained_candidate.utility_total, reverse=True)
         return explained
 
@@ -725,8 +715,7 @@ class EtwEvaluation:
             _pay(Game.BUILDING_COST[building])
             if building == Buildable.ROAD:
                 opponent_lengths = [
-                    other_player.longest_road_length
-                    for number, other_player in overlay.sim_players.items()
+                    other_player.longest_road_length for number, other_player in overlay.sim_players.items()
                     if number != player.player_number
                 ]
                 player.build_road(location, opponent_lengths)
@@ -750,8 +739,7 @@ class EtwEvaluation:
             player.remove_card(card_type)
             if card_type == DevelopmentCardType.KNIGHT:
                 opponent_armies = [
-                    other_player.army_size
-                    for number, other_player in overlay.sim_players.items()
+                    other_player.army_size for number, other_player in overlay.sim_players.items()
                     if number != player.player_number
                 ]
                 player.add_knight(opponent_armies)

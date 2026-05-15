@@ -4,10 +4,10 @@ from typing import TYPE_CHECKING
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QListWidgetItem, QWidget
 
-from controllers.GameController import GameController
 from ai.actions import Action, ActionType
+from controllers.GameController import GameController
 from game.Player import Player
-from game.PlayerAssets import Buildable, DevelopmentCardType, DevelopmentCard
+from game.PlayerAssets import Buildable, DevelopmentCard, DevelopmentCardType
 
 if TYPE_CHECKING:
     from view.MainWindow import MainWindow
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 # noinspection PyProtectedMember,PyUnresolvedReferences
 class DevelopmentPanel:
+
     def __init__(self, window: "MainWindow", development_manager_widget: QWidget):
         self.window = window
         self.development_manager_widget = development_manager_widget
@@ -37,8 +38,7 @@ class DevelopmentPanel:
         self.window.main_menu.action_btn_layout.addWidget(development_manager)
         self.window.main_menu.main_label.hide()
         self.window.main_menu.action_label.setText(
-            "You already played a card this turn." if played_dev_card else "Available Cards:"
-        )
+            "You already played a card this turn." if played_dev_card else "Available Cards:")
         self.window._set_turn_label(player)
 
         def clean_up():

@@ -15,6 +15,7 @@ T = TypeVar("T")
 
 
 class TutorController(ControllerSupport, ABC):
+
     def _new_tutor_rng(self) -> Random:
         """Create a new tutor RNG instance."""
         return Random(self.game_seed)
@@ -23,9 +24,7 @@ class TutorController(ControllerSupport, ABC):
         """Create a new tutor AI instance."""
         tutor_rng = self._new_tutor_rng()
         human_player_numbers = [
-            player_number
-            for player_number, policy_cls in self.game_players.items()
-            if policy_cls is None
+            player_number for player_number, policy_cls in self.game_players.items() if policy_cls is None
         ]
         for player_number in human_player_numbers:
             policy_factory = self.simulation_players.get(player_number)
@@ -61,10 +60,10 @@ class TutorController(ControllerSupport, ABC):
             self.tutor_ai.restore_state(snapshot)
 
     def _show_tutor_init(
-            self,
-            player: Player,
-            stage: TutorStage,
-            explanation: Optional[ActionExplanation],
+        self,
+        player: Player,
+        stage: TutorStage,
+        explanation: Optional[ActionExplanation],
     ) -> None:
         """Show the tutor introduction for the current decision stage."""
         if self.game_mode == self.GameMode.TUTOR and player.is_human and explanation is not None:
@@ -79,9 +78,9 @@ class TutorController(ControllerSupport, ABC):
         return self.view is not None and player.is_human and self.game_mode == self.GameMode.TUTOR
 
     def get_tutor_turn_explanation(
-            self,
-            player: Player,
-            played_dev_card: Optional[bool] = None,
+        self,
+        player: Player,
+        played_dev_card: Optional[bool] = None,
     ) -> Optional[ActionExplanation]:
         """Return the tutor explanation for the current turn."""
         if self.game_mode != self.GameMode.TUTOR or not player.is_human:
@@ -97,8 +96,8 @@ class TutorController(ControllerSupport, ABC):
         return explanation
 
     def _preview_tutor_explanation(
-            self,
-            callback: Callable[[], tuple[Any, ...]],
+        self,
+        callback: Callable[[], tuple[Any, ...]],
     ) -> Optional[ActionExplanation]:
         """Preview the tutor explanation for a pending decision."""
         preview_result = self._run_tutor_preview(callback)
@@ -126,8 +125,8 @@ class TutorController(ControllerSupport, ABC):
         return action
 
     def _set_tutor_shortcut_handlers(
-            self,
-            recommended_handler: Optional[Callable[[], Any]],
+        self,
+        recommended_handler: Optional[Callable[[], Any]],
     ) -> None:
         """Set the tutor shortcut handlers for the current decision."""
         if self.view is None:
@@ -137,8 +136,8 @@ class TutorController(ControllerSupport, ABC):
         else:
             self.view.set_debug_tutor_shortcut_handler(None)
 
-    def _prepare_tutor_main_action_comparison(
-            self, player: Player, action: Action, played_dev_card: bool) -> Optional[TutorFeedbackExplanation]:
+    def _prepare_tutor_main_action_comparison(self, player: Player, action: Action,
+                                              played_dev_card: bool) -> Optional[TutorFeedbackExplanation]:
         """Prepare tutor comparison data for a main action."""
         if not self._should_collect_tutor_feedback(player):
             return None
@@ -160,16 +159,14 @@ class TutorController(ControllerSupport, ABC):
             self.view.display_tutor_action_feedback(feedback)
 
     def _get_tutor_recommended_robber_choice(
-            self,
-            player: Player,
-            valid_hexes: list[HexTile],
+        self,
+        player: Player,
+        valid_hexes: list[HexTile],
     ):
         """Return the tutor-recommended robber choice."""
         cached_choice = self._pending_tutor_robber_choice
         if cached_choice is not None and cached_choice[0] in valid_hexes:
             return cached_choice
-        choice = self._run_tutor_decision(
-            lambda: self.tutor_ai.select_robber_target(player, self._game, valid_hexes)
-        )
+        choice = self._run_tutor_decision(lambda: self.tutor_ai.select_robber_target(player, self._game, valid_hexes))
         self._pending_tutor_robber_choice = choice
         return choice

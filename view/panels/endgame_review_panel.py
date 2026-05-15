@@ -1,70 +1,31 @@
-from typing import Dict, List, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Tuple
 
 from PyQt6.QtCore import QEvent, QObject, Qt, QTimer
 from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import (
-    QAbstractScrollArea,
-    QCheckBox,
-    QLabel,
-    QPushButton,
-    QSizePolicy,
-    QSplitter,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt6.QtWidgets import (QAbstractScrollArea, QCheckBox, QLabel, QPushButton, QSizePolicy, QSplitter, QVBoxLayout,
+                             QWidget)
 
-from controllers.GameController import GameController, PlayerScoreSnapshot
 from ai.tutor.feedback import TutorFeedbackExplanation
-from config.view_constants import ENDGAME_FEEDBACK_CARD_LAYOUT_SPACING_PX, ENDGAME_REPLAY_MIN_PANEL_WIDTH, \
-    ENDGAME_REPLAY_SPLITTER_HANDLE_WIDTH_PX, ENDGAME_REVIEW_BREAKDOWN_PANEL_WIDTH, ENDGAME_REVIEW_TROPHY_SIZE, \
-    TROPHY_ICON
+from config.view_constants import (ENDGAME_FEEDBACK_CARD_LAYOUT_SPACING_PX, ENDGAME_REPLAY_MIN_PANEL_WIDTH,
+                                   ENDGAME_REPLAY_SPLITTER_HANDLE_WIDTH_PX, ENDGAME_REVIEW_BREAKDOWN_PANEL_WIDTH,
+                                   ENDGAME_REVIEW_TROPHY_SIZE, TROPHY_ICON)
+from controllers.GameController import GameController, PlayerScoreSnapshot
 from game.Player import Player, PlayerNumber
 from game.PlayerAssets import DevelopmentCardType
 from view.canvas.SquareCanvas import SquareCanvas
-from view.panels.endgame_plot import (
-    HoverTooltip,
-    build_endgame_plot_tooltips,
-    create_victory_points_plot,
-    handle_plot_hover,
-    populate_tutor_endgame_performance,
-    reset_hover_state,
-)
+from view.panels.endgame_plot import (HoverTooltip, build_endgame_plot_tooltips, create_victory_points_plot,
+                                      handle_plot_hover, populate_tutor_endgame_performance, reset_hover_state)
 from view.panels.endgame_summary import (
-    build_biggest_swing_label,
-    build_closest_moment_label,
-    build_lead_change_label,
-    compact_feedback_action,
-    describe_round_vp_events,
-    endgame_feedback_filter_state_from_owner,
-    feedback_card_title,
-    format_endgame_players,
-    format_player_breakdown_html,
-    format_player_breakdown_text,
-    format_player_ranking_summary,
-    format_replay_feedback_details,
-    get_player_victory_breakdown,
-    join_reasons,
-    outcome_performance_score,
-    outcome_strength_line,
-    outcome_weakness_line,
-    overall_performance_summary,
-    performance_category,
-    performance_line,
-    replay_feedback_player_name,
-    score_swing_reasons,
-    strip_html,
-    summarise_endgame_review_labels,
-)
+    build_biggest_swing_label, build_closest_moment_label, build_lead_change_label, compact_feedback_action,
+    describe_round_vp_events, endgame_feedback_filter_state_from_owner, feedback_card_title, format_endgame_players,
+    format_player_breakdown_html, format_player_breakdown_text, format_player_ranking_summary,
+    format_replay_feedback_details, get_player_victory_breakdown, join_reasons, outcome_performance_score,
+    outcome_strength_line, outcome_weakness_line, overall_performance_summary, performance_category, performance_line,
+    replay_feedback_player_name, score_swing_reasons, strip_html, summarise_endgame_review_labels)
 from view.rich_text import winner_title_html
-from view.styles import (
-    endgame_badge_stylesheet,
-    endgame_feedback_body_stylesheet,
-    endgame_feedback_card_stylesheet,
-    endgame_feedback_empty_stylesheet,
-    endgame_feedback_score_stylesheet,
-    endgame_feedback_title_stylesheet,
-    endgame_rank_card_stylesheet,
-)
+from view.styles import (endgame_badge_stylesheet, endgame_feedback_body_stylesheet, endgame_feedback_card_stylesheet,
+                         endgame_feedback_empty_stylesheet, endgame_feedback_score_stylesheet,
+                         endgame_feedback_title_stylesheet, endgame_rank_card_stylesheet)
 
 if TYPE_CHECKING:
     from view.MainWindow import MainWindow
@@ -72,6 +33,7 @@ if TYPE_CHECKING:
 
 # noinspection PyProtectedMember,PyUnresolvedReferences
 class EndgameReviewPanel:
+
     def __init__(self, window: "MainWindow", results_menu: QWidget, widget: QWidget):
         self.window = window
         self.results_menu = results_menu
@@ -313,11 +275,8 @@ class EndgameReviewPanel:
         layout = self.widget.feedbackListLayout
         self.window._clear_layout(layout)
 
-        visible_feedback = [
-            (index, feedback)
-            for index, feedback in enumerate(self.replay_feedback)
-            if self.feedback_matches_filter(feedback)
-        ]
+        visible_feedback = [(index, feedback) for index, feedback in enumerate(self.replay_feedback)
+                            if self.feedback_matches_filter(feedback)]
 
         if not visible_feedback:
             empty_label = QLabel("No feedback items match the selected filters.")
@@ -460,8 +419,8 @@ class EndgameReviewPanel:
     def handle_event_filter(self, watched: QObject, event: QEvent) -> bool:
         """Handle replay layout events from watched widgets."""
         if watched in {self.widget.replayTab, self.widget.selectedMomentScrollArea} and event.type() in {
-            QEvent.Type.Resize,
-            QEvent.Type.Show,
+                QEvent.Type.Resize,
+                QEvent.Type.Show,
         }:
             QTimer.singleShot(0, self.sync_replay_layout)
             return False
@@ -505,16 +464,14 @@ class EndgameReviewPanel:
         return summarise_endgame_review_labels(history, players)
 
     @classmethod
-    def build_lead_change_label(
-        cls, history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]], player_names: Dict[PlayerNumber, str]
-    ) -> str:
+    def build_lead_change_label(cls, history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
+                                player_names: Dict[PlayerNumber, str]) -> str:
         """Build the lead-change summary label."""
         return build_lead_change_label(history, player_names)
 
     @classmethod
-    def build_biggest_swing_label(
-        cls, history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]], player_names: Dict[PlayerNumber, str]
-    ) -> str:
+    def build_biggest_swing_label(cls, history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
+                                  player_names: Dict[PlayerNumber, str]) -> str:
         """Build the biggest-swing summary label."""
         return build_biggest_swing_label(history, player_names)
 
@@ -529,9 +486,8 @@ class EndgameReviewPanel:
         return score_swing_reasons(previous, current)
 
     @classmethod
-    def build_closest_moment_label(
-        cls, history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]], player_names: Dict[PlayerNumber, str]
-    ) -> str:
+    def build_closest_moment_label(cls, history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
+                                   player_names: Dict[PlayerNumber, str]) -> str:
         """Build the closest-moment summary label."""
         return build_closest_moment_label(history, player_names)
 
@@ -560,11 +516,8 @@ class EndgameReviewPanel:
             card_btn.setStyleSheet(self.endgame_rank_card_stylesheet(False))
             card_btn.setMinimumWidth(0)
             card_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-            card_btn.clicked.connect(
-                lambda _checked=False, selected_player=player, selected_btn=card_btn: self.select_endgame_rank_card(
-                    selected_btn, selected_player
-                )
-            )
+            card_btn.clicked.connect(lambda _checked=False, selected_player=player, selected_btn=card_btn: self.
+                                     select_endgame_rank_card(selected_btn, selected_player))
             ranking_layout.addWidget(card_btn)
             self.rank_cards.append(card_btn)
 
@@ -628,6 +581,7 @@ class EndgameReviewPanel:
 
     def display_tutor_endgame_review(self, controller: GameController) -> None:
         """Display the tutor endgame review screen."""
+
         def return_to_main_menu() -> None:
             self.window._restore_splitter_layout()
             controller.start_game()
@@ -693,8 +647,7 @@ class EndgameReviewPanel:
                 labels["largest_army"].show()
 
             num_vp_cards = len(
-                [c for c in player.development_cards if c.card_type == DevelopmentCardType.VICTORY_POINT]
-            )
+                [c for c in player.development_cards if c.card_type == DevelopmentCardType.VICTORY_POINT])
             if num_vp_cards > 0:
                 labels["victory_cards"].setText(f"Victory Card Points: {num_vp_cards}")
                 labels["victory_cards"].show()

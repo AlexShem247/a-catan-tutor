@@ -10,6 +10,7 @@ from view.canvas.display_utils import resource_dict_to_str
 
 
 class TurnController(ControllerSupport, ABC):
+
     def make_round_move(self, player: Player):
         """Run a full turn for the given player."""
         if self.game_mode in {self.GameMode.PLAY, self.GameMode.TUTOR}:
@@ -23,10 +24,10 @@ class TurnController(ControllerSupport, ABC):
             if self.game_mode in {self.GameMode.PLAY, self.GameMode.TUTOR}:
                 self._run_tutor_decision(lambda: self.tutor_ai.next_action(player, self._game, Phase.PRE_ROLL, False))
         else:
+
             def select_tutor_pre_roll_card() -> DevelopmentCardType | bool:
                 recommended_action = self._run_tutor_decision(
-                    lambda: self.tutor_ai.next_action(player, self._game, Phase.PRE_ROLL, False)
-                )
+                    lambda: self.tutor_ai.next_action(player, self._game, Phase.PRE_ROLL, False))
                 if recommended_action.type == ActionType.PLAY_DEV_CARD:
                     return recommended_action.payload
                 return False
@@ -55,6 +56,7 @@ class TurnController(ControllerSupport, ABC):
         d1, d2, total, _ = self.roll_dice(player)
 
         while True:
+
             def select_tutor_main_action() -> Action:
                 return self.get_tutor_recommended_main_action(player, played_dev_card)
 
@@ -92,11 +94,10 @@ class TurnController(ControllerSupport, ABC):
                 case ActionType.TRADE_WITH_PLAYER:
                     selling, buying = action.payload
                     willing_players = self.trade_with_players(player, selling, buying)
-                    affordable_offers = [
-                        (p, counter) for (p, counter) in willing_players
-                        if counter is None or player.can_afford(counter)
-                    ]
+                    affordable_offers = [(p, counter) for (p, counter) in willing_players
+                                         if counter is None or player.can_afford(counter)]
                     if affordable_offers:
+
                         def select_tutor_trade_partner():
                             return self._run_tutor_decision(lambda: self.tutor_ai.choose_trade_partner(
                                 player,
@@ -142,18 +143,15 @@ class TurnController(ControllerSupport, ABC):
 
     def _is_guided_turn(self, player: Player):
         """Check whether the current turn should use guided flow."""
-        return (
-            self.game_mode == self.GameMode.GUIDED
-            and player.player_number == PlayerNumber.P1
-            and isinstance(player.policy, RuleBasedAI)
-        )
+        return (self.game_mode == self.GameMode.GUIDED and player.player_number == PlayerNumber.P1
+                and isinstance(player.policy, RuleBasedAI))
 
     def _get_ai_action(
-            self,
-            player: Player,
-            phase: Phase,
-            dev_played: bool,
-            dice_info: Optional[Tuple[int, int, int]] = None,
+        self,
+        player: Player,
+        phase: Phase,
+        dev_played: bool,
+        dice_info: Optional[Tuple[int, int, int]] = None,
     ) -> Action:
         """Get the next AI action for the current phase."""
         if self._is_guided_turn(player) and isinstance(player.policy, RuleBasedAI):
@@ -215,17 +213,13 @@ class TurnController(ControllerSupport, ABC):
                     selling, buying = action.payload
                     success = self._game.try_trade_with_bank(player, selling, buying)
                     if success:
-                        messages.append(
-                            f"{player.name} trades {resource_dict_to_str(selling)} with the bank "
-                            f"for {resource_dict_to_str(buying)}."
-                        )
+                        messages.append(f"{player.name} trades {resource_dict_to_str(selling)} with the bank "
+                                        f"for {resource_dict_to_str(buying)}.")
                 case ActionType.TRADE_WITH_PLAYER:
                     selling, buying = action.payload
                     willing_players = self.trade_with_players(player, selling, buying)
-                    affordable_offers = [
-                        (p, counter) for (p, counter) in willing_players
-                        if counter is None or player.can_afford(counter)
-                    ]
+                    affordable_offers = [(p, counter) for (p, counter) in willing_players
+                                         if counter is None or player.can_afford(counter)]
 
                     if affordable_offers:
                         if self.game_mode == self.GameMode.GUIDED and isinstance(player.policy, RuleBasedAI):
@@ -233,20 +227,17 @@ class TurnController(ControllerSupport, ABC):
                                 player, self._game, selling, buying, affordable_offers)
                             if explanation is not None:
                                 self._raise_if_return_home(
-                                    self.view.display_board_turn_explanations(player, (d1, d2, total), explanation)
-                                )
+                                    self.view.display_board_turn_explanations(player, (d1, d2, total), explanation))
                         else:
-                            deal = player.policy.choose_trade_partner(
-                                player, self._game, selling, buying, affordable_offers)
+                            deal = player.policy.choose_trade_partner(player, self._game, selling, buying,
+                                                                      affordable_offers)
                         if deal is not None:
                             buying_player, counter = deal
                             if counter is not None:
                                 selling = counter
                             self._game.trade_between_players(player, selling, buying_player, buying)
-                            messages.append(
-                                f"{player.name} trades {resource_dict_to_str(selling)} with "
-                                f"{buying_player.name} for {resource_dict_to_str(buying)}."
-                            )
+                            messages.append(f"{player.name} trades {resource_dict_to_str(selling)} with "
+                                            f"{buying_player.name} for {resource_dict_to_str(buying)}.")
                 case ActionType.BUY_DEV_CARD:
                     success, _ = self._game.try_buy_development_card(player)
                     if success:

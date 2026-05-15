@@ -1,11 +1,11 @@
 from enum import Enum
 from random import Random
-from typing import List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from game.Edge import Edge
 from game.PlayerAssets import DevelopmentCard, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
-from game.Vertex import Vertex, Port
+from game.Vertex import Port, Vertex
 
 if TYPE_CHECKING:
     from ai.AI import AI
@@ -19,6 +19,7 @@ class PlayerNumber(Enum):
 
 
 class Player:
+
     def __init__(self, is_human: bool, player_number: PlayerNumber, bank_resources: ResourceCount, rng: Random,
                  name: Optional[str] = None, policy: Optional["AI"] = None):
         self.is_human = is_human
@@ -29,9 +30,7 @@ class Player:
         self.policy = policy
 
         # Resources (0 for each)
-        self.resources: ResourceCount = {
-            resource: 0 for resource in Resource
-        }
+        self.resources: ResourceCount = {resource: 0 for resource in Resource}
 
         # Assets on the board
         self.settlements: List[Vertex] = []
@@ -62,10 +61,8 @@ class Player:
             visible_points += 2
 
         # Hidden Victory Point development cards
-        hidden_vp_cards = sum(
-            1 for card in self.development_cards
-            if card.card_type == DevelopmentCardType.VICTORY_POINT
-        )
+        hidden_vp_cards = sum(1 for card in self.development_cards
+                              if card.card_type == DevelopmentCardType.VICTORY_POINT)
 
         total_points = visible_points + hidden_vp_cards
         return visible_points, total_points
@@ -133,11 +130,7 @@ class Player:
     def random_resource(self) -> ResourceCount:
         """Return a random resource from the player inventory."""
         # Build a flat list where each card appears once per count
-        pool = [
-            resource
-            for resource, count in self.resources.items()
-            for _ in range(count)
-        ]
+        pool = [resource for resource, count in self.resources.items() for _ in range(count)]
 
         if not pool:
             return {}

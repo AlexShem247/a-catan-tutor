@@ -9,7 +9,7 @@ from game.HexTile import HexTile
 from game.Player import Player, PlayerNumber
 from game.PlayerAssets import Buildable, DevelopmentDeck
 from game.Resources import Resource, ResourceCount
-from game.Vertex import Building, Vertex, VertexDirection, Port
+from game.Vertex import Building, Port, Vertex, VertexDirection
 
 PlayerPolicyFactory = Callable[[Random], AI]
 PlayerConfig = Dict[PlayerNumber, Optional[PlayerPolicyFactory]]
@@ -18,16 +18,33 @@ PlayerConfig = Dict[PlayerNumber, Optional[PlayerPolicyFactory]]
 class Game:
     # Resource cost for each building type
     BUILDING_COST: Dict[Buildable, ResourceCount] = {
-        Buildable.ROAD: {Resource.WOOD: 1, Resource.BRICK: 1},
-        Buildable.SETTLEMENT: {
-            Resource.WOOD: 1, Resource.BRICK: 1, Resource.SHEEP: 1, Resource.WHEAT: 1
+        Buildable.ROAD: {
+            Resource.WOOD: 1,
+            Resource.BRICK: 1
         },
-        Buildable.CITY: {Resource.ORE: 3, Resource.WHEAT: 2},
-        Buildable.DEVELOPMENT_CARD: {Resource.ORE: 1, Resource.SHEEP: 1, Resource.WHEAT: 1}
+        Buildable.SETTLEMENT: {
+            Resource.WOOD: 1,
+            Resource.BRICK: 1,
+            Resource.SHEEP: 1,
+            Resource.WHEAT: 1
+        },
+        Buildable.CITY: {
+            Resource.ORE: 3,
+            Resource.WHEAT: 2
+        },
+        Buildable.DEVELOPMENT_CARD: {
+            Resource.ORE: 1,
+            Resource.SHEEP: 1,
+            Resource.WHEAT: 1
+        }
     }
 
     BANK_INITIAL_RESOURCES: ResourceCount = {
-        Resource.WOOD: 19, Resource.BRICK: 19, Resource.SHEEP: 19, Resource.WHEAT: 19, Resource.ORE: 19,
+        Resource.WOOD: 19,
+        Resource.BRICK: 19,
+        Resource.SHEEP: 19,
+        Resource.WHEAT: 19,
+        Resource.ORE: 19,
     }
 
     VICTORY_POINTS_TO_WIN = 10
@@ -38,15 +55,10 @@ class Game:
         self.bank_resources: Dict[Resource, int] = self.BANK_INITIAL_RESOURCES.copy()
 
         self.players = [
-            Player(
-                is_human=policy_factory is None,
-                player_number=num,
-                bank_resources=self.bank_resources,
-                rng=self.rng,
-                policy=None if policy_factory is None else policy_factory(self.rng)
-            )
+            Player(is_human=policy_factory is None, player_number=num, bank_resources=self.bank_resources, rng=self.rng,
+                   policy=None if policy_factory is None else policy_factory(self.rng))
             for num, policy_factory in player_config.items()
-            ]
+        ]
 
         self._board = Board(self.rng)
         self.development_deck = DevelopmentDeck(self.rng)
@@ -136,10 +148,8 @@ class Game:
 
         return 4
 
-    def try_trade_with_bank(
-            self, player: Player, selling: ResourceCount,
-            buying: ResourceCount, use_resources: bool = True
-    ) -> bool:
+    def try_trade_with_bank(self, player: Player, selling: ResourceCount, buying: ResourceCount,
+                            use_resources: bool = True) -> bool:
         """Try to perform a bank trade for the player."""
 
         # Filter zeros
@@ -168,13 +178,13 @@ class Game:
         return True
 
     def try_build_settlement(
-            self,
-            player: Player,
-            vertex: Vertex,
-            build: bool = True,
-            use_resources: bool = True,
-            road_restriction: bool = True,
-            gain_resources: bool = False,
+        self,
+        player: Player,
+        vertex: Vertex,
+        build: bool = True,
+        use_resources: bool = True,
+        road_restriction: bool = True,
+        gain_resources: bool = False,
     ) -> Tuple[bool, str]:
         """Try to build a settlement for the player."""
         if vertex.owner is not None or vertex.building is not None:
@@ -204,13 +214,8 @@ class Game:
 
         return True, f"Settlement built at {vertex}"
 
-    def try_build_city(
-            self,
-            player: Player,
-            vertex: Vertex,
-            build: bool = True,
-            use_resources: bool = True
-    ) -> Tuple[bool, str]:
+    def try_build_city(self, player: Player, vertex: Vertex, build: bool = True,
+                       use_resources: bool = True) -> Tuple[bool, str]:
         """Try to build a city for the player."""
         if vertex.owner != player:
             return False, f"Vertex is owned by {vertex.owner.name if vertex.owner else 'nobody'}"
@@ -226,14 +231,8 @@ class Game:
 
         return True, f"City built at {vertex}"
 
-    def try_build_road(
-            self,
-            player: Player,
-            edge: Edge,
-            on_vertex: Optional[Vertex] = None,
-            build: bool = True,
-            use_resources: bool = True
-    ) -> Tuple[bool, str]:
+    def try_build_road(self, player: Player, edge: Edge, on_vertex: Optional[Vertex] = None, build: bool = True,
+                       use_resources: bool = True) -> Tuple[bool, str]:
         """Try to build a road for the player."""
 
         def _finalise() -> Tuple[bool, str]:
@@ -356,9 +355,7 @@ class Game:
                 return []
 
             for vertex in self._board.vertices:
-                success, _ = self.try_build_settlement(
-                    player, vertex, build=False, road_restriction=road_restriction
-                )
+                success, _ = self.try_build_settlement(player, vertex, build=False, road_restriction=road_restriction)
                 if success:
                     available.append(vertex)
 
@@ -392,8 +389,8 @@ class Game:
         """Return the buildable edges connected to the vertex."""
         return [e for e in vertex.edges if self.try_build_road(vertex.owner, e, build=False)[0]]
 
-    def trade_between_players(self, player: Player, selling: ResourceCount,
-                              buying_player: Player, buying: ResourceCount):
+    def trade_between_players(self, player: Player, selling: ResourceCount, buying_player: Player,
+                              buying: ResourceCount):
         """Execute a resource trade between two players."""
 
         # Give resources from the selling player

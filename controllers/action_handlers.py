@@ -3,16 +3,17 @@ from typing import List, Optional, Tuple
 
 from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.tutor.tutor import TutorStage
+from controllers.controller_support import ControllerSupport
 from game.Game import Game
 from game.HexTile import HexTile
 from game.Player import Player
 from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
-from controllers.controller_support import ControllerSupport
 
 
 class ActionHandlers(ControllerSupport, ABC):
+
     def trade_with_players(self, selling_player, selling, buying) -> List[Tuple[Player, Optional[ResourceCount]]]:
         """Run the player-to-player trade flow."""
         results = []
@@ -28,20 +29,17 @@ class ActionHandlers(ControllerSupport, ABC):
                                     selling_player,
                                     selling,
                                     buying,
-                                )
-                            )
+                                ))
                             self._show_tutor_init(player, TutorStage.TRADE_RESPONSE, explanation)
 
                         def respond_to_trade_for_player() -> Tuple[bool, Optional[ResourceCount]]:
-                            return self._run_tutor_decision(
-                                lambda: self.tutor_ai.respond_to_trade(
-                                    player,
-                                    self._game,
-                                    selling_player,
-                                    selling,
-                                    buying,
-                                )
-                            )
+                            return self._run_tutor_decision(lambda: self.tutor_ai.respond_to_trade(
+                                player,
+                                self._game,
+                                selling_player,
+                                selling,
+                                buying,
+                            ))
 
                         self._set_tutor_shortcut_handlers(respond_to_trade_for_player)
                         try:
@@ -71,11 +69,10 @@ class ActionHandlers(ControllerSupport, ABC):
                                 player, self._game, selling_player, selling, buying)
                             if explanation is not None:
                                 self._raise_if_return_home(
-                                    self.view.display_board_turn_explanations(player, None, explanation)
-                                )
+                                    self.view.display_board_turn_explanations(player, None, explanation))
                         else:
-                            interested, counter = player.policy.respond_to_trade(
-                                player, self._game, selling_player, selling, buying)
+                            interested, counter = player.policy.respond_to_trade(player, self._game, selling_player,
+                                                                                 selling, buying)
                     else:
                         interested, counter = False, None
 
@@ -84,8 +81,7 @@ class ActionHandlers(ControllerSupport, ABC):
 
         if self.game_mode == self.GameMode.TUTOR and selling_player.is_human and results:
             explanation = self._preview_tutor_explanation(lambda: self.tutor_ai.choose_trade_partner_with_explanation(
-                selling_player, self._game, selling, buying, results)
-            )
+                selling_player, self._game, selling, buying, results))
             self._show_tutor_init(selling_player, TutorStage.TRADE_DECISION, explanation)
 
         return results
@@ -108,19 +104,18 @@ class ActionHandlers(ControllerSupport, ABC):
                                     p,
                                     self._game,
                                     discard_count,
-                                )
-                            )
+                                ))
                             self._show_tutor_init(p, TutorStage.DISCARD_RESOURCES, explanation)
 
                         def select_tutor_discard_resources() -> ResourceCount:
                             return self._run_tutor_decision(
-                                lambda: self.tutor_ai.select_discard_resources(p, self._game, discard_count)
-                            )
+                                lambda: self.tutor_ai.select_discard_resources(p, self._game, discard_count))
 
                         self._set_tutor_shortcut_handlers(select_tutor_discard_resources)
                         try:
-                            resources_to_discard = self.view.show_resource_chooser(
-                                p, discard_count, "The robber has been rolled!", p.resources)
+                            resources_to_discard = self.view.show_resource_chooser(p, discard_count,
+                                                                                   "The robber has been rolled!",
+                                                                                   p.resources)
                         finally:
                             self._set_tutor_shortcut_handlers(None)
                         self._raise_if_return_home(resources_to_discard)
@@ -138,8 +133,7 @@ class ActionHandlers(ControllerSupport, ABC):
                                 p, self._game, discard_count)
                             if explanation is not None:
                                 self._raise_if_return_home(
-                                    self.view.display_board_turn_explanations(p, None, explanation)
-                                )
+                                    self.view.display_board_turn_explanations(p, None, explanation))
                         else:
                             resources_to_discard = p.policy.select_discard_resources(p, self._game, discard_count)
                     p.remove_resources(resources_to_discard)
@@ -162,8 +156,7 @@ class ActionHandlers(ControllerSupport, ABC):
                         player,
                         self._game,
                         available_hexes,
-                    )
-                )
+                    ))
                 self._show_tutor_init(player, TutorStage.ROBBER_PLACEMENT, robber_explanation)
             self.view.display_board(player, "Select a hex to move the robber")
 
@@ -205,18 +198,14 @@ class ActionHandlers(ControllerSupport, ABC):
                             player,
                             self._game,
                             [selected_hex],
-                        )
-                    )
+                        ))
                     self._show_tutor_init(player, TutorStage.ROBBER_STEAL_TARGET, robber_explanation)
                 self.view.display_board(player, "Select a player to steal from")
 
                 def select_tutor_robber_target_building() -> Vertex:
                     selected_owner = self._get_tutor_recommended_robber_choice(player, [selected_hex])[1]
                     return next(
-                        (
-                            building for building in adjacent_player_buildings
-                            if building.owner == selected_owner
-                        ),
+                        (building for building in adjacent_player_buildings if building.owner == selected_owner),
                         adjacent_player_buildings[0],
                     )
 
@@ -291,15 +280,13 @@ class ActionHandlers(ControllerSupport, ABC):
                                     player,
                                     self._game,
                                     available_edges,
-                                )
-                            )
+                                ))
                             self._show_tutor_init(player, TutorStage.ROAD_BUILDING, explanation)
                         edge = self.get_road_choice(
                             player,
                             None,
                             selector=lambda candidate_edges: self.tutor_ai.road_building_placement(
-                                player, self._game, candidate_edges
-                            ),
+                                player, self._game, candidate_edges),
                         )
                         if self._should_collect_tutor_feedback(player):
                             road_building_feedback = self.tutor_evaluator.evaluate_opening_road_choice(
@@ -327,14 +314,12 @@ class ActionHandlers(ControllerSupport, ABC):
                         lambda: self.tutor_ai.select_year_of_plenty_resources_with_explanation(
                             player,
                             self._game,
-                        )
-                    )
+                        ))
                     self._show_tutor_init(player, TutorStage.YEAR_OF_PLENTY, explanation)
 
                 def select_tutor_year_of_plenty_resources() -> ResourceCount:
                     return self._run_tutor_decision(
-                        lambda: self.tutor_ai.select_year_of_plenty_resources(player, self._game)
-                    )
+                        lambda: self.tutor_ai.select_year_of_plenty_resources(player, self._game))
 
                 self._set_tutor_shortcut_handlers(select_tutor_year_of_plenty_resources)
                 try:
@@ -361,8 +346,8 @@ class ActionHandlers(ControllerSupport, ABC):
             player.add_resources(resources)
             if player.is_human:
                 self._show_tutor_action_feedback(player, year_of_plenty_feedback)
-            resource_list = ", ".join(
-                f"{amt} {res.name.replace('_', ' ').title()}" for res, amt in resources.items() if amt > 0)
+            resource_list = ", ".join(f"{amt} {res.name.replace('_', ' ').title()}" for res, amt in resources.items()
+                                      if amt > 0)
             msg += f" Took {resource_list} from the bank."
 
         elif card_type == DevelopmentCardType.MONOPOLY:
@@ -373,14 +358,12 @@ class ActionHandlers(ControllerSupport, ABC):
                         lambda: self.tutor_ai.select_monopoly_resource_with_explanation(
                             player,
                             self._game,
-                        )
-                    )
+                        ))
                     self._show_tutor_init(player, TutorStage.MONOPOLY, explanation)
 
                 def select_tutor_monopoly_choice() -> ResourceCount:
                     chosen_resource = self._run_tutor_decision(
-                        lambda: self.tutor_ai.select_monopoly_resource(player, self._game)
-                    )
+                        lambda: self.tutor_ai.select_monopoly_resource(player, self._game))
                     return {chosen_resource: 1}
 
                 self._set_tutor_shortcut_handlers(select_tutor_monopoly_choice)
@@ -389,7 +372,8 @@ class ActionHandlers(ControllerSupport, ABC):
                         player,
                         1,
                         "Monopoly: choose a resource to get from the other players.",
-                        {res: 1 for res in Resource},
+                        {res: 1
+                         for res in Resource},
                     )
                 finally:
                     self._set_tutor_shortcut_handlers(None)
@@ -404,8 +388,7 @@ class ActionHandlers(ControllerSupport, ABC):
                     )
             else:
                 if self.game_mode == self.GameMode.GUIDED and isinstance(player.policy, RuleBasedAI):
-                    resource, explanation = player.policy.select_monopoly_resource_with_explanation(
-                        player, self._game)
+                    resource, explanation = player.policy.select_monopoly_resource_with_explanation(player, self._game)
                     if explanation is not None:
                         self._raise_if_return_home(self.view.display_board_turn_explanations(player, None, explanation))
                 else:
