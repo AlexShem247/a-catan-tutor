@@ -1,32 +1,20 @@
 import unittest
+from random import Random
 
+from test_helpers import GameTestMixin
+
+from controllers.GameController import GameController
 from game.Edge import Edge, EdgeDirection
 from game.Game import Game
-from game.HexTile import HexTile
-from game.PlayerAssets import Buildable
+from game.Player import PlayerNumber
+from game.PlayerAssets import Buildable, DevelopmentCard, DevelopmentCardType
 from game.Resources import Resource
-from game.Vertex import Vertex, Building, VertexDirection, Port
+from game.Vertex import Building, Port, Vertex, VertexDirection
 
 
-class TestGame(unittest.TestCase):
-
-    def setUp(self):
-        self.game = Game(human_player_one=True)
-        self.player = self.game.players[0]
-        self.opponent = self.game.players[1]
-
-        # Give some resources for testing
-        self.player.resources = {res: 5 for res in Resource}
-        self.opponent.resources = {res: 5 for res in Resource}
-
-        # Set up basic board objects
-        self.hex_tile = HexTile(q=0, r=0, hex_type="forest", production_number=8)
-        self.vertex = Vertex(pos=(0, 0, VertexDirection.TOP))
-        v2 = Vertex(pos=(0, 0, VertexDirection.TOP_RIGHT))
-        self.edge = Edge(self.vertex, v2, pos=(0, 0, EdgeDirection.NORTH_EAST))
+class TestGame(GameTestMixin, unittest.TestCase):
 
     def test_can_afford_exact(self):
-        # Player has exactly required resources
         self.player.resources = Game.BUILDING_COST[Buildable.ROAD].copy()
         self.assertTrue(self.game.can_afford(self.player, Buildable.ROAD))
 
@@ -74,8 +62,18 @@ class TestGame(unittest.TestCase):
         buying = {Resource.SHEEP: 1}
         self.assertFalse(self.game.try_trade_with_bank(self.player, selling, buying))
 
+    def test_trade_between_players(self):
+        selling = {Resource.WOOD: 2}
+        buying = {Resource.BRICK: 1}
+        self.player.resources[Resource.WOOD] = 3
+        self.opponent.resources[Resource.BRICK] = 2
+        self.game.trade_between_players(self.player, selling, self.opponent, buying)
+        self.assertEqual(self.player.resources[Resource.WOOD], 1)
+        self.assertEqual(self.player.resources[Resource.BRICK], 6)
+        self.assertEqual(self.opponent.resources[Resource.WOOD], 7)
+        self.assertEqual(self.opponent.resources[Resource.BRICK], 1)
+
     def test_try_build_settlement_success(self):
-        # Allow a free vertex for building
         success, _ = self.game.try_build_settlement(self.player, self.vertex)
         self.assertFalse(success)
 
@@ -103,7 +101,6 @@ class TestGame(unittest.TestCase):
         self.assertFalse(success)
 
     def test_try_build_road_success(self):
-        # Attach road to player vertex
         v2 = Vertex(pos=(0, 0, VertexDirection.TOP_RIGHT))
         edge = Edge(self.vertex, v2, pos=(0, 0, EdgeDirection.NORTH_EAST))
         self.vertex.owner = self.player
@@ -118,6 +115,12 @@ class TestGame(unittest.TestCase):
         success, _ = self.game.try_build_road(self.player, edge)
         self.assertFalse(success)
 
+    def test_get_available_vertices_and_edges(self):
+        vertices = self.game.get_available_vertices(self.player, Buildable.SETTLEMENT)
+        self.assertIsInstance(vertices, list)
+        edges = self.game.get_available_edges(self.player)
+        self.assertIsInstance(edges, list)
+
     def test_update_best_opponent_victory_points(self):
         self.player.calc_victory_points = lambda: (5, 5)
         self.opponent.calc_victory_points = lambda: (7, 7)
@@ -131,23 +134,41 @@ class TestGame(unittest.TestCase):
         self.game.update_best_opponent_victory_points()
         self.assertTrue(self.game.game_over)
 
-    def test_trade_between_players(self):
-        selling = {Resource.WOOD: 2}
-        buying = {Resource.BRICK: 1}
-        self.player.resources[Resource.WOOD] = 3
-        self.opponent.resources[Resource.BRICK] = 2
-        self.game.trade_between_players(self.player, selling, self.opponent, buying)
-        self.assertEqual(self.player.resources[Resource.WOOD], 1)
-        self.assertEqual(self.player.resources[Resource.BRICK], 6)
-        self.assertEqual(self.opponent.resources[Resource.WOOD], 7)
-        self.assertEqual(self.opponent.resources[Resource.BRICK], 1)
+    def test_buy_victory_point_card_sets_game_over(self):
+        self.player.settlements = [Vertex(pos=(0, 0, VertexDirection.TOP))]
+        self.player.cities = [
+            Vertex(pos=(0, 0, VertexDirection.TOP_RIGHT)),
+            Vertex(pos=(0, 0, VertexDirection.BOTTOM_RIGHT)),
+            Vertex(pos=(0, 0, VertexDirection.BOTTOM)),
+            Vertex(pos=(0, 0, VertexDirection.BOTTOM_LEFT)),
+        ]
+        self.game.development_deck.set_cards([DevelopmentCard(DevelopmentCardType.VICTORY_POINT)])
 
-    def test_get_available_vertices_and_edges(self):
-        vertices = self.game.get_available_vertices(self.player, Buildable.SETTLEMENT)
-        self.assertIsInstance(vertices, list)
-        edges = self.game.get_available_edges(self.player)
-        self.assertIsInstance(edges, list)
+        success, _ = self.game.try_buy_development_card(self.player)
 
+        self.assertTrue(success)
+        self.assertTrue(self.game.game_over)
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_knight_largest_army_sets_game_over(self):
+        player_config = {
+            PlayerNumber.P1: None,
+            PlayerNumber.P2: None,
+            PlayerNumber.P3: None,
+            PlayerNumber.P4: None,
+        }
+        controller = GameController(player_config, player_config, game_seed=0)
+        player = controller.get_all_players()[0]
+        player.cities = [
+            Vertex(pos=(0, 0, VertexDirection.TOP)),
+            Vertex(pos=(0, 0, VertexDirection.TOP_RIGHT)),
+            Vertex(pos=(0, 0, VertexDirection.BOTTOM_RIGHT)),
+            Vertex(pos=(0, 0, VertexDirection.BOTTOM)),
+        ]
+        player.army_size = 2
+        player.development_cards.append(DevelopmentCard(DevelopmentCardType.KNIGHT, playable=True))
+        controller.handle_robber_action = lambda _: None
+
+        controller.play_development_card(player, DevelopmentCardType.KNIGHT)
+
+        self.assertTrue(player.has_largest_army)
+        self.assertTrue(controller.get_game_state().game_over)

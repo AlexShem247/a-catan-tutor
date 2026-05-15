@@ -1,20 +1,22 @@
 import unittest
+from random import Random
 
+from game.Edge import Edge, EdgeDirection
 from game.Game import Game
 from game.Player import Player, PlayerNumber
-from game.PlayerAssets import DevelopmentCardType, DevelopmentCard, DevelopmentDeck
+from game.PlayerAssets import DevelopmentCard, DevelopmentCardType, DevelopmentDeck
 from game.Resources import Resource
-from game.Vertex import Vertex, Port, VertexDirection
-from game.Edge import Edge, EdgeDirection
+from game.Vertex import Port, Vertex, VertexDirection
 
 
 class PlayerTests(unittest.TestCase):
 
     def setUp(self):
         # Create a default human player
+        self.rng = Random(0)
         self.player = Player(is_human=True, player_number=PlayerNumber.P1,
-                             bank_resources=Game.BANK_INITIAL_RESOURCES.copy())
-        self.deck = DevelopmentDeck()
+                             bank_resources=Game.BANK_INITIAL_RESOURCES.copy(), rng=self.rng)
+        self.deck = DevelopmentDeck(self.rng)
 
     def test_initial_state(self):
         # Resources should all be zero
@@ -149,7 +151,7 @@ class PlayerTests(unittest.TestCase):
     def test_deck_composition(self):
         """Check that the deck has the correct number of each card type."""
         counts = {card_type: 0 for card_type in DevelopmentCardType}
-        for card in self.deck._deck:
+        for card in self.deck.cards():
             counts[card.card_type] += 1
 
         self.assertEqual(counts[DevelopmentCardType.KNIGHT], 14)
@@ -160,12 +162,12 @@ class PlayerTests(unittest.TestCase):
 
     def test_draw_and_empty_behavior(self):
         """Test draw() reduces deck size, empty() detects when deck is empty, and drawing empty deck raises."""
-        initial_size = len(self.deck._deck)
+        initial_size = len(self.deck.cards())
 
         # Draw a single card and check size decreases
         card = self.deck.draw()
         self.assertIsNotNone(card)
-        self.assertEqual(len(self.deck._deck), initial_size - 1)
+        self.assertEqual(len(self.deck.cards()), initial_size - 1)
 
         # Draw all remaining cards
         while not self.deck.empty():
@@ -180,7 +182,12 @@ class PlayerTests(unittest.TestCase):
         """Player cannot take more resources than the bank has."""
         # Bank starts with 2 of each resource
         bank_resources = {res: 2 for res in Resource}
-        player = Player(is_human=True, player_number=PlayerNumber.P1, bank_resources=bank_resources.copy())
+        player = Player(
+            is_human=True,
+            player_number=PlayerNumber.P1,
+            bank_resources=bank_resources.copy(),
+            rng=self.rng,
+        )
 
         # Try to add 5 resources when bank only has 2
         player.add_resource(Resource.WOOD, 5)
@@ -193,7 +200,12 @@ class PlayerTests(unittest.TestCase):
         """Player cannot remove more resources than they have."""
         # Bank starts with 2 of each resource
         bank_resources = {res: 2 for res in Resource}
-        player = Player(is_human=True, player_number=PlayerNumber.P1, bank_resources=bank_resources.copy())
+        player = Player(
+            is_human=True,
+            player_number=PlayerNumber.P1,
+            bank_resources=bank_resources.copy(),
+            rng=self.rng,
+        )
 
         # Give player 1 wood first
         player.resources[Resource.WOOD] = 1

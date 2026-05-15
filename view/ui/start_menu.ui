@@ -126,28 +126,53 @@ p, li { white-space: pre-wrap; }
     </spacer>
    </item>
    <item>
-    <widget class="QPushButton" name="help_btn">
-     <property name="minimumSize">
-      <size>
-       <width>0</width>
-       <height>35</height>
-      </size>
-     </property>
-     <property name="font">
-      <font>
-       <pointsize>10</pointsize>
-      </font>
-     </property>
-     <property name="toolTip">
-      <string/>
-     </property>
-     <property name="text">
-      <string>View Catan Rules</string>
-     </property>
-    </widget>
+    <layout class="QHBoxLayout" name="utility_btn_layout">
+     <item>
+      <widget class="QPushButton" name="help_btn">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>35</height>
+        </size>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>10</pointsize>
+        </font>
+       </property>
+       <property name="toolTip">
+        <string/>
+       </property>
+       <property name="text">
+        <string>View Rules</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="settings_btn">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>35</height>
+        </size>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>10</pointsize>
+        </font>
+       </property>
+       <property name="toolTip">
+        <string/>
+       </property>
+       <property name="text">
+        <string>Settings</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
    <item>
-    <widget class="QPushButton" name="play_game_btn">
+    <widget class="QPushButton" name="standard_mode_btn">
      <property name="minimumSize">
       <size>
        <width>0</width>
@@ -163,12 +188,12 @@ p, li { white-space: pre-wrap; }
       <string/>
      </property>
      <property name="text">
-      <string>Play Game</string>
+      <string>Start Game</string>
      </property>
     </widget>
    </item>
    <item>
-    <widget class="QPushButton" name="run_simulation_btn">
+    <widget class="QPushButton" name="tutor_mode_btn">
      <property name="minimumSize">
       <size>
        <width>0</width>
@@ -181,15 +206,15 @@ p, li { white-space: pre-wrap; }
       </font>
      </property>
      <property name="toolTip">
-      <string>Let the AI play the game quickly without stopping to explain its moves.</string>
+      <string/>
      </property>
      <property name="text">
-      <string>Run Quick Simulation</string>
+      <string>Tutor Mode</string>
      </property>
     </widget>
    </item>
    <item>
-    <widget class="QPushButton" name="run_guided_btn">
+    <widget class="QPushButton" name="lab_mode_btn">
      <property name="minimumSize">
       <size>
        <width>0</width>
@@ -202,10 +227,10 @@ p, li { white-space: pre-wrap; }
       </font>
      </property>
      <property name="toolTip">
-      <string>Explore the AI's decision-making by stepping through moves with detailed explanations.</string>
+      <string/>
      </property>
      <property name="text">
-      <string>Run Guided Simulation</string>
+      <string>Lab</string>
      </property>
     </widget>
    </item>

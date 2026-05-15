@@ -1,19 +1,18 @@
-import random
 from enum import Enum, auto
 from math import ceil
-from typing import Optional, List, Tuple, Dict
+from random import Random
+from typing import Dict, List, Optional, Tuple
 
+from ai.actions import Action, ActionType, Phase
 from ai.AI import AI
-from ai.RuleBasedAI import RuleBasedAI
-from ai.ai_utils.actions import Phase, Action, ActionType
+from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
+from game.Edge import Edge
 from game.Game import Game
-from game.PlayerAssets import Buildable, DevelopmentCardType
+from game.HexTile import HexTile
 from game.Player import Player
+from game.PlayerAssets import Buildable, DevelopmentCardType
 from game.Resources import Resource, ResourceCount
 from game.Vertex import Vertex
-from game.Edge import Edge
-from game.HexTile import HexTile
-
 
 USE_OPTIMUM_SETTLEMENT_LOCATION = False
 
@@ -37,19 +36,21 @@ class BasicAI(AI):
         OPPORTUNISTIC_BUILD = auto()
         DEV_PLAYED = auto()
 
-    def __init__(self):
+    def __init__(self, rng: Random):
+        super().__init__(rng)
         self.build_target: Optional[Buildable | False] = None  # None = not yet initialised, False = no target
         self.turn_state: Optional[BasicAI._State] = None
 
     def new_turn(self):
+        """Reset turn-specific state for a new turn."""
         pass
 
     def _get_required_trade_ratio(self, round_num: int) -> int:
-        """Compute AI's required trade ratio based on the round number."""
+        """Return the trade ratio target for the current round."""
         return ceil(1 + (round_num - 1) / self.TOTAL_ROUNDS * (self.MAX_RATIO - 1))
 
     def _select_build_action(self) -> Buildable | bool:
-        """Select a build action based on weighted preferences."""
+        """Choose the next build action to pursue."""
         action_weights = {
             Buildable.CITY: 10,
             Buildable.SETTLEMENT: 8,
@@ -63,21 +64,17 @@ class BasicAI(AI):
             weighted_actions.extend([action] * action_weights[action])
         weighted_actions.extend([False] * action_weights[False])
 
-        return random.choice(weighted_actions)
+        return self.rng.choice(weighted_actions)
 
     def _choose_resources(self, player: Player, num_resources: int) -> ResourceCount:
-        """Randomly select a number of resources from available resources."""
+        """Choose a bundle of resources from the player's hand."""
         total = sum(player.resources.values())
         if total < num_resources:
             return {}
 
-        pool = [
-            resource
-            for resource, count in player.resources.items()
-            for _ in range(count)
-        ]
+        pool = [resource for resource, count in player.resources.items() for _ in range(count)]
 
-        chosen = random.sample(pool, num_resources)
+        chosen = self.rng.sample(pool, num_resources)
 
         result: ResourceCount = {}
         for resource in chosen:
@@ -86,28 +83,33 @@ class BasicAI(AI):
         return result
 
     def _resource_cost(self, resources: ResourceCount) -> int:
-        """Compute total quantity of resources in a ResourceCount dict."""
+        """Return the total card count in a resource bundle."""
         return sum(resources.values())
 
     def _player_trade_weight(self, player: Player) -> float:
-        """Return selection weight for a player in trade decisions."""
+        """Calculate how attractive a player is as a trade partner."""
         return self.HUMAN_BIAS_WEIGHT if player.is_human else self.AI_BIAS_WEIGHT
 
     def _accept_probability(self, over_cost: int) -> float:
-        """Return probability of accepting a counteroffer above estimated cost."""
+        """Calculate the probability of accepting an over-cost trade."""
         if over_cost <= 0:
             return 1.0
         return self.ACCEPT_PROBABILITY_BY_OVERCOST.get(over_cost, 0.0)
 
     def _weighted_pick(self, players: List[Player]) -> Player:
-        """Select a player randomly, weighted by human/AI bias."""
+        """Pick a player using the configured trade weights."""
         weights = [self._player_trade_weight(p) for p in players]
-        return random.choices(players, weights=weights, k=1)[0]
+        return self.rng.choices(players, weights=weights, k=1)[0]
 
-    def choose_trade_partner(self, player: Player, game: "Game", selling: ResourceCount, buying: ResourceCount,
-                             available_players: List[Tuple[Player, Optional[ResourceCount]]],
-                             ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
-        """Select a trade partner or counteroffer from offers the AI can afford."""
+    def choose_trade_partner(
+        self,
+        player: Player,
+        game: "Game",
+        selling: ResourceCount,
+        buying: ResourceCount,
+        available_players: List[Tuple[Player, Optional[ResourceCount]]],
+    ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+        """Choose the trade partner and offer to pursue."""
 
         if not available_players:
             return None
@@ -120,11 +122,7 @@ class BasicAI(AI):
             return chosen, None
 
         # Evaluate counteroffers
-        counters_with_cost = [
-            (p, c, self._resource_cost(c))
-            for (p, c) in available_players
-            if c is not None
-        ]
+        counters_with_cost = [(p, c, self._resource_cost(c)) for (p, c) in available_players if c is not None]
 
         if not counters_with_cost:
             return None
@@ -135,7 +133,7 @@ class BasicAI(AI):
 
         # Acceptance probability
         over_cost = min_cost - self._get_required_trade_ratio(game.round_num)
-        if random.random() > self._accept_probability(over_cost):
+        if self.rng.random() > self._accept_probability(over_cost):
             return None
 
         # Bias toward human if tied
@@ -149,48 +147,36 @@ class BasicAI(AI):
 
         return None
 
-    def _determine_missing_resources(self,
-                                     player_resources: ResourceCount,
-                                     cost: ResourceCount
-                                     ) -> Dict[Resource, int]:
-        """Compute which resources the player lacks for a desired build."""
+    def _determine_missing_resources(self, player_resources: ResourceCount, cost: ResourceCount) -> Dict[Resource, int]:
+        """Identify the resources still needed for the target build."""
         return {
             r: needed - player_resources.get(r, 0)
-            for r, needed in cost.items()
-            if player_resources.get(r, 0) < needed
+            for r, needed in cost.items() if player_resources.get(r, 0) < needed
         }
 
-    def _determine_spare_tradable_resources(self,
-                                            player_resources: ResourceCount,
-                                            cost: ResourceCount,
-                                            required_rate: int
-                                            ) -> Dict[Resource, int]:
-        """Identify spare resources the player can trade without affecting builds."""
+    def _determine_spare_tradable_resources(self, player_resources: ResourceCount, cost: ResourceCount,
+                                            required_rate: int) -> Dict[Resource, int]:
+        """Identify surplus resources that can be traded away."""
         return {
             r: player_resources.get(r, 0)
-            for r in Resource
-            if r not in cost and player_resources.get(r, 0) >= required_rate
+            for r in Resource if r not in cost and player_resources.get(r, 0) >= required_rate
         }
 
     def _select_buying_resource(self, missing_resources: Dict[Resource, int]) -> Optional[Resource]:
-        """Pick a missing resource to buy."""
+        """Choose which missing resource to buy first."""
         if not missing_resources:
             return None
-        return random.choice(list(missing_resources.keys()))
+        return self.rng.choice(list(missing_resources.keys()))
 
     def _select_selling_resource(self, spare_resources: Dict[Resource, int]) -> Optional[Resource]:
-        """Pick a spare resource to sell."""
+        """Choose which spare resource to sell first."""
         if not spare_resources:
             return None
-        return random.choice(list(spare_resources.keys()))
+        return self.rng.choice(list(spare_resources.keys()))
 
-    def determine_trade(self,
-                        player: Player,
-                        cost: ResourceCount,
-                        round_num: int,
-                        bank_rate: int
-                        ) -> Tuple[Optional[Resource], Optional[Resource], int, int]:
-        """Determine trade strategy: what to buy, what to sell, and trade ratios."""
+    def determine_trade(self, player: Player, cost: ResourceCount, round_num: int,
+                        bank_rate: int) -> Tuple[Optional[Resource], Optional[Resource], int, int]:
+        """Determine the best trade to request for the target build."""
         missing = self._determine_missing_resources(player.resources, cost)
         if not missing:
             return None, None, 0, 0
@@ -206,12 +192,12 @@ class BasicAI(AI):
         return buying_resource, selling_resource, bank_rate, ai_buying_rate
 
     def _is_player_trade_better(self, ai_buying_rate: int, bank_rate: int) -> bool:
-        """Check if a player trade is preferable to bank trade."""
+        """Check whether a player trade beats the bank rate."""
         return ai_buying_rate < bank_rate
 
     def select_initial_settlement_location(self, player: Player, game: Game, available_vertices: List[Vertex]) \
             -> Optional[Vertex]:
-        """Select a settlement location from available vertices using a simple heuristic."""
+        """Select the opening settlement location."""
         if not available_vertices:
             return None
 
@@ -233,8 +219,7 @@ class BasicAI(AI):
         existing_resources = {
             tile.resource
             for settlement in player.settlements
-            for tile in settlement.hexes
-            if tile.resource
+            for tile in settlement.hexes if tile.resource
         }
 
         missing_resources = {r for r in Resource} - existing_resources
@@ -244,17 +229,15 @@ class BasicAI(AI):
             if any(tile.resource in missing_resources for tile in v.hexes if tile.resource)
         ]
 
-        return random.choice(candidates if candidates else available_vertices)
+        return self.rng.choice(candidates if candidates else available_vertices)
 
     def select_initial_road_location(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
-        """Select a road location from available edges."""
-        return random.choice(available_edges) if available_edges else None
+        """Select the opening road location."""
+        return self.rng.choice(available_edges) if available_edges else None
 
-    def _select_build_location(self,
-                               buildable_options: Dict[Buildable, List | bool],
-                               action: Buildable
-                               ) -> Optional[Vertex | Edge | bool]:
-        """Select a build location or option for a given build action."""
+    def _select_build_location(self, buildable_options: Dict[Buildable, List | bool],
+                               action: Buildable) -> Optional[Vertex | Edge | bool]:
+        """Choose the build location for the selected piece."""
         if action not in buildable_options:
             return None
 
@@ -266,64 +249,59 @@ class BasicAI(AI):
 
         # For other actions, expect a list of locations
         if isinstance(value, list) and value:
-            return random.choice(value)
+            return self.rng.choice(value)
 
         return None
 
     def _decide_dev_card_usage(self, player: Player) -> Optional[DevelopmentCardType]:
-        """Decide which playable development card to use, if any."""
+        """Choose whether to play a development card this turn."""
         playable_cards = [c.card_type for c in player.development_cards if c.playable]
 
-        if playable_cards and random.random() < 0.3:
-            return random.choice(playable_cards)
+        if playable_cards and self.rng.random() < 0.3:
+            return self.rng.choice(playable_cards)
         return None
 
-    def select_robber_target(self,
-                             player: Player,
-                             game: Game,
-                             valid_hexes: List[HexTile],
-                             ) -> Tuple[HexTile, Optional[Player]]:
-        """Select a hex for the robber and a player to steal from, if any."""
+    def select_robber_target(
+        self,
+        player: Player,
+        game: Game,
+        valid_hexes: List[HexTile],
+    ) -> Tuple[HexTile, Optional[Player]]:
+        """Select the robber placement and steal target."""
         # Filter hexes that have at least one stealable opponent
         stealable_hexes = [
             hex_tile for hex_tile in valid_hexes
-            if any(
-                p != player and p.has_resources()
-                for p in game.get_players_on_hex(hex_tile)
-            )
+            if any(p != player and p.has_resources() for p in game.get_players_on_hex(hex_tile))
         ]
 
         if stealable_hexes:
             # Pick a random hex where stealing is possible
-            hex_tile = random.choice(stealable_hexes)
+            hex_tile = self.rng.choice(stealable_hexes)
 
-            stealable_players = [
-                p for p in game.get_players_on_hex(hex_tile)
-                if p != player and p.has_resources()
-            ]
+            stealable_players = [p for p in game.get_players_on_hex(hex_tile) if p != player and p.has_resources()]
 
-            target_player = random.choice(stealable_players)
+            target_player = self.rng.choice(stealable_players)
             return hex_tile, target_player
 
         # Otherwise, move robber to any other valid hex (no stealing)
-        hex_tile = random.choice(valid_hexes)
+        hex_tile = self.rng.choice(valid_hexes)
         return hex_tile, None
 
     def select_discard_resources(self, player: Player, game: Game, num_resources: int) -> ResourceCount:
-        """Select resources to discard when required."""
+        """Select the resources to discard."""
         return self._choose_resources(player, num_resources)
 
     def select_year_of_plenty_resources(self, player: Player, game: Game) -> ResourceCount:
-        """Select two resources for a Year of Plenty card."""
+        """Select the resources to take from Year of Plenty."""
         return self._choose_resources(player, 2)
 
     def select_monopoly_resource(self, player: Player, game: Game) -> Resource:
-        """Select a resource for a Monopoly card."""
-        return random.choice(list(Resource))
+        """Select the resource to claim with Monopoly."""
+        return self.rng.choice(list(Resource))
 
     def respond_to_trade(self, player: Player, game: "Game", opponent: Player, selling: ResourceCount,
                          buying: ResourceCount) -> Tuple[bool, Optional[ResourceCount]]:
-        """Decide whether to accept or counter a trade, assuming AI can afford it."""
+        """Decide how to respond to a trade offer."""
 
         # 1. AI expected trade ratio for this round
         required_ratio = self._get_required_trade_ratio(game.round_num)
@@ -337,7 +315,7 @@ class BasicAI(AI):
 
         # 3. Decide to accept probabilistically
         prob = self.ACCEPT_PROBABILITY_BY_OVERCOST.get(over_cost_int, 0.0)
-        if random.random() < prob:
+        if self.rng.random() < prob:
             return True, None  # Accept trade as-is
 
         # 4. Generate a simple counteroffer if AI wants more
@@ -353,7 +331,7 @@ class BasicAI(AI):
         return False, None
 
     def next_action(self, player: Player, game: Game, phase: Phase, dev_played: bool) -> Action:
-        """Decide the next atomic action for BasicAI this turn."""
+        """Choose the next action for the current turn state."""
         if phase == Phase.PRE_ROLL:
             # Start of a new turn: reset planning state
             self.build_target = None
@@ -395,10 +373,7 @@ class BasicAI(AI):
         # 2. Planned build
         if self.turn_state == self._State.TRADE_DONE:
             if self.build_target is not False:
-                selection = self._select_build_location(
-                    game.get_buildable_options(player),
-                    self.build_target
-                )
+                selection = self._select_build_location(game.get_buildable_options(player), self.build_target)
                 if selection is True:
                     self.turn_state = self._State.BUILD_DONE
                     return Action(ActionType.BUY_DEV_CARD)
@@ -418,7 +393,7 @@ class BasicAI(AI):
                 self.turn_state = self._State.BUILD_DONE
                 if buildable == Buildable.DEVELOPMENT_CARD:
                     return Action(ActionType.BUY_DEV_CARD)
-                loc = random.choice(locs) if isinstance(locs, list) else locs
+                loc = self.rng.choice(locs) if isinstance(locs, list) else locs
                 return Action(ActionType.BUILD, (buildable, loc))
 
         # 4. Dev card phase
@@ -426,13 +401,14 @@ class BasicAI(AI):
             self.turn_state = self._State.DEV_PLAYED
             playable_cards = [c.card_type for c in player.development_cards if c.playable]
             if playable_cards and not dev_played:
-                return Action(ActionType.PLAY_DEV_CARD, random.choice(playable_cards))
+                return Action(ActionType.PLAY_DEV_CARD, self.rng.choice(playable_cards))
 
         # 5. End turn
         return Action(ActionType.END_TURN)
 
     def trade_turn(self, player: Player, round_num: int) -> Optional[Action]:
         # Suppress trade if the build target is already affordable
+        """Choose a trade action for the current turn."""
         if self.build_target and self.build_target is not False:
             if player.can_afford(Game.BUILDING_COST[self.build_target]):
                 return None

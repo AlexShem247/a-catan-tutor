@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Literal, Dict, TypeAlias
+from typing import Dict, Literal, TypeAlias
 
 
 class HexType(Enum):

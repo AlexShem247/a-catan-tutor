@@ -1,0 +1,52 @@
+from typing import List
+
+from ai.actions import Action, ActionType
+from ai.simulation.SimPlayerState import SimPlayerState
+from config.performance_constants import EPSILON
+from game.Game import Game
+from game.PlayerAssets import Buildable
+from game.Resources import Resource, ResourceCount
+from game.Vertex import Port, Vertex
+
+
+def expected_rolls_for_resource(player: SimPlayerState, resource: Resource) -> float:
+    """Estimate expected rolls to gain a resource."""
+    fr = player.get_production_rate(resource)
+
+    if fr <= EPSILON:
+        return float("inf")  # Cannot produce this resource
+
+    # Expected rolls to get one unit
+    return 1 / fr
+
+
+def calc_step_resources(step: Action) -> ResourceCount:
+    """Return the resource effect of an action step."""
+    total_resources = {res: 0 for res in Resource}
+    if step.type == ActionType.BUILD:
+        building: Buildable = step.payload[0]
+        for res, cost in Game.BUILDING_COST[building].items():
+            total_resources[res] = total_resources.get(res, 0) + cost
+    elif step.type == ActionType.BUY_DEV_CARD:
+        total_resources = Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD]
+
+    return total_resources
+
+
+def get_bank_trade_ratio(buildings: List[Vertex], resource: Resource) -> int:
+    """Return the bank trade ratio for a resource."""
+
+    # Get all ports the player controls
+    controlled_ports = {v.port for v in buildings if v.port}
+
+    # Check for specific 2:1 port for this resource
+    specific_port = Port.resource_to_port(resource)
+    if specific_port in controlled_ports:
+        return 2
+
+    # Check for generic 3:1 port
+    if Port.THREE_TO_ONE in controlled_ports:
+        return 3
+
+    # Default bank rate
+    return 4

@@ -1,13 +1,13 @@
-from enum import IntEnum, Enum
-from typing import List, Optional, TYPE_CHECKING, Tuple, Set
+from enum import Enum, IntEnum
+from typing import TYPE_CHECKING, List, Optional, Set, Tuple
 
 from game.HexTile import HexTile
 from game.PlayerAssets import Building
 from game.Resources import Resource
 
 if TYPE_CHECKING:
-    from game.Player import Player
     from game.Edge import Edge
+    from game.Player import Player
 
 
 class VertexDirection(IntEnum):
@@ -29,7 +29,7 @@ class Port(Enum):
 
     @classmethod
     def resource_to_port(cls, resource: Resource) -> Optional["Port"]:
-        """Convert a Resource to its corresponding 2:1 Port, if any."""
+        """Convert a resource type into its matching port type."""
         resource_to_port = {
             Resource.WOOD: cls.WOOD,
             Resource.BRICK: cls.BRICK,
@@ -41,6 +41,7 @@ class Port(Enum):
 
 
 class Vertex:
+
     def __init__(self, pos: Tuple[int, int, VertexDirection]):
         self.hexes: List[HexTile] = []
         self.edges: List[Edge] = []
@@ -50,11 +51,12 @@ class Vertex:
         self.port: Optional[Port] = None
 
     def get_pos(self) -> str:
+        """Return the board position label for this object."""
         q, r, direction = self.pos
         return f"{q}, {r}, {direction.name.title().replace('_', ' ')}"
 
     def get_neighbours(self) -> Set["Vertex"]:
-        """Returns the set of vertices that share an edge with this vertex."""
+        """Return the neighboring vertices connected by edges."""
         neighbor_vertices = set()
         for edge in self.edges:
             # Add the other vertex of the edge
@@ -65,7 +67,7 @@ class Vertex:
         return neighbor_vertices
 
     def get_edge_between(self, neighbour: "Vertex") -> Optional["Edge"]:
-        """Returns the Edge object connecting this vertex to the neighbour, if it exists."""
+        """Return the edge connecting this vertex to the neighbor."""
         for edge in self.edges:
             if edge.vertices[0] == neighbour or edge.vertices[1] == neighbour:
                 return edge

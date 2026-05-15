@@ -52,7 +52,7 @@
         <string notr="true">font-weight: bold;</string>
        </property>
        <property name="text">
-        <string>🎓 Tutor Window</string>
+        <string>Tutor Window</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -157,36 +157,53 @@ p, li { white-space: pre-wrap; }
       </widget>
      </item>
      <item>
-      <layout class="QHBoxLayout" name="action_btn_layout">
+      <layout class="QVBoxLayout" name="verticalLayout_3">
        <item>
-        <widget class="QPushButton" name="explain_btn">
-         <property name="minimumSize">
-          <size>
-           <width>0</width>
-           <height>80</height>
-          </size>
-         </property>
-         <property name="toolTip">
-          <string/>
-         </property>
-         <property name="text">
-          <string>Why this move?</string>
-         </property>
-        </widget>
+        <layout class="QHBoxLayout" name="action_btn_layout">
+         <item>
+          <widget class="QPushButton" name="explain_btn">
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>80</height>
+            </size>
+           </property>
+           <property name="toolTip">
+            <string/>
+           </property>
+           <property name="text">
+            <string>Why this move?</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="continue_btn">
+           <property name="minimumSize">
+            <size>
+             <width>0</width>
+             <height>80</height>
+            </size>
+           </property>
+           <property name="toolTip">
+            <string/>
+           </property>
+           <property name="text">
+            <string>Continue</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
        </item>
        <item>
-        <widget class="QPushButton" name="continue_btn">
+        <widget class="QPushButton" name="previous_feedback_btn">
          <property name="minimumSize">
           <size>
            <width>0</width>
-           <height>80</height>
+           <height>40</height>
           </size>
          </property>
-         <property name="toolTip">
-          <string/>
-         </property>
          <property name="text">
-          <string>Continue</string>
+          <string>Previous Feedback</string>
          </property>
         </widget>
        </item>

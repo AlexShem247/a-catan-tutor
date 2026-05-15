@@ -1,6 +1,6 @@
 from collections import defaultdict
-from random import randint
-from typing import List, Optional, Dict, Tuple, Type
+from random import Random
+from typing import Callable, Dict, List, Optional, Tuple
 
 from ai.AI import AI
 from game.Board import Board
@@ -9,55 +9,70 @@ from game.HexTile import HexTile
 from game.Player import Player, PlayerNumber
 from game.PlayerAssets import Buildable, DevelopmentDeck
 from game.Resources import Resource, ResourceCount
-from game.Vertex import Building, Vertex, VertexDirection, Port
+from game.Vertex import Building, Port, Vertex, VertexDirection
 
-PlayerConfig = Dict[PlayerNumber, Optional[Type[AI]]]
+PlayerPolicyFactory = Callable[[Random], AI]
+PlayerConfig = Dict[PlayerNumber, Optional[PlayerPolicyFactory]]
 
 
 class Game:
     # Resource cost for each building type
     BUILDING_COST: Dict[Buildable, ResourceCount] = {
-        Buildable.ROAD: {Resource.WOOD: 1, Resource.BRICK: 1},
-        Buildable.SETTLEMENT: {
-            Resource.WOOD: 1, Resource.BRICK: 1, Resource.SHEEP: 1, Resource.WHEAT: 1
+        Buildable.ROAD: {
+            Resource.WOOD: 1,
+            Resource.BRICK: 1
         },
-        Buildable.CITY: {Resource.ORE: 3, Resource.WHEAT: 2},
-        Buildable.DEVELOPMENT_CARD: {Resource.ORE: 1, Resource.SHEEP: 1, Resource.WHEAT: 1}
+        Buildable.SETTLEMENT: {
+            Resource.WOOD: 1,
+            Resource.BRICK: 1,
+            Resource.SHEEP: 1,
+            Resource.WHEAT: 1
+        },
+        Buildable.CITY: {
+            Resource.ORE: 3,
+            Resource.WHEAT: 2
+        },
+        Buildable.DEVELOPMENT_CARD: {
+            Resource.ORE: 1,
+            Resource.SHEEP: 1,
+            Resource.WHEAT: 1
+        }
     }
 
     BANK_INITIAL_RESOURCES: ResourceCount = {
-        Resource.WOOD: 19, Resource.BRICK: 19, Resource.SHEEP: 19, Resource.WHEAT: 19, Resource.ORE: 19,
+        Resource.WOOD: 19,
+        Resource.BRICK: 19,
+        Resource.SHEEP: 19,
+        Resource.WHEAT: 19,
+        Resource.ORE: 19,
     }
 
     VICTORY_POINTS_TO_WIN = 10
     ROBBER_DICE_NUM = 7
 
-    def __init__(self, player_config: PlayerConfig):
+    def __init__(self, player_config: PlayerConfig, rng: Random):
+        self.rng = rng
         self.bank_resources: Dict[Resource, int] = self.BANK_INITIAL_RESOURCES.copy()
 
         self.players = [
-            Player(
-                is_human=policy_cls is None,
-                player_number=num,
-                bank_resources=self.bank_resources,
-                policy=None if policy_cls is None else policy_cls()
-            )
-            for num, policy_cls in player_config.items()
-            ]
+            Player(is_human=policy_factory is None, player_number=num, bank_resources=self.bank_resources, rng=self.rng,
+                   policy=None if policy_factory is None else policy_factory(self.rng))
+            for num, policy_factory in player_config.items()
+        ]
 
-        self._board = Board()
-        self.development_deck = DevelopmentDeck()
+        self._board = Board(self.rng)
+        self.development_deck = DevelopmentDeck(self.rng)
         self.game_over = False
         self.round_num = 1
 
     def can_afford(self, player: Player, building_type: Buildable) -> bool:
-        """Check if the player has enough resources to build the given type."""
+        """Check whether the player can afford the given cost."""
         cost = self.BUILDING_COST[building_type]
         return all(player.resources.get(res, 0) >= amt for res, amt in cost.items())
 
     def roll_dice(self) -> Tuple[int, int, int]:
-        """Roll two dice and distribute resources to players."""
-        d1, d2 = randint(1, 6), randint(1, 6)
+        """Roll the dice and distribute produced resources."""
+        d1, d2 = self.rng.randint(1, 6), self.rng.randint(1, 6)
         total = d1 + d2
 
         # 1. Aggregate production demands per player per resource
@@ -93,10 +108,7 @@ class Game:
         return d1, d2, total
 
     def get_buildable_options(self, player: Player) -> Dict:
-        """
-        Returns dict of possible Buildable actions and valid board locations.
-        Empty list if player cannot afford or no legal space.
-        """
+        """Return the current buildable options for the player."""
         options = {Buildable.ROAD: [], Buildable.SETTLEMENT: [], Buildable.CITY: [], Buildable.DEVELOPMENT_CARD: False}
 
         # Roads
@@ -119,7 +131,7 @@ class Game:
         return options
 
     def get_trade_rate(self, player: Player, resource: Resource) -> int:
-        """Return the best trade rate for 'player' when selling 'resource'."""
+        """Return the bank trade rate for the given resource."""
         player_ports = player.get_ports()
 
         # Try specific 2:1 port first
@@ -136,11 +148,9 @@ class Game:
 
         return 4
 
-    def try_trade_with_bank(
-            self, player: Player, selling: ResourceCount,
-            buying: ResourceCount, use_resources: bool = True
-    ) -> bool:
-        """Attempt a bank trade using correct port discounts (2:1, 3:1, 4:1)."""
+    def try_trade_with_bank(self, player: Player, selling: ResourceCount, buying: ResourceCount,
+                            use_resources: bool = True) -> bool:
+        """Try to perform a bank trade for the player."""
 
         # Filter zeros
         selling_nonzero = {r: amt for r, amt in selling.items() if amt > 0}
@@ -168,15 +178,15 @@ class Game:
         return True
 
     def try_build_settlement(
-            self,
-            player: Player,
-            vertex: Vertex,
-            build: bool = True,
-            use_resources: bool = True,
-            road_restriction: bool = True,
-            gain_resources: bool = False,
+        self,
+        player: Player,
+        vertex: Vertex,
+        build: bool = True,
+        use_resources: bool = True,
+        road_restriction: bool = True,
+        gain_resources: bool = False,
     ) -> Tuple[bool, str]:
-        """Attempt to build a settlement with rules enforced."""
+        """Try to build a settlement for the player."""
         if vertex.owner is not None or vertex.building is not None:
             if vertex.owner:
                 return False, f"Vertex already owned by {vertex.owner.name}"
@@ -204,14 +214,9 @@ class Game:
 
         return True, f"Settlement built at {vertex}"
 
-    def try_build_city(
-            self,
-            player: Player,
-            vertex: Vertex,
-            build: bool = True,
-            use_resources: bool = True
-    ) -> Tuple[bool, str]:
-        """Attempt to upgrade a settlement to a city."""
+    def try_build_city(self, player: Player, vertex: Vertex, build: bool = True,
+                       use_resources: bool = True) -> Tuple[bool, str]:
+        """Try to build a city for the player."""
         if vertex.owner != player:
             return False, f"Vertex is owned by {vertex.owner.name if vertex.owner else 'nobody'}"
         if vertex.building != Building.SETTLEMENT:
@@ -226,15 +231,9 @@ class Game:
 
         return True, f"City built at {vertex}"
 
-    def try_build_road(
-            self,
-            player: Player,
-            edge: Edge,
-            on_vertex: Optional[Vertex] = None,
-            build: bool = True,
-            use_resources: bool = True
-    ) -> Tuple[bool, str]:
-        """Attempt to build a road with rules enforced."""
+    def try_build_road(self, player: Player, edge: Edge, on_vertex: Optional[Vertex] = None, build: bool = True,
+                       use_resources: bool = True) -> Tuple[bool, str]:
+        """Try to build a road for the player."""
 
         def _finalise() -> Tuple[bool, str]:
             if build:
@@ -277,7 +276,7 @@ class Game:
         return False, f"Cannot build road: no adjacent settlement or connecting road. Vertices: {v_info}"
 
     def _update_longest_road_ownership(self) -> None:
-        """Update the longest road ownership across all players."""
+        """Recalculate longest road ownership and awards."""
         # Recalculate for all players (in case roads were broken by settlements)
         for p in self.players:
             p.longest_road_length = self._board.calculate_longest_road_length(p.roads)
@@ -315,7 +314,7 @@ class Game:
         self.update_best_opponent_victory_points()
 
     def update_best_opponent_victory_points(self) -> None:
-        """Update best_opponents_victory_point for all players."""
+        """Refresh the tracked best opponent victory-point total."""
         # Calculate victory points for all players
         player_vp = {player: player.calc_victory_points()[0] for player in self.players}
 
@@ -329,24 +328,24 @@ class Game:
                 self.game_over = True
 
     def get_row_hexes(self, r: int) -> List[HexTile]:
-        """Return a list of hex tiles in row r, sorted by their q coordinate."""
+        """Return all hexes in the given row."""
         return sorted([h for h in self._board.hexes if h.r == r], key=lambda h: h.q)
 
     def get_hex_tile(self, q: int, r: int) -> Optional[HexTile]:
-        """Return the HexTile object for hex (q,r)."""
+        """Return the hex tile at the given coordinates."""
         return self._board.hex_map.get((q, r))
 
     def get_vertex(self, q: int, r: int, corner_index: VertexDirection) -> Optional[Vertex]:
-        """Return the Vertex object for hex (q,r) at corner_index 0-5."""
+        """Return the vertex at the given board position."""
         return self._board.vertex_map.get((q, r, corner_index))
 
     def get_edge(self, q: int, r: int, edge_index: EdgeDirection) -> Optional[Edge]:
-        """Return the Edge object for hex (q,r) at edge_index 0-5."""
+        """Return the edge at the given board position."""
         return self._board.edge_map.get((q, r, edge_index))
 
     def get_available_vertices(self, player: Player, building_type: Buildable, road_restriction: bool = True) -> \
             List[Vertex]:
-        """Return a list of vertices where the player can build a settlement or city, respecting limits."""
+        """Return the vertices available for the requested build."""
 
         available: List[Vertex] = []
 
@@ -356,9 +355,7 @@ class Game:
                 return []
 
             for vertex in self._board.vertices:
-                success, _ = self.try_build_settlement(
-                    player, vertex, build=False, road_restriction=road_restriction
-                )
+                success, _ = self.try_build_settlement(player, vertex, build=False, road_restriction=road_restriction)
                 if success:
                     available.append(vertex)
 
@@ -375,7 +372,7 @@ class Game:
         return available
 
     def get_available_edges(self, player: Player) -> List[Edge]:
-        """Return a list of edges where the player can legally build a road."""
+        """Return the edges available for road building."""
         # Check if player has already built the maximum number of roads
         if len(player.roads) >= Buildable.ROAD.value[1]:  # ROAD.value[1] is max count
             return []
@@ -389,12 +386,12 @@ class Game:
         return available
 
     def get_buildable_edges_for_vertex(self, vertex: Vertex) -> List[Edge]:
-        """Return edges adjacent to a vertex where the player can build a road."""
+        """Return the buildable edges connected to the vertex."""
         return [e for e in vertex.edges if self.try_build_road(vertex.owner, e, build=False)[0]]
 
-    def trade_between_players(self, player: Player, selling: ResourceCount,
-                              buying_player: Player, buying: ResourceCount):
-        """Execute a trade of resources between two players."""
+    def trade_between_players(self, player: Player, selling: ResourceCount, buying_player: Player,
+                              buying: ResourceCount):
+        """Execute a resource trade between two players."""
 
         # Give resources from the selling player
         player.remove_resources(selling)
@@ -405,52 +402,61 @@ class Game:
         player.add_resources(buying)
 
     def set_robber(self, tile: HexTile):
-        """Replace the robber tile with 'tile'"""
+        """Move the robber to the given hex tile."""
         self._board.robber_position.robber = False
         self._board.robber_position = tile
         self._board.robber_position.robber = True
 
     def get_players_on_hex(self, hex_tile: HexTile) -> List[Player]:
-        """Return a list of players who own a settlement or city on the given hex tile."""
-        return list(set([v.owner for v in hex_tile.vertices if v.owner is not None]))
+        """Return the players with buildings on the given hex."""
+        players_on_hex: List[Player] = []
+        seen_player_numbers = set()
+        for vertex in hex_tile.vertices:
+            owner = vertex.owner
+            if owner is None or owner.player_number in seen_player_numbers:
+                continue
+            seen_player_numbers.add(owner.player_number)
+            players_on_hex.append(owner)
+        return players_on_hex
 
     def get_all_hexes(self) -> List[HexTile]:
-        """Return a list of all hex tiles on the board."""
+        """Return all board hex tiles."""
         return self._board.hexes
 
     def get_all_vertices(self) -> List[Vertex]:
-        """Return a list of all vertices on the board."""
+        """Return all board vertices."""
         return self._board.vertices
 
     def get_all_edges(self) -> List[Edge]:
-        """Return a list of all edges on the board."""
+        """Return all board edges."""
         return self._board.edges
 
     def get_hex_tiles_with_players(self):
-        """Return a list of hex tiles that have at least one player on them."""
+        """Return hex tiles that currently have player buildings."""
         return [h for h in self._board.hexes if self.get_players_on_hex(h)]
 
     def get_robber_tile(self) -> HexTile:
-        """Returns the robber's current position"""
+        """Return the hex tile that currently contains the robber."""
         return self._board.robber_position
 
     def try_buy_development_card(self, player) -> Tuple[bool, str]:
-        """Attempt to buy a development card for a player."""
+        """Try to buy a development card for the player."""
         if self.development_deck.empty():
             return False, "There are no more development cards"
 
         card = self.development_deck.draw()
         player.development_cards.append(card)
         player.remove_resources(Game.BUILDING_COST[Buildable.DEVELOPMENT_CARD])
+        self.update_best_opponent_victory_points()
 
         return True, f"You got a {card.card_type.name.replace('_', ' ').capitalize()} card!"
 
     def get_ports(self) -> List[Tuple[Port, Vertex, Vertex]]:
-        """Returns the list of ports and their position"""
+        """Return the board ports and their attached vertices."""
         return self._board.port_vertices
 
     def count_player_buildings(self, player: Player, hex_tile: HexTile) -> int:
-        """Counts how many resource units a player produces on this hex."""
+        """Count the player buildings adjacent to the hex tile."""
 
         count = 0
         for vertex in hex_tile.vertices:

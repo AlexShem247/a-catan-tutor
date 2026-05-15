@@ -1,12 +1,13 @@
-from typing import List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
-from game.Resources import HexType, HEX_TO_RESOURCE, Resource
+from game.Resources import HEX_TO_RESOURCE, HexType, Resource
 
 if TYPE_CHECKING:
     from game.Vertex import Vertex
 
 
 class HexTile:
+
     def __init__(self, q: int, r: int, hex_type: HexType, production_number: Optional[int] = None):
         self.q: int = q
         self.r: int = r

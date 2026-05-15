@@ -1,34 +1,30 @@
-import random
 from collections import defaultdict
-from typing import List, Optional, Dict, Tuple, Set
+from random import Random
+from typing import Dict, List, Optional, Set, Tuple
 
 from game.Edge import Edge, EdgeDirection
 from game.HexTile import HexTile, HexType
 from game.Player import Player
-from game.Vertex import Vertex, VertexDirection, Building, Port
+from game.Vertex import Building, Port, Vertex, VertexDirection
 
-PRODUCTION_NUMBERS = [2, 3, 3, 4, 4, 5, 5, 6, 6,
-                      8, 8, 9, 9, 10, 10, 11, 11, 12]
+PRODUCTION_NUMBERS = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 11, 12]
 
 PORT_TYPES = [
-    Port.THREE_TO_ONE, Port.THREE_TO_ONE, Port.THREE_TO_ONE, Port.THREE_TO_ONE,
-    Port.BRICK, Port.WOOD, Port.SHEEP, Port.WHEAT, Port.ORE
+    Port.THREE_TO_ONE, Port.THREE_TO_ONE, Port.THREE_TO_ONE, Port.THREE_TO_ONE, Port.BRICK, Port.WOOD, Port.SHEEP,
+    Port.WHEAT, Port.ORE
 ]
 
 
 class Board:
     # Catan tile coordinates for 3-4-5-4-3 layout
-    HEX_COORDS: List[Tuple[int, int]] = [
-        (0, 0), (1, 0), (2, 0),
-        (-1, 1), (0, 1), (1, 1), (2, 1),
-        (-2, 2), (-1, 2), (0, 2), (1, 2), (2, 2),
-        (-2, 3), (-1, 3), (0, 3), (1, 3),
-        (-2, 4), (-1, 4), (0, 4)
-    ]
+    HEX_COORDS: List[Tuple[int, int]] = [(0, 0), (1, 0), (2, 0), (-1, 1), (0, 1), (1, 1), (2, 1), (-2, 2), (-1, 2),
+                                         (0, 2), (1, 2), (2, 2), (-2, 3), (-1, 3), (0, 3), (1, 3), (-2, 4), (-1, 4),
+                                         (0, 4)]
     MIN_R: int = 0
     MAX_R: int = 4
 
-    def __init__(self):
+    def __init__(self, rng: Random):
+        self.rng = rng
         self.hexes: List[HexTile] = []
         self.vertices: List[Vertex] = []
         self.edges: List[Edge] = []
@@ -45,16 +41,14 @@ class Board:
         self.assign_neighbors()
 
     def create_hexes(self) -> None:
+        """Create and assign the board hex tiles."""
         hex_types_sequence: List[HexType] = [
-            HexType.FOREST, HexType.FOREST, HexType.FOREST, HexType.FOREST,
-            HexType.HILLS, HexType.HILLS, HexType.HILLS,
-            HexType.PASTURE, HexType.PASTURE, HexType.PASTURE, HexType.PASTURE,
-            HexType.FIELDS, HexType.FIELDS, HexType.FIELDS, HexType.FIELDS,
-            HexType.MOUNTAINS, HexType.MOUNTAINS, HexType.MOUNTAINS,
-            HexType.DESERT
+            HexType.FOREST, HexType.FOREST, HexType.FOREST, HexType.FOREST, HexType.HILLS, HexType.HILLS, HexType.HILLS,
+            HexType.PASTURE, HexType.PASTURE, HexType.PASTURE, HexType.PASTURE, HexType.FIELDS, HexType.FIELDS,
+            HexType.FIELDS, HexType.FIELDS, HexType.MOUNTAINS, HexType.MOUNTAINS, HexType.MOUNTAINS, HexType.DESERT
         ]
 
-        random.shuffle(hex_types_sequence)
+        self.rng.shuffle(hex_types_sequence)
         numbers = PRODUCTION_NUMBERS.copy()
 
         def get_adjacent_coords(q_val: int, r_val: int) -> List[Tuple[int, int]]:
@@ -64,7 +58,7 @@ class Board:
 
         def assign_number(q_val: int, r_val: int, available: List[int]) -> Optional[int]:
             # Assign numbers with constraint that 6/8 are not adjacent
-            random.shuffle(available)
+            self.rng.shuffle(available)
             for number in available:
                 if number in (6, 8):
                     conflict = False
@@ -102,6 +96,7 @@ class Board:
                 self.production_to_hex[production_number].append(hex_tile)
 
     def create_vertices(self) -> None:
+        """Create the board vertices and attach them to hexes."""
         vertex_map: Dict[Tuple[Tuple[int, int], ...], Vertex] = {}
 
         # Axial offsets for corners of a pointy-top hex
@@ -116,8 +111,8 @@ class Board:
 
         for hex_tile in self.hexes:
             for idx, corner in enumerate(corner_offsets):
-                key: Tuple[Tuple[int, int], ...] = tuple(
-                    sorted([(hex_tile.q + dq, hex_tile.r + dr) for dq, dr in corner]))
+                key: Tuple[Tuple[int, int],
+                           ...] = tuple(sorted([(hex_tile.q + dq, hex_tile.r + dr) for dq, dr in corner]))
                 if key not in vertex_map:
                     vertex = Vertex((hex_tile.q, hex_tile.r, VertexDirection(idx)))
                     vertex_map[key] = vertex
@@ -132,6 +127,7 @@ class Board:
                 self.vertex_map[(hex_tile.q, hex_tile.r, VertexDirection(idx))] = vertex
 
     def create_edges(self) -> None:
+        """Create the board edges and connect them to vertices."""
         edge_map: Dict[Tuple[int, int], Edge] = {}
 
         for hex_tile in self.hexes:
@@ -165,7 +161,7 @@ class Board:
         blocked_edges = set()
 
         ports = PORT_TYPES[:]
-        random.shuffle(ports)
+        self.rng.shuffle(ports)
 
         for port in ports:
             candidates = [i for i in available_edges if i not in blocked_edges]
@@ -174,7 +170,7 @@ class Board:
                 # No legal placement left
                 break
 
-            i = random.choice(candidates)
+            i = self.rng.choice(candidates)
 
             edge = water_edges[i]
             v1, v2 = edge.vertices
@@ -182,12 +178,18 @@ class Board:
             self.port_vertices.append((port, v1, v2))
 
             # Block this edge ±2 to enforce 2-edge spacing
-            blocked_edges.update({i, (i - 1) % num_edges, (i + 1) % num_edges,
-                                  (i - 2) % num_edges, (i + 2) % num_edges, })
+            blocked_edges.update({
+                i,
+                (i - 1) % num_edges,
+                (i + 1) % num_edges,
+                (i - 2) % num_edges,
+                (i + 2) % num_edges,
+            })
 
             available_edges.remove(i)
 
     def assign_neighbors(self) -> None:
+        """Link neighboring vertices across the board."""
         directions: List[Tuple[int, int]] = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]
         for hex_tile in self.hexes:
             for dq, dr in directions:
@@ -196,24 +198,24 @@ class Board:
                     hex_tile.neighbors.append(neighbor)
 
     def build_settlement(self, vertex: Vertex, player: Player) -> None:
-        """Directly build a settlement at the vertex, ignoring validation."""
+        """Build a settlement for the player on the given vertex."""
         vertex.owner = player
         vertex.building = Building.SETTLEMENT
         player.add_settlement(vertex)
 
     def build_city(self, vertex: Vertex, player: Player) -> None:
-        """Directly upgrade a settlement to a city, ignoring validation."""
+        """Upgrade the given settlement to a city."""
         vertex.building = Building.CITY
         player.add_city(vertex)
 
     def build_road(self, edge: Edge, player: Player) -> None:
-        """Directly assign ownership of a road, ignoring validation."""
+        """Build a road for the player on the given edge."""
         edge.owner = player
         player.add_road(edge)
 
     @staticmethod
     def calculate_longest_road_length(roads: List[Edge]) -> int:
-        """Calculate the longest continuous road length for a player."""
+        """Calculate the longest connected road length."""
         if not roads:
             return 0
 
@@ -237,9 +239,8 @@ class Board:
         return max_length
 
     @staticmethod
-    def _dfs_longest_path(current_road: Edge, current_vertex: Vertex,
-                          road_graph: Dict, visited_roads: Set) -> int:
-        """DFS to find the longest path from current position."""
+    def _dfs_longest_path(current_road: Edge, current_vertex: Vertex, road_graph: Dict, visited_roads: Set) -> int:
+        """Explore road paths to find the longest valid route."""
         visited_roads.add(current_road)
         max_length = 1  # Current road counts as 1
 
@@ -263,20 +264,16 @@ class Board:
 
     @staticmethod
     def _is_road_blocked(vertex: Vertex, player: Player) -> bool:
-        """Check if a road connection is blocked by opponent's building."""
+        """Check whether a road path is blocked at the vertex."""
         # If vertex has a building owned by another player, it blocks the path
         return vertex.owner is not None and vertex.owner != player
 
     def _get_water_edges(self) -> List[Edge]:
-        """Returns the edges that are on the edge of the map"""
+        """Return the water-facing edges on the board perimeter."""
         WIDTH = 6  # Edges in a hexagon
         directions = [
-            t
-            for i in range(2, WIDTH + 2)
-            for t in [
-                ((i - 2) % WIDTH, (i - 1) % WIDTH),
-                ((i - 2) % WIDTH, (i - 1) % WIDTH, i % WIDTH)
-            ]
+            t for i in range(2, WIDTH + 2)
+            for t in [((i - 2) % WIDTH, (i - 1) % WIDTH), ((i - 2) % WIDTH, (i - 1) % WIDTH, i % WIDTH)]
         ]
 
         # Get all hexes grouped by row
