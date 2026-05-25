@@ -4,6 +4,7 @@ from PySide6.QtCore import QEvent, QObject, Qt, Signal
 from PySide6.QtGui import QIcon, QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import (
     QAbstractButton,
+    QAbstractScrollArea,
     QApplication,
     QButtonGroup,
     QFrame,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QToolButton,
     QVBoxLayout,
     QWidget,
+    QScroller,
 )
 
 from ai.actions import Action, ActionType
@@ -170,6 +172,7 @@ class MainWindow(QMainWindow):
 
         self._apply_player_colour_indicators()
         self._apply_touch_friendly_button_sizes()
+        self._enable_touch_scrolling()
         self.settings_panel.capture_font_baselines()
         self.settings_panel.load_settings_into_ui()
         self.safe_connect(self.settings_window.apply_btn, self.settings_panel.save_settings)
@@ -402,6 +405,12 @@ class MainWindow(QMainWindow):
             button.setMinimumHeight(max(button.minimumHeight(), 44))
             if isinstance(button, QToolButton):
                 button.setMinimumWidth(max(button.minimumWidth(), 44))
+
+    def _enable_touch_scrolling(self) -> None:
+        for scroll_area in self.findChildren(QAbstractScrollArea):
+            viewport = scroll_area.viewport()
+            if viewport is not None:
+                QScroller.grabGesture(viewport, QScroller.ScrollerGestureType.TouchGesture)
 
     def _apply_player_colour_indicators(self) -> None:
         for menu in (self.main_menu, self.scoreboard_menu):

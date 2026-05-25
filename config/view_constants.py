@@ -11,7 +11,7 @@ from game.Vertex import Port
 
 # Window and top-level layout
 APP_WINDOW_TITLE = "Catan - Explainable Al Tutor"
-WINDOW_WIDTH, WINDOW_HEIGHT = 1280, 720
+WINDOW_WIDTH, WINDOW_HEIGHT = 640, 360
 WINDOW_DEFAULT_X = 80
 WINDOW_DEFAULT_Y = 50
 MAIN_WINDOW_SIDE_PANEL_WIDTH = 360
