@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Callable, Dict, Optional, Tuple
 
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QLabel, QListWidgetItem, QToolButton, QWidget
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import QLabel, QListWidgetItem, QToolButton, QWidget
 
 from ai.actions import Action, ActionType
 from ai.tutor.explanations import ActionExplanation, ExplanationTemplate
@@ -9,6 +9,7 @@ from controllers.GameController import GameController
 from game.Player import Player
 from game.Resources import Resource, ResourceCount
 from view.canvas.display_utils import format_counter_offer
+from view.qt_compat import disconnect_signal
 
 if TYPE_CHECKING:
     from view.MainWindow import MainWindow
@@ -381,10 +382,7 @@ class TradePanel:
             self.window.set_debug_tutor_shortcut_finalizer(None)
             self.window.tradeSelected.emit(deal)
 
-        try:
-            select_trade.trade_list.itemDoubleClicked.disconnect()
-        except TypeError:
-            pass
+        disconnect_signal(select_trade.trade_list.itemDoubleClicked)
         select_trade.trade_list.itemDoubleClicked.connect(accept_trade)
 
         def cancel() -> None:

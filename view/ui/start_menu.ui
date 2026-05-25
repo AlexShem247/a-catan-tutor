@@ -126,53 +126,7 @@ p, li { white-space: pre-wrap; }
     </spacer>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="utility_btn_layout">
-     <item>
-      <widget class="QPushButton" name="help_btn">
-       <property name="minimumSize">
-        <size>
-         <width>0</width>
-         <height>35</height>
-        </size>
-       </property>
-       <property name="font">
-        <font>
-         <pointsize>10</pointsize>
-        </font>
-       </property>
-       <property name="toolTip">
-        <string/>
-       </property>
-       <property name="text">
-        <string>View Rules</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="settings_btn">
-       <property name="minimumSize">
-        <size>
-         <width>0</width>
-         <height>35</height>
-        </size>
-       </property>
-       <property name="font">
-        <font>
-         <pointsize>10</pointsize>
-        </font>
-       </property>
-       <property name="toolTip">
-        <string/>
-       </property>
-       <property name="text">
-        <string>Settings</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
-   </item>
-   <item>
-    <widget class="QPushButton" name="standard_mode_btn">
+    <widget class="QPushButton" name="start_game_btn">
      <property name="minimumSize">
       <size>
        <width>0</width>
@@ -193,11 +147,11 @@ p, li { white-space: pre-wrap; }
     </widget>
    </item>
    <item>
-    <widget class="QPushButton" name="tutor_mode_btn">
+    <widget class="QPushButton" name="settings_btn">
      <property name="minimumSize">
       <size>
        <width>0</width>
-       <height>70</height>
+       <height>50</height>
       </size>
      </property>
      <property name="font">
@@ -205,32 +159,8 @@ p, li { white-space: pre-wrap; }
        <pointsize>10</pointsize>
       </font>
      </property>
-     <property name="toolTip">
-      <string/>
-     </property>
      <property name="text">
-      <string>Tutor Mode</string>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QPushButton" name="lab_mode_btn">
-     <property name="minimumSize">
-      <size>
-       <width>0</width>
-       <height>70</height>
-      </size>
-     </property>
-     <property name="font">
-      <font>
-       <pointsize>10</pointsize>
-      </font>
-     </property>
-     <property name="toolTip">
-      <string/>
-     </property>
-     <property name="text">
-      <string>Lab</string>
+      <string>Settings</string>
      </property>
     </widget>
    </item>

@@ -1,13 +1,14 @@
 from itertools import groupby
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QListWidgetItem, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QListWidgetItem, QWidget
 
 from ai.actions import Action, ActionType
 from controllers.GameController import GameController
 from game.Player import Player
 from game.PlayerAssets import Buildable, DevelopmentCard, DevelopmentCardType
+from view.qt_compat import disconnect_signal
 
 if TYPE_CHECKING:
     from view.MainWindow import MainWindow
@@ -107,10 +108,7 @@ class DevelopmentPanel:
 
         can_afford_card = controller.get_buildable_options(player)[Buildable.DEVELOPMENT_CARD]
 
-        try:
-            development_manager.card_list.itemDoubleClicked.disconnect()
-        except TypeError:
-            pass
+        disconnect_signal(development_manager.card_list.itemDoubleClicked)
         development_manager.card_list.itemDoubleClicked.connect(card_double_clicked)
 
         if pre_roll_mode:

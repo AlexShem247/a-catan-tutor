@@ -1,7 +1,8 @@
 from typing import Dict, Tuple
 
-from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtGui import QColor
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QColor
+from app_runtime import bundled_path
 
 from game.Player import PlayerNumber
 from game.PlayerAssets import Building
@@ -10,28 +11,31 @@ from game.Vertex import Port
 
 # Window and top-level layout
 APP_WINDOW_TITLE = "Catan - Explainable Al Tutor"
-WINDOW_WIDTH, WINDOW_HEIGHT = 1400, 760
+WINDOW_WIDTH, WINDOW_HEIGHT = 1280, 720
 WINDOW_DEFAULT_X = 80
 WINDOW_DEFAULT_Y = 50
 MAIN_WINDOW_SIDE_PANEL_WIDTH = 360
 MAIN_WINDOW_SIDE_PANEL_MAX_WIDTH = MAIN_WINDOW_SIDE_PANEL_WIDTH * 2
 MAIN_WINDOW_BOARD_PANEL_DEFAULT_WIDTH = 1000
+MAIN_WINDOW_SIDE_PANEL_WIDTH_RATIO = 0.5
+MAIN_WINDOW_SIDE_PANEL_MIN_WIDTH = 280
 TUTOR_PANEL_DEFAULT_WIDTH_RATIO = 0.8
 MAIN_WINDOW_HEADER_ICON_SIZE = QSize(18, 18)
 
 # UI resource paths
-UI_MAIN_MENU_PATH = "view/ui/main_menu.ui"
-UI_TUTOR_MENU_PATH = "view/ui/tutor_menu.ui"
-UI_RESOURCE_SELECTOR_PATH = "view/ui/resource_selector.ui"
-UI_TRADE_DESIGNER_PATH = "view/ui/trade_designer.ui"
-UI_SELECT_TRADE_PATH = "view/ui/select_trade.ui"
-UI_TRADE_MANAGER_PATH = "view/ui/trade_manager.ui"
-UI_DEVELOPMENT_MANAGER_PATH = "view/ui/development_manager.ui"
-UI_RESULTS_MENU_PATH = "view/ui/results_menu.ui"
-UI_ENDGAME_REVIEW_PATH = "view/ui/endgame_review.ui"
-UI_START_MENU_PATH = "view/ui/start_menu.ui"
-UI_RULES_WINDOW_PATH = "view/ui/rules_window.ui"
-UI_SETTINGS_WINDOW_PATH = "view/ui/settings_window.ui"
+UI_MAIN_MENU_PATH = bundled_path("view", "ui", "main_menu.ui")
+UI_TUTOR_MENU_PATH = bundled_path("view", "ui", "tutor_menu.ui")
+UI_RESOURCE_SELECTOR_PATH = bundled_path("view", "ui", "resource_selector.ui")
+UI_TRADE_DESIGNER_PATH = bundled_path("view", "ui", "trade_designer.ui")
+UI_SELECT_TRADE_PATH = bundled_path("view", "ui", "select_trade.ui")
+UI_TRADE_MANAGER_PATH = bundled_path("view", "ui", "trade_manager.ui")
+UI_DEVELOPMENT_MANAGER_PATH = bundled_path("view", "ui", "development_manager.ui")
+UI_RESULTS_MENU_PATH = bundled_path("view", "ui", "results_menu.ui")
+UI_ENDGAME_REVIEW_PATH = bundled_path("view", "ui", "endgame_review.ui")
+UI_START_MENU_PATH = bundled_path("view", "ui", "start_menu.ui")
+UI_SCOREBOARD_PATH = bundled_path("view", "ui", "scoreboard.ui")
+UI_RULES_WINDOW_PATH = bundled_path("view", "ui", "rules_window.ui")
+UI_SETTINGS_WINDOW_PATH = bundled_path("view", "ui", "settings_window.ui")
 
 # Shared badge and label styling
 PLAYER_BADGE_FONT_SIZE_PX = 12
@@ -124,33 +128,33 @@ TERRAIN_COLORS: Dict[HexType, QColor] = {
 
 # Asset paths
 RESOURCE_ICONS: Dict[Resource, str] = {
-    Resource.WOOD: "assets/wood.png",
-    Resource.BRICK: "assets/brick.png",
-    Resource.SHEEP: "assets/sheep.png",
-    Resource.WHEAT: "assets/wheat.png",
-    Resource.ORE: "assets/ore.png",
+    Resource.WOOD: bundled_path("assets", "wood.png"),
+    Resource.BRICK: bundled_path("assets", "brick.png"),
+    Resource.SHEEP: bundled_path("assets", "sheep.png"),
+    Resource.WHEAT: bundled_path("assets", "wheat.png"),
+    Resource.ORE: bundled_path("assets", "ore.png"),
 }
-APP_ICON = "assets/logo.png"
-HOME_ICON = "assets/home.png"
-RULES_ICON = "assets/rules.png"
-SETTINGS_ICON = "assets/settings.png"
-DESERT_ICON = "assets/cactus.png"
-ROBBER_ICON = "assets/robber.png"
-SEA_BACKGROUND = "assets/sea_background.png"
-SETTLEMENT_OUTLINE = "assets/settlement_outline.png"
-SETTLEMENT_OUTLINE_SOLID = "assets/settlement_outline_solid.png"
-CITY_OUTLINE = "assets/city_outline.png"
-TUTOR_ICON = "assets/tutor.png"
-TROPHY_ICON = "assets/trophy.png"
+APP_ICON = bundled_path("assets", "logo.png")
+HOME_ICON = bundled_path("assets", "home.png")
+RULES_ICON = bundled_path("assets", "rules.png")
+SETTINGS_ICON = bundled_path("assets", "settings.png")
+DESERT_ICON = bundled_path("assets", "cactus.png")
+ROBBER_ICON = bundled_path("assets", "robber.png")
+SEA_BACKGROUND = bundled_path("assets", "sea_background.png")
+SETTLEMENT_OUTLINE = bundled_path("assets", "settlement_outline.png")
+SETTLEMENT_OUTLINE_SOLID = bundled_path("assets", "settlement_outline_solid.png")
+CITY_OUTLINE = bundled_path("assets", "city_outline.png")
+TUTOR_ICON = bundled_path("assets", "tutor.png")
+TROPHY_ICON = bundled_path("assets", "trophy.png")
 
 # Port and player assets
 PORT_ICONS: Dict[Port, str] = {
-    Port.THREE_TO_ONE: "assets/port_generic.png",
-    Port.WOOD: "assets/port_wood.png",
-    Port.BRICK: "assets/port_brick.png",
-    Port.SHEEP: "assets/port_sheep.png",
-    Port.WHEAT: "assets/port_wheat.png",
-    Port.ORE: "assets/port_ore.png",
+    Port.THREE_TO_ONE: bundled_path("assets", "port_generic.png"),
+    Port.WOOD: bundled_path("assets", "port_wood.png"),
+    Port.BRICK: bundled_path("assets", "port_brick.png"),
+    Port.SHEEP: bundled_path("assets", "port_sheep.png"),
+    Port.WHEAT: bundled_path("assets", "port_wheat.png"),
+    Port.ORE: bundled_path("assets", "port_ore.png"),
 }
 PLAYER_COLORS: Dict[PlayerNumber, QColor] = {
     PlayerNumber.P1: QColor(0, 0, 255),
@@ -161,14 +165,14 @@ PLAYER_COLORS: Dict[PlayerNumber, QColor] = {
 
 # Building sprites
 SETTLEMENT_ICONS: Dict[Tuple[PlayerNumber, Building], str] = {
-    (PlayerNumber.P1, Building.SETTLEMENT): "assets/settlement_1.png",
-    (PlayerNumber.P1, Building.CITY): "assets/city_1.png",
-    (PlayerNumber.P2, Building.SETTLEMENT): "assets/settlement_2.png",
-    (PlayerNumber.P2, Building.CITY): "assets/city_2.png",
-    (PlayerNumber.P3, Building.SETTLEMENT): "assets/settlement_3.png",
-    (PlayerNumber.P3, Building.CITY): "assets/city_3.png",
-    (PlayerNumber.P4, Building.SETTLEMENT): "assets/settlement_4.png",
-    (PlayerNumber.P4, Building.CITY): "assets/city_4.png",
+    (PlayerNumber.P1, Building.SETTLEMENT): bundled_path("assets", "settlement_1.png"),
+    (PlayerNumber.P1, Building.CITY): bundled_path("assets", "city_1.png"),
+    (PlayerNumber.P2, Building.SETTLEMENT): bundled_path("assets", "settlement_2.png"),
+    (PlayerNumber.P2, Building.CITY): bundled_path("assets", "city_2.png"),
+    (PlayerNumber.P3, Building.SETTLEMENT): bundled_path("assets", "settlement_3.png"),
+    (PlayerNumber.P3, Building.CITY): bundled_path("assets", "city_3.png"),
+    (PlayerNumber.P4, Building.SETTLEMENT): bundled_path("assets", "settlement_4.png"),
+    (PlayerNumber.P4, Building.CITY): bundled_path("assets", "city_4.png"),
 }
 
 

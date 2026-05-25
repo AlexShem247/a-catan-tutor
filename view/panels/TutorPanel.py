@@ -1,8 +1,8 @@
 import math
 from typing import TYPE_CHECKING, Callable, Optional, Tuple
 
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QAbstractScrollArea, QHBoxLayout, QPushButton, QWidget
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import QAbstractScrollArea, QHBoxLayout, QPushButton, QWidget
 
 from ai.tutor.explanations import ActionExplanation
 from ai.tutor.feedback import TutorFeedbackExplanation, move_quality_colour
@@ -35,14 +35,14 @@ class TutorPanel:
         self.history_prev_btn = QPushButton("<")
         self.history_detail_btn = QPushButton("Show Detailed")
         self.history_next_btn = QPushButton(">")
-        self.history_prev_btn.setFixedSize(TUTOR_HISTORY_NAV_BUTTON_SIZE_PX, TUTOR_HISTORY_NAV_BUTTON_SIZE_PX)
-        self.history_next_btn.setFixedSize(TUTOR_HISTORY_NAV_BUTTON_SIZE_PX, TUTOR_HISTORY_NAV_BUTTON_SIZE_PX)
-        self.history_detail_btn.setFixedHeight(TUTOR_HISTORY_ACTION_HEIGHT_PX)
+        self.history_prev_btn.setMinimumSize(TUTOR_HISTORY_NAV_BUTTON_SIZE_PX, TUTOR_HISTORY_NAV_BUTTON_SIZE_PX)
+        self.history_next_btn.setMinimumSize(TUTOR_HISTORY_NAV_BUTTON_SIZE_PX, TUTOR_HISTORY_NAV_BUTTON_SIZE_PX)
+        self.history_detail_btn.setMinimumHeight(TUTOR_HISTORY_ACTION_HEIGHT_PX)
         self.history_nav_layout.addWidget(self.history_prev_btn)
         self.history_nav_layout.addWidget(self.history_detail_btn)
         self.history_nav_layout.addWidget(self.history_next_btn)
         self.history_exit_btn = QPushButton("Close History")
-        self.history_exit_btn.setFixedHeight(TUTOR_HISTORY_ACTION_HEIGHT_PX)
+        self.history_exit_btn.setMinimumHeight(TUTOR_HISTORY_ACTION_HEIGHT_PX)
         self.widget.verticalLayout_3.addWidget(self.history_nav_widget)
         self.widget.verticalLayout_3.addWidget(self.history_exit_btn)
         self.history_nav_widget.hide()
@@ -57,10 +57,22 @@ class TutorPanel:
         self.history_enabled_on_turn = False
         self.history_available_in_mode = False
         self.history_mode_active = False
+        self.auto_review_enabled = True
         self.restore_tutor_menu_callback: Optional[Callable[[], None]] = None
         self.dismiss_tutor_hint_callback: Optional[Callable[[], None]] = None
 
         self.window.safe_connect(self.widget.previous_feedback_btn, self.show_previous_feedback_history)
+        self.widget.auto_review_checkbox.setChecked(True)
+        self.widget.auto_review_checkbox.toggled.connect(self.set_auto_review_enabled)
+
+    def set_auto_review_enabled(self, enabled: bool) -> None:
+        self.auto_review_enabled = enabled
+
+    def record_tutor_feedback(self, feedback: TutorFeedbackExplanation) -> None:
+        self.append_tutor_feedback_history(feedback)
+
+    def should_auto_review(self) -> bool:
+        return self.auto_review_enabled
 
     @staticmethod
     def append_feedback_history_state(owner, feedback: TutorFeedbackExplanation) -> None:
@@ -248,6 +260,7 @@ class TutorPanel:
         """Continue the turn flow after tutor feedback finishes."""
         self.stop_auto_feedback()
         self.window.canvas.clear_planned_builds()
+        self.window._show_board_menu("main")
         self.widget.action_label.setText("Wait For Your Turn")
         self.widget.explanation_edit.setText("Opponent is making move")
         self.widget.explain_btn.hide()
@@ -381,6 +394,7 @@ class TutorPanel:
     def display_tutor_action_feedback(self, feedback: TutorFeedbackExplanation) -> None:
         """Display tutor feedback for the player action."""
         self.history_mode_active = False
+        self.window._show_board_menu("tutor")
         self.window.canvas.clear_planned_builds()
         self.window.canvas.clear_feedback_builds()
         self.window.trade_panel.clear_trade_preview()
@@ -435,3 +449,4 @@ class TutorPanel:
         self.set_dismiss_tutor_hint_callback(None)
         self.set_restore_tutor_menu_callback(None, False)
         self.hide_history_controls()
+        self.widget.auto_review_checkbox.setChecked(True)

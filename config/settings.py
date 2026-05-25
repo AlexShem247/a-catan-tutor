@@ -2,9 +2,9 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
-CONFIG_DIR = Path(__file__).resolve().parent
-DEFAULT_SETTINGS_PATH = CONFIG_DIR / "default_settings.json"
-APPLIED_SETTINGS_PATH = CONFIG_DIR / "applied_settings.json"
+from app_runtime import bundled_file, writable_app_dir
+
+DEFAULT_SETTINGS_PATH = bundled_file("config", "default_settings.json")
 AI_DIFFICULTY_STRATEGIC_MOVE_PROBABILITIES: Dict[str, float] = {
     "easy": 0.70,
     "medium": 0.85,
@@ -21,10 +21,16 @@ def load_default_settings() -> Dict[str, Any]:
     return _read_json(DEFAULT_SETTINGS_PATH)
 
 
+def get_applied_settings_path() -> Path:
+    """Return the writable settings override path."""
+    return writable_app_dir() / "applied_settings.json"
+
+
 def load_applied_settings() -> Dict[str, Any]:
-    if not APPLIED_SETTINGS_PATH.exists():
+    applied_settings_path = get_applied_settings_path()
+    if not applied_settings_path.exists():
         return {}
-    return _read_json(APPLIED_SETTINGS_PATH)
+    return _read_json(applied_settings_path)
 
 
 def load_effective_settings() -> Dict[str, Any]:
@@ -41,11 +47,13 @@ def save_applied_settings(settings: Dict[str, Any]) -> None:
         reset_applied_settings()
         return
 
-    with APPLIED_SETTINGS_PATH.open("w", encoding="utf-8") as handle:
+    applied_settings_path = get_applied_settings_path()
+    with applied_settings_path.open("w", encoding="utf-8") as handle:
         json.dump(overrides, handle, indent=2)
         handle.write("\n")
 
 
 def reset_applied_settings() -> None:
-    if APPLIED_SETTINGS_PATH.exists():
-        APPLIED_SETTINGS_PATH.unlink()
+    applied_settings_path = get_applied_settings_path()
+    if applied_settings_path.exists():
+        applied_settings_path.unlink()

@@ -1,10 +1,9 @@
 import math
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
-import pyqtgraph as pg
-from PyQt6.QtCore import QPoint, QPointF, Qt
-from PyQt6.QtGui import QBrush, QCursor, QPainter, QPen
-from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QBrush, QCursor, QPainter, QPen
+from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
 from config.view_constants import (ENDGAME_PLOT_BACKGROUND_COLOR, ENDGAME_PLOT_HOVER_DISTANCE_THRESHOLD_PX,
                                    ENDGAME_PLOT_LAYOUT_MARGINS, ENDGAME_PLOT_LEGEND_OFFSET,
@@ -15,31 +14,64 @@ from controllers.GameController import GameController, PlayerScoreSnapshot
 from game.Player import Player, PlayerNumber
 from view.panels.endgame_summary import describe_round_vp_events, format_endgame_players
 
+try:
+    import pyqtgraph as pg
+except ImportError:  # pragma: no cover - exercised mainly in Android packaging scenarios.
+    pg = None
 
-class IntegerAxisItem(pg.AxisItem):
 
-    def tickSpacing(self, minVal: float, maxVal: float, size: float) -> List[Tuple[float, float]]:
-        """Calculate sensible tick spacing for the integer axis."""
-        value_range = abs(maxVal - minVal)
-        if value_range <= 0 or size <= 0:
-            return [(1.0, 0.0)]
+PYQTGRAPH_AVAILABLE = pg is not None
 
-        target_tick_count = max(2, int(size / ENDGAME_PLOT_TARGET_TICK_PIXEL_SPACING))
-        raw_spacing = max(1.0, value_range / target_tick_count)
-        magnitude = 10**math.floor(math.log10(raw_spacing))
 
-        for multiplier in (1, 2, 5, 10):
-            spacing = magnitude * multiplier
-            if spacing >= raw_spacing:
-                spacing = max(1.0, round(spacing))
-                return [(float(spacing), 0.0)]
+class FallbackPlotWidget(QFrame):
+    """Simple placeholder when pyqtgraph is unavailable."""
 
-        spacing = max(1.0, round(magnitude * 10))
-        return [(float(spacing), 0.0)]
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("victoryPointsPlotFallback")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(*ENDGAME_PLOT_LAYOUT_MARGINS)
+        label = QLabel("Endgame chart unavailable in this build.", self)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setWordWrap(True)
+        layout.addWidget(label)
 
-    def tickStrings(self, values: List[float], scale: float, spacing: float) -> List[str]:
-        """Format axis tick values as whole-number labels."""
-        return [str(int(round(value))) for value in values]
+    def scene(self):
+        return None
+
+
+if PYQTGRAPH_AVAILABLE:
+
+    class IntegerAxisItem(pg.AxisItem):
+
+        def tickSpacing(self, minVal: float, maxVal: float, size: float) -> List[Tuple[float, float]]:
+            """Calculate sensible tick spacing for the integer axis."""
+            value_range = abs(maxVal - minVal)
+            if value_range <= 0 or size <= 0:
+                return [(1.0, 0.0)]
+
+            target_tick_count = max(2, int(size / ENDGAME_PLOT_TARGET_TICK_PIXEL_SPACING))
+            raw_spacing = max(1.0, value_range / target_tick_count)
+            magnitude = 10**math.floor(math.log10(raw_spacing))
+
+            for multiplier in (1, 2, 5, 10):
+                spacing = magnitude * multiplier
+                if spacing >= raw_spacing:
+                    spacing = max(1.0, round(spacing))
+                    return [(float(spacing), 0.0)]
+
+            spacing = max(1.0, round(magnitude * 10))
+            return [(float(spacing), 0.0)]
+
+        def tickStrings(self, values: List[float], scale: float, spacing: float) -> List[str]:
+            """Format axis tick values as whole-number labels."""
+            return [str(int(round(value))) for value in values]
+
+else:
+
+    class IntegerAxisItem:  # pragma: no cover - placeholder for missing dependency path.
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("pyqtgraph is not available")
 
 
 class HoverTooltip(QFrame):
@@ -95,7 +127,9 @@ class HoverTooltip(QFrame):
         self.raise_()
 
 
-def create_victory_points_plot() -> pg.PlotWidget:
+def create_victory_points_plot() -> QWidget:
+    if not PYQTGRAPH_AVAILABLE:
+        return FallbackPlotWidget()
     plot = pg.PlotWidget(axisItems={
         "bottom": IntegerAxisItem(orientation="bottom"),
         "left": IntegerAxisItem(orientation="left"),
@@ -113,6 +147,8 @@ def reset_hover_state(owner) -> None:
 
 
 def handle_plot_hover(owner, scene_pos: QPointF) -> None:
+    if not PYQTGRAPH_AVAILABLE:
+        return
     if not owner.plot_points or owner.window.fullscreen_panel is not owner.widget:
         reset_hover_state(owner)
         return
@@ -185,6 +221,10 @@ def build_endgame_plot_tooltips(
 
 
 def populate_tutor_endgame_performance(owner, controller: GameController) -> None:
+    if not PYQTGRAPH_AVAILABLE:
+        owner.plot_points = []
+        owner.plot_tooltips = {}
+        return
     plot_item = owner.victory_points_plot.getPlotItem()
     plot_item.clear()
     owner.plot_points = []

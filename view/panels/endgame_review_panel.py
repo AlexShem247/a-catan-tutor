@@ -1,9 +1,9 @@
 from typing import TYPE_CHECKING, Dict, List, Tuple
 
-from PyQt6.QtCore import QEvent, QObject, Qt, QTimer
-from PyQt6.QtGui import QPixmap
-from PyQt6.QtWidgets import (QAbstractScrollArea, QCheckBox, QLabel, QPushButton, QSizePolicy, QSplitter, QVBoxLayout,
-                             QWidget)
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer
+from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import (QAbstractScrollArea, QCheckBox, QLabel, QPushButton, QSizePolicy, QSplitter,
+                               QVBoxLayout, QWidget)
 
 from ai.tutor.feedback import TutorFeedbackExplanation
 from config.view_constants import (ENDGAME_FEEDBACK_CARD_LAYOUT_SPACING_PX, ENDGAME_REPLAY_MIN_PANEL_WIDTH,
@@ -26,6 +26,7 @@ from view.rich_text import winner_title_html
 from view.styles import (endgame_badge_stylesheet, endgame_feedback_body_stylesheet, endgame_feedback_card_stylesheet,
                          endgame_feedback_empty_stylesheet, endgame_feedback_score_stylesheet,
                          endgame_feedback_title_stylesheet, endgame_rank_card_stylesheet)
+from view.qt_compat import disconnect_signal
 
 if TYPE_CHECKING:
     from view.MainWindow import MainWindow
@@ -155,21 +156,21 @@ class EndgameReviewPanel:
         self.widget.setMinimumSize(0, 0)
         self.widget.titleWinnerLabel.setMinimumWidth(0)
         self.widget.reviewTabs.setMinimumWidth(0)
-        self.widget.selectedBreakdownBox.setMinimumSize(ENDGAME_REVIEW_BREAKDOWN_PANEL_WIDTH, 0)
-        self.widget.selectedBreakdownBox.setMinimumWidth(ENDGAME_REVIEW_BREAKDOWN_PANEL_WIDTH)
-        self.widget.selectedBreakdownBox.setMaximumWidth(ENDGAME_REVIEW_BREAKDOWN_PANEL_WIDTH)
+        self.widget.selectedBreakdownBox.setMinimumSize(0, 0)
+        self.widget.selectedBreakdownBox.setMinimumWidth(0)
+        self.widget.selectedBreakdownBox.setMaximumWidth(16777215)
         self.widget.selectedBreakdownBox.setMinimumHeight(0)
         self.widget.selectedBreakdownBox.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
         self.widget.selectedBreakdownBox.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.widget.selectedBreakdownBox.setLineWrapMode(self.widget.selectedBreakdownBox.LineWrapMode.WidgetWidth)
         self.victory_points_plot.setMinimumSize(0, 0)
         self.replay_canvas.setMinimumSize(0, 0)
-        self.replay_canvas.setMinimumWidth(ENDGAME_REPLAY_MIN_PANEL_WIDTH)
+        self.replay_canvas.setMinimumWidth(0)
         self.widget.selectedMomentScrollArea.setMinimumSize(0, 0)
-        self.widget.selectedMomentScrollArea.setMinimumWidth(ENDGAME_REPLAY_MIN_PANEL_WIDTH)
+        self.widget.selectedMomentScrollArea.setMinimumWidth(0)
         self.widget.selectedBreakdownBox.viewport().setCursor(Qt.CursorShape.ArrowCursor)
         self.widget.titleWinnerLabel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        self.widget.selectedBreakdownBox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        self.widget.selectedBreakdownBox.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.widget.selectedMomentScrollArea.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.replay_splitter.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.widget.replayMainLayout.setStretch(0, 1)
@@ -550,10 +551,7 @@ class EndgameReviewPanel:
         replay_slider.setEnabled(bool(self.replay_feedback))
         self.window.safe_connect(self.widget.prevTurn, self.show_previous_endgame_replay_feedback)
         self.window.safe_connect(self.widget.nextTurn, self.show_next_endgame_replay_feedback)
-        try:
-            replay_slider.valueChanged.disconnect()
-        except TypeError:
-            pass
+        disconnect_signal(replay_slider.valueChanged)
         replay_slider.valueChanged.connect(self.render_endgame_replay_feedback)
 
         if self.replay_feedback:
@@ -583,7 +581,8 @@ class EndgameReviewPanel:
         """Display the tutor endgame review screen."""
 
         def return_to_main_menu() -> None:
-            self.window._restore_splitter_layout()
+            self.window._show_page("board", remember=False)
+            self.window._show_board_menu("main")
             controller.start_game()
 
         self.window.open_tutor_menu(False)
@@ -591,22 +590,16 @@ class EndgameReviewPanel:
         self.widget.reviewTabs.setCurrentIndex(0)
         self.window.safe_connect(self.widget.main_menu_btn, return_to_main_menu)
         self.window.safe_connect(self.widget.quit_btn, self.window.close)
-        self.window._show_fullscreen_panel(self.widget)
+        self.window._show_page("endgame")
         QTimer.singleShot(0, self.sync_replay_layout)
 
     def display_results(self, controller: GameController) -> None:
         """Display the game results view."""
-        self.window._restore_splitter_layout()
         self.window.open_tutor_menu(False)
         self.window.canvas.clear_planned_builds()
         self.window.canvas.interactive_shapes.clear()
         self.window.canvas.display_board(controller)
         self.window.display_resources(controller)
-
-        sizes = self.window.splitter_layout.sizes()
-        self.window.main_menu.setParent(None)
-        self.window.splitter_layout.addWidget(self.results_menu)
-        self.window.splitter_layout.setSizes([sizes[0], sizes[1]])
 
         all_labels = {}
         for i in range(1, 5):
@@ -653,12 +646,10 @@ class EndgameReviewPanel:
                 labels["victory_cards"].show()
 
         def return_to_main_menu() -> None:
-            layout_sizes = self.window.splitter_layout.sizes()
-            self.results_menu.setParent(None)
-            self.window.splitter_layout.addWidget(self.window.main_menu)
-            self.window.splitter_layout.setSizes(layout_sizes)
-            self.window.main_menu.show()
+            self.window._show_page("board", remember=False)
+            self.window._show_board_menu("main")
             controller.start_game()
 
         self.window.safe_connect(self.results_menu.main_menu_btn, return_to_main_menu)
         self.window.safe_connect(self.results_menu.quit_btn, self.window.close)
+        self.window._show_page("results")

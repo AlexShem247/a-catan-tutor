@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from typing import cast
 
-from PyQt6.QtWidgets import QCheckBox
+from PySide6.QtWidgets import QCheckBox
 from test_helpers import GameTestMixin, ReplayMarker
 
 from ai.tutor.feedback import TutorDecisionType, TutorFeedbackExplanation

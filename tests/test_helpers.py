@@ -3,7 +3,7 @@ from random import Random
 from types import SimpleNamespace
 from typing import Any, cast
 
-from PyQt6.QtWidgets import QCheckBox
+from PySide6.QtWidgets import QCheckBox
 
 from ai.actions import Action, ActionType, Phase
 from ai.BasicAI import BasicAI

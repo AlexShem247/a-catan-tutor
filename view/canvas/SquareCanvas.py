@@ -1,10 +1,11 @@
 import math
 from typing import Dict, List, Tuple
 
-from PyQt6.QtCore import QPointF, QRect, QSize, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QCursor, QFontMetrics, QPainter, QPixmap
-from PyQt6.QtWidgets import QWidget
+from PySide6.QtCore import QEvent, QPointF, QRect, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QCursor, QFontMetrics, QPainter, QPixmap
+from PySide6.QtWidgets import QGestureEvent, QPinchGesture, QWidget
 
+from app_runtime import is_mobile_platform
 from config.view_constants import (BOARD_BG_COLOR, CANVAS_ANIMATION_INTERVAL_MS, CANVAS_ZOOM_HINT_FONT_SIZE_PX,
                                    CANVAS_ZOOM_HINT_PADDING_PX, CITY_OUTLINE, EDGE_COLOR, HEX_TILE_RADIUS,
                                    HIGHLIGHT_COLOR, OUTLINE_COLOR, PLAN_OUTLINE_COLOR, PLAYER_COLORS, PORT_EDGE_COLOR,
@@ -23,10 +24,11 @@ from view.canvas.shapes import (HexTileShape, InteractiveCircle, InteractivePixm
 
 
 class SquareCanvas(QWidget):
-    selectionMade = pyqtSignal(object)
+    selectionMade = Signal(object)
 
     def __init__(self):
         super().__init__()
+        self.mobile_mode = is_mobile_platform()
         self.square_rect = None
         self.base_scale = None
         self.setMinimumSize(WINDOW_HEIGHT // 2, WINDOW_HEIGHT // 2)
@@ -40,8 +42,11 @@ class SquareCanvas(QWidget):
         self.offset = QPointF(0, 0)
         self.last_mouse_pos = None
         self.dragging = False
+        self.pinch_start_zoom = self.zoom
 
-        self.setMouseTracking(True)
+        self.setMouseTracking(not self.mobile_mode)
+        self.setAttribute(Qt.WidgetAttribute.WA_AcceptTouchEvents, True)
+        self.grabGesture(Qt.GestureType.PinchGesture)
 
         # List of shapes
         self.shapes = []
@@ -122,7 +127,8 @@ class SquareCanvas(QWidget):
             if self.zoom > self.min_zoom and self.square_rect.contains(event.position().toPoint()):
                 self.dragging = True
                 self.last_mouse_pos = event.position()
-                self.setCursor(QCursor(Qt.CursorShape.ClosedHandCursor))
+                if not self.mobile_mode:
+                    self.setCursor(QCursor(Qt.CursorShape.ClosedHandCursor))
 
     def mouseMoveEvent(self, event):
         """Handle mouse movement for dragging and hover state."""
@@ -136,7 +142,7 @@ class SquareCanvas(QWidget):
             return
 
         # Hover detection (only when not dragging)
-        if not self.disable_interactivity:
+        if not self.disable_interactivity and not self.mobile_mode:
             wx, wy = self.screen_to_world(event.position())
 
             new_hover = None
@@ -167,33 +173,61 @@ class SquareCanvas(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             self.dragging = False
             self.last_mouse_pos = None
-            self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
+            if not self.mobile_mode:
+                self.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
 
     def wheelEvent(self, event):
         """Handle mouse-wheel zooming on the canvas."""
         if not self.square_rect.contains(event.position().toPoint()):
             return
 
-        old_zoom = self.zoom
         zoom_factor = 1.15
 
         if event.angleDelta().y() > 0:
-            self.zoom *= zoom_factor
+            target_zoom = self.zoom * zoom_factor
         else:
-            self.zoom /= zoom_factor
+            target_zoom = self.zoom / zoom_factor
 
-        self.zoom = max(self.min_zoom, min(self.zoom, self.max_zoom))
+        self._apply_zoom(target_zoom, event.position())
 
-        base_scale = self.base_scale
-        old_scale = base_scale * old_zoom
-        new_scale = base_scale * self.zoom
+    def event(self, event):
+        if event.type() == QEvent.Type.Gesture:
+            return self.gestureEvent(event)
+        return super().event(event)
 
-        mouse_pos = event.position()
-        world_before = (mouse_pos - self.offset) / old_scale
-        world_after = (mouse_pos - self.offset) / new_scale
+    def gestureEvent(self, event: QGestureEvent) -> bool:
+        pinch = event.gesture(Qt.GestureType.PinchGesture)
+        if pinch is None:
+            return False
+        return self.handle_pinch_gesture(pinch)
 
+    def handle_pinch_gesture(self, gesture: QPinchGesture) -> bool:
+        if self.square_rect is None:
+            return False
+        if gesture.state() == Qt.GestureState.GestureStarted:
+            self.pinch_start_zoom = self.zoom
+        target_zoom = self.pinch_start_zoom * gesture.totalScaleFactor()
+        self._apply_zoom(target_zoom, gesture.centerPoint())
+        return True
+
+    def _apply_zoom(self, target_zoom: float, focal_point: QPointF) -> None:
+        if self.square_rect is None or self.base_scale is None:
+            return
+        if not self.square_rect.contains(focal_point.toPoint()):
+            return
+
+        old_zoom = self.zoom
+        new_zoom = max(self.min_zoom, min(target_zoom, self.max_zoom))
+        if math.isclose(old_zoom, new_zoom):
+            return
+
+        old_scale = self.base_scale * old_zoom
+        new_scale = self.base_scale * new_zoom
+        world_before = (focal_point - self.offset) / old_scale
+        world_after = (focal_point - self.offset) / new_scale
+
+        self.zoom = new_zoom
         self.offset += (world_after - world_before) * new_scale
-
         self.clamp_offset()
         self.update()
 
@@ -212,7 +246,7 @@ class SquareCanvas(QWidget):
             font.setPointSize(CANVAS_ZOOM_HINT_FONT_SIZE_PX)
             painter.setFont(font)
 
-            text = "Use the scrollbar to zoom in"
+            text = "Pinch to zoom" if self.mobile_mode else "Use the scrollbar to zoom in"
             fm = QFontMetrics(font)
             text_rect = fm.boundingRect(text)
 

@@ -1,9 +1,35 @@
-*.pdf
+# Virtual environments
+.venv/
+venv/
+qtandroid-venv/
+
+# Python cache
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE / tooling
 .idea/
+.vscode/
 .pytest_cache/
-Coordinates.png
-Screenshot.png
+
+# Android / build outputs
+.buildozer/
+bin/
+*.apk
+
+# Generated / local files
+*.log
+*.pdf
 *.txt
 *.csv
 *.xlsx
+
+# Images
+Coordinates.png
+Screenshot.png
+
+# OS files
+.DS_Store
+Thumbs.db

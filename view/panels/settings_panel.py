@@ -1,7 +1,7 @@
 import re
 from typing import TYPE_CHECKING, Any, Dict
 
-from PyQt6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget
 
 from config.settings import (load_default_settings, load_effective_settings, reset_applied_settings,
                              save_applied_settings)
@@ -79,7 +79,7 @@ class SettingsPanel:
 
     def close_settings_window(self) -> None:
         """Close the settings window."""
-        self.window.settings_window.close()
+        self.window.go_back()
 
     def capture_font_baselines(self) -> None:
         """Capture baseline font and size values for rescaling."""

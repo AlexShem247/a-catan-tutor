@@ -4,8 +4,8 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from typing import Dict
 
-from PyQt6.QtCore import QPoint, QPointF, Qt
-from PyQt6.QtGui import QColor, QFontMetrics, QPen, QPixmap, QPolygonF
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QColor, QFontMetrics, QPen, QPixmap, QPolygonF
 
 from config.view_constants import (EDGE_COLOR, HIGHLIGHT_ANIMATION, PLAYER_COLORS, ROBBER_ICON, SETTLEMENT_ICONS,
                                    TERRAIN_COLORS, TOKEN_COLOR, TOKEN_COMMON_COLOR, TOKEN_OUTLINE_COLOR,

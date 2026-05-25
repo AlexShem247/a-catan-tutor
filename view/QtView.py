@@ -1,6 +1,7 @@
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from PyQt6.QtCore import QEventLoop, QTimer, pyqtBoundSignal
+from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtGui import QGuiApplication
 
 from ai.actions import Action
 from ai.tutor.explanations import ActionExplanation
@@ -16,6 +17,7 @@ from game.PlayerAssets import DevelopmentCardType
 from game.Resources import ResourceCount
 from game.Vertex import Vertex
 from view.MainWindow import MainWindow
+from view.qt_compat import disconnect_signal
 from view.View import GameMode, View
 
 
@@ -26,8 +28,18 @@ class QtView(View):
         self.canvas = window.canvas
         self.controller = controller
         self.ai_decision_animation_delay = AI_DECISION_ANIMATION_DELAY
-        self.window.setGeometry(WINDOW_DEFAULT_X, WINDOW_DEFAULT_Y, WINDOW_WIDTH, WINDOW_HEIGHT)
+        self._configure_initial_window()
         self.window.show()
+
+    def _configure_initial_window(self) -> None:
+        """Apply the initial window sizing."""
+        screen = QGuiApplication.primaryScreen()
+        if screen is None:
+            self.window.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
+            return
+
+        _available = screen.availableGeometry()
+        self.window.setGeometry(WINDOW_DEFAULT_X, WINDOW_DEFAULT_Y, WINDOW_WIDTH, WINDOW_HEIGHT)
 
     def set_debug_tutor_shortcut_handler(self, handler: Optional[Callable[[], Any]]) -> None:
         """Store the debug tutor shortcut handler."""
@@ -164,6 +176,9 @@ class QtView(View):
 
     def display_tutor_action_feedback(self, feedback: TutorFeedbackExplanation):
         """Display tutor feedback for the player action."""
+        if not self.window.should_auto_review():
+            self.window.record_tutor_action_feedback(feedback)
+            return True
         self.canvas.display_board(self.controller)
         self.window.display_resources(self.controller)
         self.window.set_debug_tutor_shortcut_handler(lambda: True)
@@ -199,7 +214,7 @@ class QtView(View):
         self.canvas.draw_selectable_tiles(tiles)
 
 
-def select_blocking(view: QtView, signal: pyqtBoundSignal, draw_fn, *args, **kwargs) -> Any:
+def select_blocking(view: QtView, signal: Any, draw_fn, *args, **kwargs) -> Any:
     """Block execution until the signal emits a value, then return that value."""
     loop = QEventLoop()
     selected = None
@@ -210,10 +225,7 @@ def select_blocking(view: QtView, signal: pyqtBoundSignal, draw_fn, *args, **kwa
         loop.quit()
 
     # Disconnect all previous handlers safely
-    try:
-        signal.disconnect()
-    except TypeError:
-        pass
+    disconnect_signal(signal)
 
     # Connect the new handler
     signal.connect(on_selected)
@@ -224,14 +236,8 @@ def select_blocking(view: QtView, signal: pyqtBoundSignal, draw_fn, *args, **kwa
     loop.exec()
 
     # Clean up
-    try:
-        signal.disconnect(on_selected)
-    except TypeError:
-        pass
-    try:
-        view.window.debugShortcutResult.disconnect(on_selected)
-    except TypeError:
-        pass
+    disconnect_signal(signal, on_selected)
+    disconnect_signal(view.window.debugShortcutResult, on_selected)
 
     view.canvas.clear_interactives()
 
