@@ -29,7 +29,7 @@ class SquareCanvas(QWidget):
         super().__init__()
         self.square_rect = None
         self.base_scale = None
-        self.setMinimumSize(WINDOW_HEIGHT // 2, WINDOW_HEIGHT // 2)
+        self.setMinimumSize(0, 0)
         self.world_size = 1000
         self.background_image = None
 

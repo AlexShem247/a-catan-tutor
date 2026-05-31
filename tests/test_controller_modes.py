@@ -138,6 +138,18 @@ class TestControllerModes(GameTestMixin, unittest.TestCase):
         for snapshot in snapshots[1:]:
             self.assertEqual(snapshot, snapshots[0])
 
+    def test_reset_game_uses_fresh_randomness_without_fixed_seed(self):
+        controller = GameController(STANDARD_SINGLEPLAYER, EVO_VS_RULE_BASED)
+        controller.view = HeadlessView()
+        controller.game_mode = GameMode.SIMULATION
+
+        snapshots = []
+        for _ in range(3):
+            controller.reset_game()
+            snapshots.append(self.controller_state_snapshot(controller, include_roles=False))
+
+        self.assertGreater(len(set(snapshots)), 1)
+
     def test_play_mode_tutor_following_matches_quick_simulation(self):
         simulation = GameController(STANDARD_SINGLEPLAYER, EVO_VS_RULE_BASED, game_seed=0)
         simulation.view = HeadlessView()

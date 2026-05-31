@@ -3,8 +3,8 @@ from typing import Callable, Dict, List, Optional, Tuple
 from PyQt6 import uic
 from PyQt6.QtCore import QEvent, QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QIcon, QKeyEvent
-from PyQt6.QtWidgets import (QButtonGroup, QHBoxLayout, QLabel, QLayout, QMainWindow, QPushButton, QSizePolicy,
-                             QSpacerItem, QSplitter, QToolButton, QWidget)
+from PyQt6.QtWidgets import (QAbstractScrollArea, QButtonGroup, QFrame, QHBoxLayout, QLabel, QLayout, QMainWindow,
+                             QPushButton, QScrollArea, QSizePolicy, QSpacerItem, QSplitter, QToolButton, QWidget)
 
 from ai.actions import Action, ActionType
 from ai.tutor.explanations import ActionExplanation
@@ -57,6 +57,7 @@ class MainWindow(QMainWindow):
 
         self.root_layout = QHBoxLayout(central)
         self.root_layout.setContentsMargins(0, 0, 0, 0)
+        self.panel_hosts: Dict[QWidget, QWidget] = {}
 
         # Splitter
         self.splitter_layout = QSplitter(Qt.Orientation.Horizontal, self)
@@ -69,8 +70,8 @@ class MainWindow(QMainWindow):
         # Side panel
         self.main_menu = self._load_ui(UI_MAIN_MENU_PATH)
         self.main_menu.setMinimumWidth(0)
-        self.main_menu.setMaximumWidth(MAIN_WINDOW_SIDE_PANEL_MAX_WIDTH)
-        self.splitter_layout.addWidget(self.main_menu)
+        self.main_menu_host = self._create_side_panel_host(self.main_menu)
+        self.splitter_layout.addWidget(self.main_menu_host)
         self.splitter_layout.setSizes([MAIN_WINDOW_BOARD_PANEL_DEFAULT_WIDTH, MAIN_WINDOW_SIDE_PANEL_WIDTH])
 
         # Prevent canvas from being squashed too much
@@ -80,7 +81,7 @@ class MainWindow(QMainWindow):
         # Tutor panel
         self.tutor_menu = self._load_ui(UI_TUTOR_MENU_PATH)
         self.tutor_menu.setMinimumWidth(0)
-        self.tutor_menu.setMaximumWidth(MAIN_WINDOW_SIDE_PANEL_MAX_WIDTH)
+        self.tutor_menu_host = self._create_side_panel_host(self.tutor_menu)
 
         self.resource_selector_widget = self._load_ui(UI_RESOURCE_SELECTOR_PATH)
         self.trade_designer_widget = self._load_ui(UI_TRADE_DESIGNER_PATH)
@@ -90,6 +91,7 @@ class MainWindow(QMainWindow):
         self.results_menu = self._load_ui(UI_RESULTS_MENU_PATH)
         self.endgame_review_menu = self._load_ui(UI_ENDGAME_REVIEW_PATH)
         self.start_menu = self._load_ui(UI_START_MENU_PATH)
+        self.start_menu_host = self._create_side_panel_host(self.start_menu)
         self.tutor_panel = TutorPanel(self, self.tutor_menu)
         self.trade_panel = TradePanel(self, self.resource_selector_widget, self.trade_designer_widget,
                                       self.select_trade_widget, self.trade_manager_widget)
@@ -160,6 +162,34 @@ class MainWindow(QMainWindow):
         except TypeError:
             pass
         button.clicked.connect(slot)  # type: ignore[attr-defined]
+
+    def _create_side_panel_host(self, panel: QWidget) -> QScrollArea:
+        """Wrap a side panel in a scroll area so window height can shrink independently."""
+        host = QScrollArea(self)
+        host.setObjectName(f"{panel.objectName()}Host")
+        host.setWidget(panel)
+        host.setWidgetResizable(True)
+        host.setFrameShape(QFrame.Shape.NoFrame)
+        host.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        host.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        host.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
+        host.setMinimumWidth(0)
+        host.setMaximumWidth(MAIN_WINDOW_SIDE_PANEL_MAX_WIDTH)
+        host.hide()
+        self.panel_hosts[panel] = host
+        return host
+
+    def _panel_host(self, panel: QWidget) -> QWidget:
+        """Return the splitter host widget for a panel."""
+        return self.panel_hosts.get(panel, panel)
+
+    def _remove_panel_host(self, panel: QWidget) -> None:
+        """Detach a panel host from the splitter without turning it into a floating window."""
+        host = self._panel_host(panel)
+        if self.splitter_layout.indexOf(host) == -1:
+            return
+        host.hide()
+        host.setParent(self)
 
     def set_restore_board_state_callback(self, callback: Optional[Callable[[], None]]):
         """Store the callback used to restore the board state."""
@@ -568,22 +598,20 @@ class MainWindow(QMainWindow):
 
     def open_tutor_menu(self, open_menu: bool):
         """Toggle the tutor menu visibility."""
+        tutor_host = self._panel_host(self.tutor_menu)
         if open_menu:
             # Avoid adding it twice
-            if self.splitter_layout.indexOf(self.tutor_menu) == -1:
-                self.tutor_menu.setMinimumWidth(0)
-                self.tutor_menu.setMaximumWidth(MAIN_WINDOW_SIDE_PANEL_MAX_WIDTH)
-                self.splitter_layout.insertWidget(0, self.tutor_menu)
-            self.tutor_menu.show()
+            if self.splitter_layout.indexOf(tutor_host) == -1:
+                self.splitter_layout.insertWidget(0, tutor_host)
+            tutor_host.show()
             self.splitter_layout.setSizes([
                 int(MAIN_WINDOW_SIDE_PANEL_WIDTH * TUTOR_PANEL_DEFAULT_WIDTH_RATIO),
                 MAIN_WINDOW_BOARD_PANEL_DEFAULT_WIDTH, MAIN_WINDOW_SIDE_PANEL_WIDTH
             ])
 
         else:
-            if self.splitter_layout.indexOf(self.tutor_menu) != -1:
-                self.tutor_menu.hide()
-                self.tutor_menu.setParent(None)
+            if self.splitter_layout.indexOf(tutor_host) != -1:
+                self._remove_panel_host(self.tutor_menu)
             self.splitter_layout.setSizes([MAIN_WINDOW_BOARD_PANEL_DEFAULT_WIDTH, MAIN_WINDOW_SIDE_PANEL_WIDTH])
 
     def display_tutor_init(self, player: Player, stage: TutorStage, explanation: ActionExplanation):
@@ -679,13 +707,13 @@ class MainWindow(QMainWindow):
         self._restore_splitter_layout()
 
         for widget in (self.main_menu, self.start_menu, self.results_menu):
-            if self.splitter_layout.indexOf(widget) != -1:
-                widget.setParent(None)
+            self._remove_panel_host(widget)
 
-        panel.setMinimumWidth(0)
-        panel.setMaximumWidth(MAIN_WINDOW_SIDE_PANEL_MAX_WIDTH)
-        self.splitter_layout.addWidget(panel)
-        panel.show()
+        host = self._panel_host(panel)
+        host.setMinimumWidth(0)
+        host.setMaximumWidth(MAIN_WINDOW_SIDE_PANEL_MAX_WIDTH)
+        self.splitter_layout.addWidget(host)
+        host.show()
         self.splitter_layout.setSizes([MAIN_WINDOW_BOARD_PANEL_DEFAULT_WIDTH, MAIN_WINDOW_SIDE_PANEL_WIDTH])
 
     def display_start_screen(self):
