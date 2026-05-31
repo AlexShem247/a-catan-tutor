@@ -34,6 +34,12 @@ class QtView(View):
         """Store the debug tutor shortcut handler."""
         self.window.set_debug_tutor_shortcut_handler(handler)
 
+    def _consume_animation_delay(self, default_delay: float) -> float:
+        """Return the one-shot fast delay for F8-driven actions when requested."""
+        if self.window.consume_debug_fast_animation_request():
+            return 0.1
+        return default_delay
+
     def consume_return_home_request(self) -> bool:
         """Consume and clear any pending return-home request."""
         return self.window.consume_return_home_request()
@@ -49,7 +55,7 @@ class QtView(View):
         """Display the board while an AI status message is shown."""
         self.window.display_resources(self.controller)
         self.window.display_generic_info(player, msg)
-        ai_time_delay(self.ai_decision_animation_delay * 1)
+        ai_time_delay(self._consume_animation_delay(self.ai_decision_animation_delay))
 
     def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int], played_dev_card: bool = False) \
             -> Action:
@@ -64,7 +70,7 @@ class QtView(View):
         self.window.display_round_info_ai_start(player, dice_info, msg)
         delay = AI_DECISION_ANIMATION_DELAY if increase_delay else self.ai_decision_animation_delay
         delay *= 3 if "\n" in msg else 1
-        ai_time_delay(self.ai_decision_animation_delay)
+        ai_time_delay(self._consume_animation_delay(delay))
 
     def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False) -> Optional[Vertex]:
         """Draw selectable vertices on the board."""
@@ -88,6 +94,7 @@ class QtView(View):
 
     def draw_selectable_tiles(self, tiles: List[HexTile]) -> HexTile:
         """Draw selectable tiles on the board."""
+        self.canvas.disable_interactivity = False
         self.window.set_restore_board_state_callback(lambda: self._restore_selectable_tiles(tiles))
         selected = select_blocking(self, self.canvas.selectionMade, self.canvas.draw_selectable_tiles, tiles)
         self.window.set_restore_board_state_callback(None)

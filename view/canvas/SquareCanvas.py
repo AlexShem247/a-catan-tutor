@@ -32,6 +32,8 @@ class SquareCanvas(QWidget):
         self.setMinimumSize(0, 0)
         self.world_size = 1000
         self.background_image = None
+        self.camera_controls_enabled = True
+        self.camera_focus_world: QPointF | None = None
 
         self.zoom = 1.0
         self.min_zoom = 1.0
@@ -119,7 +121,8 @@ class SquareCanvas(QWidget):
                         return
 
             # Manage zoom-in
-            if self.zoom > self.min_zoom and self.square_rect.contains(event.position().toPoint()):
+            if (self.camera_controls_enabled and self.zoom > self.min_zoom
+                    and self.square_rect.contains(event.position().toPoint())):
                 self.dragging = True
                 self.last_mouse_pos = event.position()
                 self.setCursor(QCursor(Qt.CursorShape.ClosedHandCursor))
@@ -171,6 +174,8 @@ class SquareCanvas(QWidget):
 
     def wheelEvent(self, event):
         """Handle mouse-wheel zooming on the canvas."""
+        if not self.camera_controls_enabled:
+            return
         if not self.square_rect.contains(event.position().toPoint()):
             return
 
@@ -235,7 +240,12 @@ class SquareCanvas(QWidget):
         self.base_scale = side / self.world_size
         scale = self.base_scale * self.zoom
 
-        if self.offset == QPointF(0, 0):
+        if self.camera_focus_world is not None:
+            self.offset = QPointF(
+                self.square_rect.center().x() - self.camera_focus_world.x() * scale,
+                self.square_rect.center().y() - self.camera_focus_world.y() * scale,
+            )
+        elif self.offset == QPointF(0, 0):
             self.offset = QPointF(self.square_rect.x(), self.square_rect.y())
 
         self.clamp_offset()
@@ -276,6 +286,13 @@ class SquareCanvas(QWidget):
         self.clear_shapes()
         cx, cy = self.get_world_centre()
         self.background_image = None
+        self.camera_controls_enabled = True
+        self.camera_focus_world = None
+        self.zoom = 1.0
+        self.min_zoom = 1.0
+        self.max_zoom = 20.0
+        self.offset = QPointF(0, 0)
+        self.dragging = False
 
         for tile in controller.get_all_hexes():
             x, y = hex_center(tile.q, tile.r, cx, cy, HEX_TILE_RADIUS)
@@ -390,19 +407,27 @@ class SquareCanvas(QWidget):
         self.planned_overlay_shapes = []
         self.feedback_builds = []
         self.feedback_overlay_shapes = []
+        self.clear_interactives()
+        self.camera_controls_enabled = False
+        self.zoom = 1.35
+        self.min_zoom = self.zoom
+        self.max_zoom = self.zoom
+        self.camera_focus_world = QPointF(self.world_size * 0.5, self.world_size * 0.42)
+        self.offset = QPointF(0, 0)
+        self.dragging = False
         w, h = self.world_size, self.world_size
 
         self.background_image = self.icons[SEA_BACKGROUND]
 
-        self.add_shape(TextShape(w * 0.5, h * 0.35, "Catan", TITLE_COLOR, 200, outline_width=2, bold=True))
+        self.add_shape(TextShape(w * 0.5, h * 0.35, "Catan", TITLE_COLOR, 150, outline_width=2, bold=True))
 
         self.add_shape(
-            TextShape(w * 0.5, h * 0.55, "Explainable AI Tutor", TITLE_COLOR.lighter(150), 40, outline_width=1,
+            TextShape(w * 0.5, h * 0.48, "Explainable AI Tutor", TITLE_COLOR.lighter(150), 30, outline_width=1,
                       bold=True))
 
         self.add_shape(
-            TextShape(w * 0.5, h * 0.65, "Your AI guide to smart moves and strategic insights in Catan.",
-                      TITLE_COLOR.lighter(150), 25, bold=True))
+            TextShape(w * 0.5, h * 0.55, "Your AI guide to smart moves and strategic insights in Catan.",
+                      TITLE_COLOR.lighter(150), 20, bold=True))
 
     def render_planned_builds(self, builds: List[Tuple]):
         """Render the planned build overlays."""

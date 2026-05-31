@@ -132,6 +132,7 @@ class MainWindow(QMainWindow):
         self.main_menu.home_btn.setText("")
         self.main_menu.home_btn.setIcon(QIcon(HOME_ICON))
         self.main_menu.home_btn.setIconSize(self.main_menu.home_btn.size())
+        self._configure_trade_designer_fonts()
         self._apply_player_colour_indicators()
         self.settings_panel.capture_font_baselines()
         self.settings_panel.load_settings_into_ui()
@@ -141,6 +142,7 @@ class MainWindow(QMainWindow):
         self.settings_window.font_size_spinbox.valueChanged.connect(self.settings_panel.preview_font_size)
 
         self.verticalSpacer = self.find_last_vertical_spacer()
+        self._configure_main_menu_spacer()
         self.live_board_source: BoardDisplaySource | None = None
         self.fullscreen_panel: Optional[QWidget] = None
         self.debug_tutor_shortcut_handler: Optional[Callable[[], object]] = None
@@ -149,6 +151,8 @@ class MainWindow(QMainWindow):
         self.restore_board_state_callback: Optional[Callable[[], None]] = None
         self.return_home_requested = False
         self.app_closing = False
+        self.debug_fast_animation_requested = False
+        self.pending_action_status_message: Optional[str] = None
         self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(Action(ActionType.END_TURN)))
         self.safe_connect(self.main_menu.home_btn, self.return_to_start_screen)
 
@@ -214,6 +218,22 @@ class MainWindow(QMainWindow):
         self.return_home_requested = False
         return requested
 
+    def consume_debug_fast_animation_request(self) -> bool:
+        """Consume and clear any pending F8 fast-animation request."""
+        requested = self.debug_fast_animation_requested
+        self.debug_fast_animation_requested = False
+        return requested
+
+    def set_pending_action_status_message(self, message: Optional[str]) -> None:
+        """Store a one-shot action status message for the next main turn redraw."""
+        self.pending_action_status_message = message
+
+    def consume_pending_action_status_message(self) -> Optional[str]:
+        """Consume and clear any pending one-shot action status message."""
+        message = self.pending_action_status_message
+        self.pending_action_status_message = None
+        return message
+
     def show_rules(self):
         """Show the rules window."""
         # Show the rule window
@@ -240,6 +260,47 @@ class MainWindow(QMainWindow):
                                    vertical_padding_px=PLAYER_INDICATOR_BADGE_PADDING_PX[0],
                                    horizontal_padding_px=PLAYER_INDICATOR_BADGE_PADDING_PX[1],
                                    font_size_px=PLAYER_BADGE_FONT_SIZE_PX)
+
+    def _configure_trade_designer_fonts(self) -> None:
+        """Keep the dense trade-designer resource controls readable in a small panel."""
+        compact_point_size = 8
+        quantity_point_size = 8
+        button_point_size = 8
+
+        for res in Resource:
+            for widget_name, point_size in (
+                (f"selling_{res.name.lower()}_quantity", quantity_point_size),
+                (f"buying_{res.name.lower()}_quantity", quantity_point_size),
+                (f"selling_{res.name.lower()}_quantity_dec", button_point_size),
+                (f"selling_{res.name.lower()}_quantity_inc", button_point_size),
+                (f"buying_{res.name.lower()}_quantity_dec", button_point_size),
+                (f"buying_{res.name.lower()}_quantity_inc", button_point_size),
+            ):
+                widget = getattr(self.trade_designer_widget, widget_name, None)
+                if widget is None:
+                    continue
+                font = widget.font()
+                font.setPointSize(point_size)
+                widget.setFont(font)
+
+        for label_name in (
+            "label_49",
+            "label_50",
+            "label_51",
+            "label_53",
+            "label_54",
+            "label_52",
+            "label_55",
+            "label_56",
+            "label_57",
+            "label_58",
+        ):
+            label = getattr(self.trade_designer_widget, label_name, None)
+            if label is None:
+                continue
+            font = label.font()
+            font.setPointSize(compact_point_size)
+            label.setFont(font)
 
     def _set_turn_label(self, player: Player) -> None:
         """Update the turn label for the active player."""
@@ -293,6 +354,17 @@ class MainWindow(QMainWindow):
         self.verticalSpacer = last_spacer
         return last_spacer
 
+    def _configure_main_menu_spacer(self) -> None:
+        """Make the main action spacer consume only surplus height."""
+        spacer = getattr(self, "verticalSpacer", None)
+        if spacer is None:
+            return
+
+        spacer.changeSize(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        if self.main_menu.frame.layout() is not None:
+            self.main_menu.frame.layout().invalidate()
+            self.main_menu.frame.layout().update()
+
     def minimise_spacer(self):
         """Collapse the main menu spacer to reclaim vertical space."""
         if getattr(self, "verticalSpacer", None) is None:
@@ -300,7 +372,8 @@ class MainWindow(QMainWindow):
 
         spacer = self.verticalSpacer
         if not hasattr(spacer, "_original_size"):
-            spacer._original_size = (spacer.geometry().width(), spacer.geometry().height(),
+            size_hint = spacer.sizeHint()
+            spacer._original_size = (size_hint.width(), size_hint.height(),
                                      spacer.sizePolicy().horizontalPolicy(), spacer.sizePolicy().verticalPolicy())
 
         spacer.changeSize(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
@@ -392,6 +465,7 @@ class MainWindow(QMainWindow):
 
     def _try_apply_tutor_recommended_move(self) -> bool:
         """Try to apply the tutor-recommended move shortcut."""
+        self.debug_fast_animation_requested = True
         return self._try_apply_tutor_shortcut(self.debug_tutor_shortcut_handler)
 
     def _show_fullscreen_panel(self, panel: QWidget):
@@ -584,6 +658,9 @@ class MainWindow(QMainWindow):
         self.set_main_action_btns_enabled(True)
 
         self.draw_buildables_if_can_build(controller, player)
+        pending_action_status = self.consume_pending_action_status_message()
+        if pending_action_status:
+            self.main_menu.action_label.setText(pending_action_status)
         can_afford_card = controller.get_buildable_options(player)[Buildable.DEVELOPMENT_CARD]
         self.main_menu.dev_btn.setEnabled(can_afford_card or len(player.development_cards) > 0)
         self.main_menu.trade_btn.setEnabled(sum(player.resources.values()) > 0)

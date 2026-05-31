@@ -1134,8 +1134,13 @@
             <property name="minimumSize">
              <size>
               <width>0</width>
-              <height>80</height>
+              <height>60</height>
              </size>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+             </font>
             </property>
             <property name="toolTip">
              <string>Open the trade menu to offer trades with other players or the bank.
@@ -1154,7 +1159,7 @@ Building costs:
             <property name="minimumSize">
              <size>
               <width>0</width>
-              <height>80</height>
+              <height>60</height>
              </size>
             </property>
             <property name="font">
@@ -1176,8 +1181,13 @@ Building costs:
             <property name="minimumSize">
              <size>
               <width>0</width>
-              <height>80</height>
+              <height>60</height>
              </size>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>10</pointsize>
+             </font>
             </property>
             <property name="toolTip">
              <string>Finish your turn</string>

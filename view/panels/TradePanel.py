@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Callable, Dict, Optional, Tuple
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QLabel, QListWidgetItem, QToolButton, QWidget
 
 from ai.actions import Action, ActionType
@@ -31,6 +31,20 @@ class TradePanel:
         self.select_trade_widget = select_trade_widget
         self.trade_manager_widget = trade_manager_widget
         self.active_trade_preview_widget: QWidget | None = None
+
+    @staticmethod
+    def _fit_list_to_contents(list_widget) -> None:
+        """Resize a list widget to exactly fit its current rows."""
+        row_count = list_widget.count()
+        if row_count <= 0:
+            list_widget.setFixedHeight(0)
+            return
+
+        total_row_height = sum(list_widget.sizeHintForRow(i) for i in range(row_count))
+        frame_height = list_widget.frameWidth() * 2
+        margins = list_widget.contentsMargins()
+        total_height = total_row_height + frame_height + margins.top() + margins.bottom()
+        list_widget.setFixedHeight(total_height)
 
     def clear_trade_preview(self) -> None:
         """Clear the trade preview."""
@@ -333,12 +347,6 @@ class TradePanel:
         self.clear_trade_preview()
         self.window.main_menu.action_label.show()
 
-        if not willing_players:
-            self.window.main_menu.action_label.setText("No players are willing to trade with you right now.")
-            self.window.set_debug_tutor_shortcut_finalizer(None)
-            QTimer.singleShot(0, lambda: self.window.tradeSelected.emit(None))
-            return
-
         select_trade = self.select_trade_widget
         select_trade.setParent(self.window.main_menu)
         self.window.toggle_main_action_btns(False)
@@ -346,32 +354,46 @@ class TradePanel:
         self.window.main_menu.action_btn_layout.addWidget(select_trade)
         self.active_trade_preview_widget = select_trade
         select_trade.trade_list.clear()
-        select_trade.trade_list.setEnabled(True)
+        select_trade.trade_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
-        self.window.main_menu.action_label.setText(f"Available Trades for {format_counter_offer(buying, buying)}:")
-        select_trade.submit_btn.setText("Cancel")
+        no_willing_players = not willing_players
+        if no_willing_players:
+            self.window.main_menu.action_label.setText("No players are willing to trade with you right now.")
+            select_trade.submit_btn.setText("Go Back")
+            select_trade.trade_list.setEnabled(False)
+            item = QListWidgetItem("No players want to trade with you.")
+            item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+            select_trade.trade_list.addItem(item)
+            select_trade.trade_list.setCurrentRow(-1)
+        else:
+            self.window.main_menu.action_label.setText(f"Available Trades for {format_counter_offer(buying, buying)}:")
+            select_trade.submit_btn.setText("Cancel")
+            select_trade.trade_list.setEnabled(True)
         select_trade.submit_btn.show()
         select_trade.trade_list.show()
 
-        for trade_player, counter in willing_players:
-            if counter is None:
-                can_afford = True
-                trade_str = format_counter_offer(selling, selling)
-            else:
-                can_afford = all(player.resources.get(res, 0) >= amt for res, amt in counter.items())
-                trade_str = format_counter_offer(selling, counter)
+        if not no_willing_players:
+            for trade_player, counter in willing_players:
+                if counter is None:
+                    can_afford = True
+                    trade_str = format_counter_offer(selling, selling)
+                else:
+                    can_afford = all(player.resources.get(res, 0) >= amt for res, amt in counter.items())
+                    trade_str = format_counter_offer(selling, counter)
 
-            item = QListWidgetItem(f"Trade {trade_player.name}: {trade_str}")
-            if not can_afford:
-                item.setText(item.text() + " (CANNOT AFFORD)")
-                item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
-            item.setData(Qt.ItemDataRole.UserRole, (trade_player, counter) if can_afford else None)
-            select_trade.trade_list.addItem(item)
+                item = QListWidgetItem(f"Trade {trade_player.name}: {trade_str}")
+                if not can_afford:
+                    item.setText(item.text() + " (CANNOT AFFORD)")
+                    item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEnabled)
+                item.setData(Qt.ItemDataRole.UserRole, (trade_player, counter) if can_afford else None)
+                select_trade.trade_list.addItem(item)
 
-        for i in range(select_trade.trade_list.count()):
-            if select_trade.trade_list.item(i).flags() & Qt.ItemFlag.ItemIsEnabled:
-                select_trade.trade_list.setCurrentRow(i)
-                break
+            for i in range(select_trade.trade_list.count()):
+                if select_trade.trade_list.item(i).flags() & Qt.ItemFlag.ItemIsEnabled:
+                    select_trade.trade_list.setCurrentRow(i)
+                    break
+
+        self._fit_list_to_contents(select_trade.trade_list)
 
         def accept_trade(trade: QListWidgetItem) -> None:
             deal = trade.data(Qt.ItemDataRole.UserRole)
@@ -425,6 +447,7 @@ class TradePanel:
             f"You need to select {num_resources} more resource{'s' if num_resources != 1 else ''}.")
 
         self.window.toggle_main_action_btns(False)
+        self.window.minimise_spacer()
         self.window.main_menu.action_btn_layout.addWidget(selection_widget)
         selection_widget.submit_btn.show()
 
@@ -445,12 +468,14 @@ class TradePanel:
         )
 
         def submit() -> None:
+            self.window.restore_spacer()
             self.window.main_menu.action_btn_layout.removeWidget(selection_widget)
             selection_widget.setParent(None)
             self.window.set_debug_tutor_shortcut_finalizer(None)
             self.window.resourcesPicked.emit(chosen)
 
         def cleanup_selection_widget() -> None:
+            self.window.restore_spacer()
             self.window.main_menu.action_btn_layout.removeWidget(selection_widget)
             selection_widget.setParent(None)
             self.window.set_debug_tutor_shortcut_finalizer(None)

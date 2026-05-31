@@ -108,29 +108,29 @@ class TurnController(ControllerSupport, ABC):
                             ))
 
                         self._set_tutor_shortcut_handlers(select_tutor_trade_partner)
-                        try:
-                            deal = self.view.select_player_trade_offer(player, selling, buying, affordable_offers)
-                        finally:
-                            self._set_tutor_shortcut_handlers(None)
-                        self._raise_if_return_home(deal)
-                        if deal is not None:
-                            buying_player, counter = deal
-                            partner_feedback = None
-                            if self._should_collect_tutor_feedback(player):
-                                partner_feedback = self.tutor_evaluator.evaluate_trade_partner_choice(
-                                    player,
-                                    self._game,
-                                    selling,
-                                    buying,
-                                    affordable_offers,
-                                    buying_player,
-                                    counter,
-                                    title="Trade Partner",
-                                )
-                            final_selling = counter if counter is not None else selling
-                            self.trade_between_players(player, final_selling, buying_player, buying)
-                            self._show_tutor_action_feedback(player, partner_feedback)
-                            self._show_tutor_action_feedback(player, action_feedback)
+                    try:
+                        deal = self.view.select_player_trade_offer(player, selling, buying, willing_players)
+                    finally:
+                        self._set_tutor_shortcut_handlers(None)
+                    self._raise_if_return_home(deal)
+                    if deal is not None:
+                        buying_player, counter = deal
+                        partner_feedback = None
+                        if self._should_collect_tutor_feedback(player):
+                            partner_feedback = self.tutor_evaluator.evaluate_trade_partner_choice(
+                                player,
+                                self._game,
+                                selling,
+                                buying,
+                                affordable_offers,
+                                buying_player,
+                                counter,
+                                title="Trade Partner",
+                            )
+                        final_selling = counter if counter is not None else selling
+                        self.trade_between_players(player, final_selling, buying_player, buying)
+                        self._show_tutor_action_feedback(player, partner_feedback)
+                        self._show_tutor_action_feedback(player, action_feedback)
                 case ActionType.BUY_DEV_CARD:
                     success, _ = self.try_buy_development_card(player)
                     if success:

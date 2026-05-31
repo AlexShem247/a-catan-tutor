@@ -274,11 +274,6 @@ def overall_performance_summary(
         weaknesses = [outcome_weakness, *weaknesses][:2]
 
     score_text = f"Overall: {overall_label} ({overall_score:.2f})"
-    if vp_score is not None and win_bonus is not None:
-        score_text = (f"Overall: {overall_label} ({overall_score:.2f})"
-                      f" | Moves {weighted_quality:.2f}"
-                      f" | VP {vp_score:.2f}"
-                      f" | Win {float(win_bonus):.2f}")
 
     return {
         "turn_and_player": "",

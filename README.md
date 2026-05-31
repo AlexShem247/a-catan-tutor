@@ -17,7 +17,7 @@ Make sure you are using Python 3.12 or higher for compatibility.
 The game runs through the PyQt GUI:
 
 ```bash
-python play_game.py
+python catan_tutor.py
 ```
 
 ## Game Modes
