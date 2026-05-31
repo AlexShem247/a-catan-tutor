@@ -4,7 +4,8 @@ from PyQt6 import uic
 from PyQt6.QtCore import QEvent, QObject, Qt, pyqtSignal
 from PyQt6.QtGui import QIcon, QKeyEvent
 from PyQt6.QtWidgets import (QAbstractScrollArea, QButtonGroup, QFrame, QHBoxLayout, QLabel, QLayout, QMainWindow,
-                             QPushButton, QScrollArea, QSizePolicy, QSpacerItem, QSplitter, QToolButton, QWidget)
+                             QApplication, QPushButton, QScrollArea, QSizePolicy, QSpacerItem, QSplitter,
+                             QToolButton, QWidget)
 
 from ai.actions import Action, ActionType
 from ai.tutor.explanations import ActionExplanation
@@ -147,6 +148,7 @@ class MainWindow(QMainWindow):
         self.main_action_btn_enabled_states: List[bool] = []
         self.restore_board_state_callback: Optional[Callable[[], None]] = None
         self.return_home_requested = False
+        self.app_closing = False
         self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(Action(ActionType.END_TURN)))
         self.safe_connect(self.main_menu.home_btn, self.return_to_start_screen)
 
@@ -458,9 +460,15 @@ class MainWindow(QMainWindow):
             return True
         return super().eventFilter(watched, event)
 
-    def closeEvent(self, _):
-        """Exit the application when the window closes."""
-        quit()
+    def closeEvent(self, event):
+        """Terminate pending UI wait states and close the application."""
+        self.app_closing = True
+        self.tutor_panel.stop_auto_feedback()
+        self.debugShortcutResult.emit(None)
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()
+        event.accept()
 
     def display_resources(self, controller: BoardDisplaySource):
         """Display the current board and player resource totals."""

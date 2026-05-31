@@ -1,6 +1,7 @@
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from PyQt6.QtCore import QEventLoop, QTimer, pyqtBoundSignal
+from PyQt6.QtWidgets import QApplication
 
 from ai.actions import Action
 from ai.tutor.explanations import ActionExplanation
@@ -203,6 +204,7 @@ def select_blocking(view: QtView, signal: pyqtBoundSignal, draw_fn, *args, **kwa
     """Block execution until the signal emits a value, then return that value."""
     loop = QEventLoop()
     selected = None
+    app = QApplication.instance()
 
     def on_selected(obj):
         nonlocal selected
@@ -218,10 +220,15 @@ def select_blocking(view: QtView, signal: pyqtBoundSignal, draw_fn, *args, **kwa
     # Connect the new handler
     signal.connect(on_selected)
     view.window.debugShortcutResult.connect(on_selected)
+    if app is not None:
+        app.aboutToQuit.connect(loop.quit)
 
     draw_fn(*args, **kwargs)
 
     loop.exec()
+
+    if getattr(view.window, "app_closing", False):
+        raise SystemExit
 
     # Clean up
     try:
@@ -232,6 +239,11 @@ def select_blocking(view: QtView, signal: pyqtBoundSignal, draw_fn, *args, **kwa
         view.window.debugShortcutResult.disconnect(on_selected)
     except TypeError:
         pass
+    if app is not None:
+        try:
+            app.aboutToQuit.disconnect(loop.quit)
+        except TypeError:
+            pass
 
     view.canvas.clear_interactives()
 
@@ -241,7 +253,15 @@ def select_blocking(view: QtView, signal: pyqtBoundSignal, draw_fn, *args, **kwa
 def ai_time_delay(seconds: float):
     if seconds > 0:
         loop = QEventLoop()
+        app = QApplication.instance()
 
         QTimer.singleShot(int(seconds * SECONDS_TO_MILLISECONDS), loop.quit)
+        if app is not None:
+            app.aboutToQuit.connect(loop.quit)
 
         loop.exec()
+        if app is not None:
+            try:
+                app.aboutToQuit.disconnect(loop.quit)
+            except TypeError:
+                pass
