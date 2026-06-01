@@ -108,6 +108,8 @@ class TurnController(ControllerSupport, ABC):
                             ))
 
                         self._set_tutor_shortcut_handlers(select_tutor_trade_partner)
+                    else:
+                        self._set_tutor_shortcut_handlers(lambda: None)
                     try:
                         deal = self.view.select_player_trade_offer(player, selling, buying, willing_players)
                     finally:

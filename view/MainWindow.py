@@ -132,6 +132,7 @@ class MainWindow(QMainWindow):
         self.main_menu.home_btn.setText("")
         self.main_menu.home_btn.setIcon(QIcon(HOME_ICON))
         self.main_menu.home_btn.setIconSize(self.main_menu.home_btn.size())
+        self._configure_compact_resource_selector_fonts()
         self._configure_trade_designer_fonts()
         self._apply_player_colour_indicators()
         self.settings_panel.capture_font_baselines()
@@ -261,6 +262,32 @@ class MainWindow(QMainWindow):
                                    horizontal_padding_px=PLAYER_INDICATOR_BADGE_PADDING_PX[1],
                                    font_size_px=PLAYER_BADGE_FONT_SIZE_PX)
 
+    @staticmethod
+    def _set_widget_point_size(widget: QWidget | None, point_size: int) -> None:
+        """Apply a point size to a widget if it exists."""
+        if widget is None:
+            return
+        font = widget.font()
+        font.setPointSize(point_size)
+        widget.setFont(font)
+
+    def _configure_compact_resource_selector_fonts(self) -> None:
+        """Keep resource-selector controls aligned with the compact trade layouts."""
+        compact_point_size = 8
+        quantity_point_size = 8
+        button_point_size = 8
+
+        for res in Resource:
+            for widget_name, point_size in (
+                (f"{res.name.lower()}_quantity", quantity_point_size),
+                (f"{res.name.lower()}_quantity_dec", button_point_size),
+                (f"{res.name.lower()}_quantity_inc", button_point_size),
+            ):
+                self._set_widget_point_size(getattr(self.resource_selector_widget, widget_name, None), point_size)
+
+        for label_name in ("label_49", "label_50", "label_51", "label_53", "label_54", "submit_btn"):
+            self._set_widget_point_size(getattr(self.resource_selector_widget, label_name, None), compact_point_size)
+
     def _configure_trade_designer_fonts(self) -> None:
         """Keep the dense trade-designer resource controls readable in a small panel."""
         compact_point_size = 8
@@ -276,12 +303,7 @@ class MainWindow(QMainWindow):
                 (f"buying_{res.name.lower()}_quantity_dec", button_point_size),
                 (f"buying_{res.name.lower()}_quantity_inc", button_point_size),
             ):
-                widget = getattr(self.trade_designer_widget, widget_name, None)
-                if widget is None:
-                    continue
-                font = widget.font()
-                font.setPointSize(point_size)
-                widget.setFont(font)
+                self._set_widget_point_size(getattr(self.trade_designer_widget, widget_name, None), point_size)
 
         for label_name in (
             "label_49",
@@ -295,12 +317,7 @@ class MainWindow(QMainWindow):
             "label_57",
             "label_58",
         ):
-            label = getattr(self.trade_designer_widget, label_name, None)
-            if label is None:
-                continue
-            font = label.font()
-            font.setPointSize(compact_point_size)
-            label.setFont(font)
+            self._set_widget_point_size(getattr(self.trade_designer_widget, label_name, None), compact_point_size)
 
     def _set_turn_label(self, player: Player) -> None:
         """Update the turn label for the active player."""
