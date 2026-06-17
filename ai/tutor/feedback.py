@@ -3,7 +3,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from html import escape
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 from game.PlayerAssets import Buildable
 from view.canvas.board_display_source import BoardDisplaySource
@@ -79,11 +79,11 @@ class TutorAssessment:
     judgment_sentence: str
     your_move: str
     move_context: str = ""
-    better_move: Optional[str] = None
+    better_move: str | None = None
     better_move_context: str = ""
-    top_strengths: List[str] = field(default_factory=list)
-    top_weaknesses: List[str] = field(default_factory=list)
-    better_move_reasons: List[str] = field(default_factory=list)
+    top_strengths: list[str] = field(default_factory=list)
+    top_weaknesses: list[str] = field(default_factory=list)
+    better_move_reasons: list[str] = field(default_factory=list)
     tip: str = ""
 
     @staticmethod
@@ -109,9 +109,9 @@ class TutorAssessment:
         return text.rstrip(".!?")
 
     @classmethod
-    def _dedupe_display_texts(cls, texts: List[str]) -> List[str]:
+    def _dedupe_display_texts(cls, texts: list[str]) -> list[str]:
         """Remove duplicate display texts while preserving order."""
-        deduped: List[str] = []
+        deduped: list[str] = []
         seen = set()
         for text in texts:
             if not text:
@@ -188,8 +188,8 @@ class TutorFeedbackExplanation:
     detailed_html: str
     label: str
     board_snapshot: BoardStateSnapshot
-    visual_build_plan: List[Tuple[Any, Any, Any]]
-    recommended_visual_plan: List[Tuple[Any, Any]]
+    visual_build_plan: list[tuple[Any, Any, Any]]
+    recommended_visual_plan: list[tuple[Any, Any]]
     history_summary: str
     assessment: TutorAssessment
 
@@ -199,7 +199,7 @@ class TutorFeedbackExplanation:
         title: str,
         assessment: TutorAssessment,
         game_state: Any,
-        visual_build_plan: Optional[List[Tuple[Any, Any, Any]]] = None,
+        visual_build_plan: list[tuple[Any, Any, Any]] | None = None,
     ) -> "TutorFeedbackExplanation":
         """Create a feedback explanation from an assessment."""
         return cls(
@@ -225,6 +225,6 @@ class TutorFeedbackExplanation:
             return
         self.visual_build_plan = [(buildable, position, player_number)]
 
-    def set_recommended_visual_plan(self, visual_plan: List[Tuple[Any, Any]]):
+    def set_recommended_visual_plan(self, visual_plan: list[tuple[Any, Any]]):
         """Store the recommended visual plan for the feedback."""
         self.recommended_visual_plan = list(visual_plan)

@@ -1,5 +1,5 @@
 import math
-from typing import TYPE_CHECKING, Callable, Optional, Tuple
+from typing import TYPE_CHECKING, Callable
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QAbstractScrollArea, QHBoxLayout, QPushButton, QWidget
@@ -57,8 +57,8 @@ class TutorPanel:
         self.history_enabled_on_turn = False
         self.history_available_in_mode = False
         self.history_mode_active = False
-        self.restore_tutor_menu_callback: Optional[Callable[[], None]] = None
-        self.dismiss_tutor_hint_callback: Optional[Callable[[], None]] = None
+        self.restore_tutor_menu_callback: Callable[[], None] | None = None
+        self.dismiss_tutor_hint_callback: Callable[[], None] | None = None
 
         self.window.safe_connect(self.widget.previous_feedback_btn, self.show_previous_feedback_history)
 
@@ -81,6 +81,7 @@ class TutorPanel:
         """Update the visibility of the previous-feedback button."""
         visible = (self.history_available_in_mode and self.history_enabled_on_turn and bool(self.tutor_feedback_history)
                    and not self.history_mode_active)
+        self.widget.previous_feedback_btn.setText("Previous Feedback")
         self.widget.previous_feedback_btn.setVisible(visible)
         self.widget.previous_feedback_btn.setEnabled(visible)
 
@@ -89,12 +90,12 @@ class TutorPanel:
         self.history_enabled_on_turn = enabled
         self.update_previous_feedback_button()
 
-    def set_restore_tutor_menu_callback(self, callback: Optional[Callable[[], None]], allow_history: bool) -> None:
+    def set_restore_tutor_menu_callback(self, callback: Callable[[], None] | None, allow_history: bool) -> None:
         """Store the callback used to restore the tutor menu."""
         self.restore_tutor_menu_callback = callback
         self.set_history_enabled(allow_history)
 
-    def set_dismiss_tutor_hint_callback(self, callback: Optional[Callable[[], None]]) -> None:
+    def set_dismiss_tutor_hint_callback(self, callback: Callable[[], None] | None) -> None:
         """Store the callback used to dismiss the active tutor hint."""
         self.dismiss_tutor_hint_callback = callback
 
@@ -266,7 +267,7 @@ class TutorPanel:
         return TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS + (
             (TUTOR_FEEDBACK_MAX_DISPLAY_SECONDS - TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS) * gap)
 
-    def concise_explanation_html(self, explanation: ActionExplanation) -> Tuple[str, str]:
+    def concise_explanation_html(self, explanation: ActionExplanation) -> tuple[str, str]:
         """Build the concise tutor explanation HTML."""
         concise_title, concise_explanation = explanation.generate_text_concise()
         quality_label = explanation.tutor_move_quality_label
@@ -380,6 +381,7 @@ class TutorPanel:
 
     def display_tutor_action_feedback(self, feedback: TutorFeedbackExplanation) -> None:
         """Display tutor feedback for the player action."""
+        demo_mode = getattr(self.window, "demo_navigation_enabled", False)
         self.history_mode_active = False
         self.window.canvas.clear_planned_builds()
         self.window.canvas.clear_feedback_builds()
@@ -399,18 +401,39 @@ class TutorPanel:
         self.widget.continue_btn.setEnabled(False)
         self.widget.continue_btn.setText("Continue")
 
-        def switch_to_manual_continue() -> None:
+        def show_concise_feedback() -> None:
+            self.window.canvas.clear_planned_builds()
+            self.widget.action_label.setText(feedback.title)
+            self.widget.explanation_edit.setHtml(feedback.concise_html)
+            self.widget.explain_btn.show()
+            self.widget.explain_btn.setEnabled(True)
+            self.widget.explain_btn.setText("Explain Further")
+            self.widget.continue_btn.hide()
+            self.window.safe_connect(self.widget.explain_btn, show_detailed_feedback)
+            self.update_previous_feedback_button()
+
+        def show_detailed_feedback() -> None:
             self.stop_auto_feedback()
             self.window.canvas.clear_planned_builds()
             if feedback.recommended_visual_plan:
                 self.window.canvas.render_planned_builds(feedback.recommended_visual_plan)
             self.widget.explanation_edit.setHtml(feedback.detailed_html)
-            self.widget.explain_btn.hide()
-            self.widget.continue_btn.show()
-            self.widget.continue_btn.setEnabled(True)
-            self.window.safe_connect(self.widget.continue_btn, self.continue_after_tutor_feedback)
+            if demo_mode:
+                self.widget.explain_btn.show()
+                self.widget.explain_btn.setEnabled(True)
+                self.widget.explain_btn.setText("Show Less")
+                self.widget.continue_btn.hide()
+                self.window.safe_connect(self.widget.explain_btn, show_concise_feedback)
+            else:
+                self.widget.explain_btn.hide()
+                self.widget.continue_btn.show()
+                self.widget.continue_btn.setEnabled(True)
+                self.window.safe_connect(self.widget.continue_btn, self.continue_after_tutor_feedback)
 
-        self.window.safe_connect(self.widget.explain_btn, switch_to_manual_continue)
+        self.window.safe_connect(self.widget.explain_btn, show_detailed_feedback)
+        if demo_mode:
+            self.stop_auto_feedback()
+            return
         self.start_feedback_fade(self.tutor_feedback_display_seconds(feedback))
 
     def prepare_ai_wait_state(self) -> None:

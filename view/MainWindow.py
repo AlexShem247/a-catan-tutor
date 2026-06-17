@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable
 
 from PyQt6 import uic
 from PyQt6.QtCore import QEvent, QObject, Qt, pyqtSignal
@@ -35,7 +35,7 @@ from view.panels.TradePanel import TradePanel
 from view.panels.TutorPanel import TutorPanel
 from view.rich_text import tutor_window_title_html
 from view.styles import player_badge_stylesheet
-from view.View import GameMode
+from view.View import DemoControl, GameMode
 
 
 # noinspection PyUnresolvedReferences
@@ -58,7 +58,7 @@ class MainWindow(QMainWindow):
 
         self.root_layout = QHBoxLayout(central)
         self.root_layout.setContentsMargins(0, 0, 0, 0)
-        self.panel_hosts: Dict[QWidget, QWidget] = {}
+        self.panel_hosts: dict[QWidget, QWidget] = {}
 
         # Splitter
         self.splitter_layout = QSplitter(Qt.Orientation.Horizontal, self)
@@ -145,15 +145,18 @@ class MainWindow(QMainWindow):
         self.verticalSpacer = self.find_last_vertical_spacer()
         self._configure_main_menu_spacer()
         self.live_board_source: BoardDisplaySource | None = None
-        self.fullscreen_panel: Optional[QWidget] = None
-        self.debug_tutor_shortcut_handler: Optional[Callable[[], object]] = None
-        self.debug_tutor_shortcut_finalizer: Optional[Callable[[], None]] = None
-        self.main_action_btn_enabled_states: List[bool] = []
-        self.restore_board_state_callback: Optional[Callable[[], None]] = None
+        self.fullscreen_panel: QWidget | None = None
+        self.debug_tutor_shortcut_handler: Callable[[], object] | None = None
+        self.debug_tutor_shortcut_finalizer: Callable[[], None] | None = None
+        self.main_action_btn_enabled_states: list[bool] = []
+        self.restore_board_state_callback: Callable[[], None] | None = None
         self.return_home_requested = False
         self.app_closing = False
         self.debug_fast_animation_requested = False
-        self.pending_action_status_message: Optional[str] = None
+        self.pending_action_status_message: str | None = None
+        self.window_title_suffix: str | None = None
+        self.demo_navigation_enabled = False
+        self.demo_navigation_has_next = False
         self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(Action(ActionType.END_TURN)))
         self.safe_connect(self.main_menu.home_btn, self.return_to_start_screen)
 
@@ -172,6 +175,7 @@ class MainWindow(QMainWindow):
 
     def _create_side_panel_host(self, panel: QWidget) -> QScrollArea:
         """Wrap a side panel in a scroll area so window height can shrink independently."""
+        self._prepare_embedded_panel(panel)
         host = QScrollArea(self)
         host.setObjectName(f"{panel.objectName()}Host")
         host.setWidget(panel)
@@ -186,6 +190,15 @@ class MainWindow(QMainWindow):
         self.panel_hosts[panel] = host
         return host
 
+    def _prepare_embedded_panel(self, panel: QWidget) -> None:
+        """Ensure a loaded UI widget behaves as an embedded widget."""
+        panel.hide()
+        if panel.parent() is None:
+            panel.setParent(self)
+        panel.setWindowFlag(Qt.WindowType.Window, False)
+        panel.setWindowFlag(Qt.WindowType.Dialog, False)
+        panel.setWindowFlag(Qt.WindowType.Tool, False)
+
     def _panel_host(self, panel: QWidget) -> QWidget:
         """Return the splitter host widget for a panel."""
         return self.panel_hosts.get(panel, panel)
@@ -198,7 +211,7 @@ class MainWindow(QMainWindow):
         host.hide()
         host.setParent(self)
 
-    def set_restore_board_state_callback(self, callback: Optional[Callable[[], None]]):
+    def set_restore_board_state_callback(self, callback: Callable[[], None] | None):
         """Store the callback used to restore the board state."""
         self.restore_board_state_callback = callback
 
@@ -213,6 +226,33 @@ class MainWindow(QMainWindow):
         self.tradeSelected.emit(home_action)
         self.resourcesPicked.emit(home_action)
 
+    def request_next_demo_state(self) -> None:
+        """Request that demo mode advance to the next saved state."""
+        self.main_menu.end_turn_btn.setEnabled(False)
+        self.main_menu.end_turn_btn.setText("Loading...")
+        app = QApplication.instance()
+        if app is not None:
+            app.processEvents()
+        self.turnMade.emit(DemoControl.NEXT_STATE)
+        self.canvas.selectionMade.emit(DemoControl.NEXT_STATE)
+        self.tradeDecisionMade.emit(DemoControl.NEXT_STATE)
+        self.tradeSelected.emit(DemoControl.NEXT_STATE)
+        self.resourcesPicked.emit(DemoControl.NEXT_STATE)
+
+    def hide_demo_next_state_action(self) -> None:
+        """Hide demo navigation from the main action menu."""
+        self.main_menu.end_turn_btn.setText("End Turn")
+
+    def show_demo_next_state_action(self) -> None:
+        """Show demo navigation on the main action menu."""
+        self.toggle_main_action_btns(True)
+        self.main_menu.trade_btn.hide()
+        self.main_menu.dev_btn.hide()
+        self.main_menu.end_turn_btn.show()
+        self.main_menu.end_turn_btn.setText("Next Demo State")
+        self.main_menu.end_turn_btn.setEnabled(True)
+        self.safe_connect(self.main_menu.end_turn_btn, self.request_next_demo_state)
+
     def consume_return_home_request(self) -> bool:
         """Consume and clear any pending return-home request."""
         requested = self.return_home_requested
@@ -225,11 +265,11 @@ class MainWindow(QMainWindow):
         self.debug_fast_animation_requested = False
         return requested
 
-    def set_pending_action_status_message(self, message: Optional[str]) -> None:
+    def set_pending_action_status_message(self, message: str | None) -> None:
         """Store a one-shot action status message for the next main turn redraw."""
         self.pending_action_status_message = message
 
-    def consume_pending_action_status_message(self) -> Optional[str]:
+    def consume_pending_action_status_message(self) -> str | None:
         """Consume and clear any pending one-shot action status message."""
         message = self.pending_action_status_message
         self.pending_action_status_message = None
@@ -248,6 +288,12 @@ class MainWindow(QMainWindow):
         self.settings_window.show()
         self.settings_window.raise_()
         self.settings_window.activateWindow()
+
+    def set_window_title_suffix(self, suffix: str | None) -> None:
+        """Set an optional suffix for the OS window title."""
+        self.window_title_suffix = suffix
+        title = APP_WINDOW_TITLE if not suffix else f"{APP_WINDOW_TITLE} - {suffix}"
+        self.setWindowTitle(title)
 
     def _apply_player_colour_indicators(self) -> None:
         """Apply styled player indicators to the opponent labels."""
@@ -428,9 +474,9 @@ class MainWindow(QMainWindow):
             if widget:
                 widget.setEnabled(enabled)
 
-    def _capture_main_action_btn_enabled_states(self) -> List[bool]:
+    def _capture_main_action_btn_enabled_states(self) -> list[bool]:
         """Capture the enabled state of the main action buttons."""
-        states: List[bool] = []
+        states: list[bool] = []
         for i in range(self.main_menu.action_btn_layout.count()):
             widget: QWidget = self.main_menu.action_btn_layout.itemAt(i).widget()
             if widget:
@@ -454,11 +500,11 @@ class MainWindow(QMainWindow):
         self.debug_tutor_shortcut_handler = None
         self.debug_tutor_shortcut_finalizer = None
 
-    def set_debug_tutor_shortcut_handler(self, handler: Optional[Callable[[], object]]):
+    def set_debug_tutor_shortcut_handler(self, handler: Callable[[], object] | None):
         """Store the debug tutor shortcut handler."""
         self.debug_tutor_shortcut_handler = handler
 
-    def set_debug_tutor_shortcut_finalizer(self, finalizer: Optional[Callable[[], None]]):
+    def set_debug_tutor_shortcut_finalizer(self, finalizer: Callable[[], None] | None):
         """Store the debug tutor shortcut finalizer."""
         self.debug_tutor_shortcut_finalizer = finalizer
 
@@ -468,7 +514,7 @@ class MainWindow(QMainWindow):
             self.tutor_panel.dismiss_tutor_hint_callback()
         self.trade_panel.clear_trade_preview()
 
-    def _try_apply_tutor_shortcut(self, handler: Optional[Callable[[], object]]) -> bool:
+    def _try_apply_tutor_shortcut(self, handler: Callable[[], object] | None) -> bool:
         """Try to run the active tutor shortcut handler."""
         if handler is None:
             return False
@@ -488,13 +534,15 @@ class MainWindow(QMainWindow):
     def _show_fullscreen_panel(self, panel: QWidget):
         """Show the fullscreen panel."""
         current_size = self.size()
+        self._prepare_embedded_panel(panel)
         if self.root_layout.indexOf(self.splitter_layout) != -1:
             self.root_layout.removeWidget(self.splitter_layout)
         self.splitter_layout.hide()
 
         if self.fullscreen_panel is not None and self.root_layout.indexOf(self.fullscreen_panel) != -1:
             self.root_layout.removeWidget(self.fullscreen_panel)
-            self.fullscreen_panel.setParent(None)
+            self.fullscreen_panel.hide()
+            self.fullscreen_panel.setParent(self)
 
         self.fullscreen_panel = panel
         panel.setMinimumSize(0, 0)
@@ -524,7 +572,8 @@ class MainWindow(QMainWindow):
         """Restore the main splitter layout after fullscreen panels."""
         if self.fullscreen_panel is not None and self.root_layout.indexOf(self.fullscreen_panel) != -1:
             self.root_layout.removeWidget(self.fullscreen_panel)
-            self.fullscreen_panel.setParent(None)
+            self.fullscreen_panel.hide()
+            self.fullscreen_panel.setParent(self)
         self.fullscreen_panel = None
 
         if self.root_layout.indexOf(self.splitter_layout) == -1:
@@ -567,7 +616,7 @@ class MainWindow(QMainWindow):
             self.live_board_source = controller
 
         # Fill in bank labels
-        bank_labels: Dict[Resource, QLabel] = {
+        bank_labels: dict[Resource, QLabel] = {
             res: getattr(self.main_menu, f"bank_{res.name.lower()}_label")
             for res in Resource
         }
@@ -586,13 +635,13 @@ class MainWindow(QMainWindow):
             "army_size": "army_",
             "longest_road": "road_"
         }
-        opponent_prefixes: Dict[PlayerNumber, str] = {
+        opponent_prefixes: dict[PlayerNumber, str] = {
             PlayerNumber.P2: "p2",
             PlayerNumber.P3: "p3",
             PlayerNumber.P4: "p4"
         }
 
-        opponent_labels: Dict[PlayerNumber, Dict[str, QLabel]] = {
+        opponent_labels: dict[PlayerNumber, dict[str, QLabel]] = {
             pn: {
                 stat: getattr(self.main_menu, f"{opponent_prefixes[pn]}_{suffix}label")
                 for stat, suffix in stat_suffixes.items()
@@ -600,7 +649,7 @@ class MainWindow(QMainWindow):
             for pn in opponent_prefixes
         }
 
-        player_labels: Dict[Resource, QLabel] = {
+        player_labels: dict[Resource, QLabel] = {
             res: getattr(self.main_menu, f"{res.name.lower()}_label")
             for res in Resource
         }
@@ -651,9 +700,10 @@ class MainWindow(QMainWindow):
         self.main_menu.action_label.setText("" if player.is_human else f"{player} is thinking")
         self.toggle_main_action_btns(False)
 
-    def display_round_info(self, controller: GameController, player: Player, dice_info: Tuple[int, int, int],
+    def display_round_info(self, controller: GameController, player: Player, dice_info: tuple[int, int, int],
                            played_dev_card: bool = False):
         """Display the main round UI for a player turn."""
+        self.hide_demo_next_state_action()
         self.tutor_panel.reset_for_turn()
         self.canvas.clear_feedback_builds()
         self.canvas.interactive_shapes.clear()
@@ -661,7 +711,7 @@ class MainWindow(QMainWindow):
         self.canvas.display_board(controller)
         self.display_resources(controller)
 
-        if controller.game_mode == GameMode.TUTOR and player.is_human:
+        if controller.game_mode in {GameMode.TUTOR, GameMode.GUIDED} and player.is_human:
             explanation = controller.get_tutor_turn_explanation(player, played_dev_card)
             if explanation is not None:
                 self.display_tutor_init(player, TutorStage.TURN_ACTION, explanation)
@@ -691,12 +741,18 @@ class MainWindow(QMainWindow):
         self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(Action(ActionType.END_TURN)))
         self.tutor_panel.set_restore_tutor_menu_callback(
             lambda: self.display_round_info(controller, player, dice_info, played_dev_card),
-            controller.game_mode == GameMode.TUTOR and player.is_human)
+            controller.game_mode in {GameMode.TUTOR, GameMode.GUIDED} and player.is_human)
         self.set_restore_board_state_callback(None)
 
     def configure_tutor_panel(self, game_mode: GameMode):
         """Configure the tutor panel for the selected game mode."""
         self.tutor_panel.configure_for_game_mode(game_mode)
+
+    def configure_demo_navigation(self, enabled: bool, has_next: bool) -> None:
+        """Configure demo navigation state."""
+        self.demo_navigation_enabled = enabled
+        self.demo_navigation_has_next = has_next
+        self.hide_demo_next_state_action()
 
     def open_tutor_menu(self, open_menu: bool):
         """Toggle the tutor menu visibility."""
@@ -718,9 +774,10 @@ class MainWindow(QMainWindow):
 
     def display_tutor_init(self, player: Player, stage: TutorStage, explanation: ActionExplanation):
         """Display the tutor introduction for the current stage."""
+        self.hide_demo_next_state_action()
         self.tutor_panel.display_tutor_init(player, stage, explanation)
 
-    def display_explanation(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
+    def display_explanation(self, player: Player, dice_info: tuple[int, int, int] | None,
                             explanation: ActionExplanation):
         """Display the tutor explanation for the current move."""
         self.tutor_panel.display_explanation(player, dice_info, explanation)
@@ -728,18 +785,21 @@ class MainWindow(QMainWindow):
     def display_tutor_action_feedback(self, feedback: TutorFeedbackExplanation) -> None:
         """Display tutor feedback for the player action."""
         self.tutor_panel.display_tutor_action_feedback(feedback)
+        if self.demo_navigation_enabled:
+            self.show_demo_next_state_action()
 
     def display_trade_menu(self, controller: GameController, player: Player, back_action):
         """Display the trade menu workflow."""
         self.trade_panel.display_trade_menu(controller, player, back_action)
 
     def select_player_to_trade(self, controller: GameController, player: Player, selling: ResourceCount,
-                               buying: ResourceCount, willing_players: List[Tuple[Player, ResourceCount | None]]):
+                               buying: ResourceCount, willing_players: list[tuple[Player, ResourceCount | None]]):
         """Display the player-trade selection workflow."""
         self.trade_panel.select_player_to_trade(controller, player, selling, buying, willing_players)
 
-    def display_round_info_ai_start(self, player: Player, dice_info: Optional[Tuple[int, int, int]], msg: str):
+    def display_round_info_ai_start(self, player: Player, dice_info: tuple[int, int, int] | None, msg: str):
         """Display the waiting state while an AI turn begins."""
+        self.hide_demo_next_state_action()
         self._clear_debug_tutor_shortcut_context()
         self.tutor_panel.prepare_ai_wait_state()
         self.canvas.clear_feedback_builds()
@@ -799,7 +859,7 @@ class MainWindow(QMainWindow):
     def display_results(self, controller: GameController):
         """Display the game results view."""
         self._clear_debug_tutor_shortcut_context()
-        if controller.game_mode in {GameMode.PLAY, GameMode.TUTOR}:
+        if controller.game_mode in {GameMode.PLAY, GameMode.TUTOR, GameMode.GUIDED}:
             self.endgame_review_panel.display_tutor_endgame_review(controller)
             return
         self.endgame_review_panel.display_results(controller)
@@ -821,8 +881,10 @@ class MainWindow(QMainWindow):
     def display_start_screen(self):
         """Render the start screen artwork on the canvas."""
         self.return_home_requested = False
+        self.hide_demo_next_state_action()
         self._clear_debug_tutor_shortcut_context()
         self.tutor_panel.reset_for_start_screen()
+        self.set_window_title_suffix(None)
         self.open_tutor_menu(False)
         self.trade_panel.clear_trade_preview()
         self.restore_spacer()
@@ -841,8 +903,8 @@ class MainWindow(QMainWindow):
 
         def update_lab_mode(is_enabled: bool):
             self.start_menu.standard_mode_btn.setText("Quick Simulation" if is_enabled else "Start Game")
-            self.start_menu.tutor_mode_btn.setText("Guided Simulation" if is_enabled else "Tutor Mode")
-            self.start_menu.lab_mode_btn.setText("Back" if is_enabled else "Lab Mode")
+            self.start_menu.tutor_mode_btn.setText("Demo Mode" if is_enabled else "Tutor Mode")
+            self.start_menu.lab_mode_btn.setText("Back" if is_enabled else "More Options")
 
         self.start_menu.lab_mode_btn.setCheckable(True)
         try:

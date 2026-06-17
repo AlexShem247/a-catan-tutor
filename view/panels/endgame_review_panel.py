@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Dict, List, Tuple
+from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QEvent, QObject, Qt, QTimer
 from PyQt6.QtGui import QPixmap
@@ -71,26 +71,28 @@ class EndgameReviewPanel:
         self.widget.graphPlaceholder.setParent(None)
         self.widget.graphPlaceholder.deleteLater()
 
-        self.plot_points: List[Tuple[int, float, float]] = []
-        self.plot_tooltips: Dict[int, str] = {}
+        self.plot_points: list[tuple[int, float, float]] = []
+        self.plot_tooltips: dict[int, str] = {}
         self.active_tooltip_round: int | None = None
         self.last_tooltip_text: str | None = None
         self.hover_tooltip = HoverTooltip(self.window)
-        self.replay_feedback: List[TutorFeedbackExplanation] = []
+        self.replay_feedback: list[TutorFeedbackExplanation] = []
         self.replay_index: int | None = None
         self.total_turns = 0
         self.replay_splitter_user_adjusted = False
         self.replay_splitter_initialised = False
-        self.feedback_filter_checkboxes: Dict[str, QCheckBox] = {}
-        self.rank_cards: List[QPushButton] = []
+        self.feedback_filter_checkboxes: dict[str, QCheckBox] = {}
+        self.rank_cards: list[QPushButton] = []
         self.selected_rank_card: QPushButton | None = None
         self.final_board_source = None
         self.human_final_snapshot: PlayerScoreSnapshot | None = None
         self.final_leader_vp: int | None = None
+        self._plot_controller: GameController | None = None
 
         scene = self.victory_points_plot.scene()
         if scene is not None and hasattr(scene, "sigMouseMoved"):
             scene.sigMouseMoved.connect(self.handle_plot_hover)
+        self.widget.reviewTabs.currentChanged.connect(self.refresh_performance_plot_if_visible)
 
         self.configure_endgame_feedback_filters()
 
@@ -103,7 +105,7 @@ class EndgameReviewPanel:
         handle_plot_hover(self, scene_pos)
 
     @staticmethod
-    def get_player_victory_breakdown(player: Player) -> Dict[str, int]:
+    def get_player_victory_breakdown(player: Player) -> dict[str, int]:
         """Return the player victory-point breakdown."""
         return get_player_victory_breakdown(player)
 
@@ -200,11 +202,11 @@ class EndgameReviewPanel:
         return feedback_card_title(feedback)
 
     @staticmethod
-    def endgame_feedback_filter_state_from_owner(owner) -> Dict[str, bool]:
+    def endgame_feedback_filter_state_from_owner(owner) -> dict[str, bool]:
         """Read the endgame feedback filter state from an owner."""
         return endgame_feedback_filter_state_from_owner(owner)
 
-    def endgame_feedback_filter_state(self) -> Dict[str, bool]:
+    def endgame_feedback_filter_state(self) -> dict[str, bool]:
         """Read the current endgame feedback filter state."""
         return self.endgame_feedback_filter_state_from_owner(self)
 
@@ -295,16 +297,16 @@ class EndgameReviewPanel:
         return replay_feedback_player_name(feedback)
 
     @classmethod
-    def format_replay_feedback_details(cls, feedback: TutorFeedbackExplanation, total_turns: int) -> Dict[str, str]:
+    def format_replay_feedback_details(cls, feedback: TutorFeedbackExplanation, total_turns: int) -> dict[str, str]:
         """Format the detail fields for replay feedback."""
         return format_replay_feedback_details(feedback, total_turns)
 
     @staticmethod
     def overall_performance_summary(
-        feedback_items: List[TutorFeedbackExplanation],
+        feedback_items: list[TutorFeedbackExplanation],
         final_snapshot: PlayerScoreSnapshot | None = None,
         leader_vp: int | None = None,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """Summarise the overall endgame performance."""
         return overall_performance_summary(feedback_items, final_snapshot, leader_vp)
 
@@ -430,70 +432,80 @@ class EndgameReviewPanel:
         """Populate the tutor endgame performance chart."""
         populate_tutor_endgame_performance(self, controller)
 
+    def refresh_performance_plot_if_visible(self, _index: int | None = None) -> None:
+        """Re-render the performance plot once the tab is visible."""
+        if self._plot_controller is None:
+            return
+        performance_index = self.widget.reviewTabs.indexOf(self.widget.performanceTab)
+        if self.widget.reviewTabs.currentIndex() != performance_index:
+            return
+        self.populate_tutor_endgame_performance(self._plot_controller)
+
     @classmethod
     def build_endgame_plot_tooltips(
         cls,
-        history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
-        players: List[Player],
-    ) -> Dict[int, str]:
+        history: list[tuple[int, dict[PlayerNumber, PlayerScoreSnapshot]]],
+        players: list[Player],
+    ) -> dict[int, str]:
         """Build tooltip text for the endgame performance plot."""
         return build_endgame_plot_tooltips(history, players)
 
     @classmethod
     def describe_round_vp_events(
         cls,
-        previous_snapshot: Dict[PlayerNumber, PlayerScoreSnapshot] | None,
-        current_snapshot: Dict[PlayerNumber, PlayerScoreSnapshot],
-        player_names: Dict[PlayerNumber, str],
-    ) -> List[str]:
+        previous_snapshot: dict[PlayerNumber, PlayerScoreSnapshot] | None,
+        current_snapshot: dict[PlayerNumber, PlayerScoreSnapshot],
+        player_names: dict[PlayerNumber, str],
+    ) -> list[str]:
         """Describe victory-point changes for a review round."""
         return describe_round_vp_events(previous_snapshot, current_snapshot, player_names)
 
     @staticmethod
-    def format_endgame_players(names: List[str]) -> str:
+    def format_endgame_players(names: list[str]) -> str:
         """Format a list of endgame player names."""
         return format_endgame_players(names)
 
     @classmethod
     def summarise_endgame_review_labels(
         cls,
-        history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
-        players: List[Player],
-    ) -> Tuple[str, str, str]:
+        history: list[tuple[int, dict[PlayerNumber, PlayerScoreSnapshot]]],
+        players: list[Player],
+    ) -> tuple[str, str, str]:
         """Build the headline summary labels for endgame review."""
         return summarise_endgame_review_labels(history, players)
 
     @classmethod
-    def build_lead_change_label(cls, history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
-                                player_names: Dict[PlayerNumber, str]) -> str:
+    def build_lead_change_label(cls, history: list[tuple[int, dict[PlayerNumber, PlayerScoreSnapshot]]],
+                                player_names: dict[PlayerNumber, str]) -> str:
         """Build the lead-change summary label."""
         return build_lead_change_label(history, player_names)
 
     @classmethod
-    def build_biggest_swing_label(cls, history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
-                                  player_names: Dict[PlayerNumber, str]) -> str:
+    def build_biggest_swing_label(cls, history: list[tuple[int, dict[PlayerNumber, PlayerScoreSnapshot]]],
+                                  player_names: dict[PlayerNumber, str]) -> str:
         """Build the biggest-swing summary label."""
         return build_biggest_swing_label(history, player_names)
 
     @staticmethod
-    def join_reasons(reasons: List[str]) -> str:
+    def join_reasons(reasons: list[str]) -> str:
         """Join endgame reason strings into readable text."""
         return join_reasons(reasons)
 
     @staticmethod
-    def score_swing_reasons(previous: PlayerScoreSnapshot, current: PlayerScoreSnapshot) -> List[str]:
+    def score_swing_reasons(previous: PlayerScoreSnapshot, current: PlayerScoreSnapshot) -> list[str]:
         """Describe the reasons for a score swing."""
         return score_swing_reasons(previous, current)
 
     @classmethod
-    def build_closest_moment_label(cls, history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
-                                   player_names: Dict[PlayerNumber, str]) -> str:
+    def build_closest_moment_label(cls, history: list[tuple[int, dict[PlayerNumber, PlayerScoreSnapshot]]],
+                                   player_names: dict[PlayerNumber, str]) -> str:
         """Build the closest-moment summary label."""
         return build_closest_moment_label(history, player_names)
 
     def populate_tutor_endgame_review(self, controller: GameController) -> None:
         """Populate the tutor endgame review view."""
         self.configure_tutor_endgame_layout()
+        self._plot_controller = controller
         sorted_players = sorted(controller.get_all_players(), key=lambda p: p.calc_victory_points()[1], reverse=True)
         winner = sorted_players[0]
         winner_total_vp = winner.calc_victory_points()[1]
@@ -592,6 +604,7 @@ class EndgameReviewPanel:
         self.window.safe_connect(self.widget.main_menu_btn, return_to_main_menu)
         self.window.safe_connect(self.widget.quit_btn, self.window.close)
         self.window._show_fullscreen_panel(self.widget)
+        QTimer.singleShot(0, self.refresh_performance_plot_if_visible)
         QTimer.singleShot(0, self.sync_replay_layout)
 
     def display_results(self, controller: GameController) -> None:
@@ -602,11 +615,7 @@ class EndgameReviewPanel:
         self.window.canvas.interactive_shapes.clear()
         self.window.canvas.display_board(controller)
         self.window.display_resources(controller)
-
-        sizes = self.window.splitter_layout.sizes()
-        self.window.main_menu.setParent(None)
-        self.window.splitter_layout.addWidget(self.results_menu)
-        self.window.splitter_layout.setSizes([sizes[0], sizes[1]])
+        self.window._set_primary_side_panel(self.results_menu)
 
         all_labels = {}
         for i in range(1, 5):
@@ -653,11 +662,7 @@ class EndgameReviewPanel:
                 labels["victory_cards"].show()
 
         def return_to_main_menu() -> None:
-            layout_sizes = self.window.splitter_layout.sizes()
-            self.results_menu.setParent(None)
-            self.window.splitter_layout.addWidget(self.window.main_menu)
-            self.window.splitter_layout.setSizes(layout_sizes)
-            self.window.main_menu.show()
+            self.window._set_primary_side_panel(self.window.main_menu)
             controller.start_game()
 
         self.window.safe_connect(self.results_menu.main_menu_btn, return_to_main_menu)

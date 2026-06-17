@@ -1,4 +1,3 @@
-from typing import List, Optional, Tuple
 
 from ai.actions import Action, ActionType
 from ai.RandomAI import RandomAI
@@ -29,16 +28,16 @@ class TradePolicy:
 
     def choose_trade_partner(
         self, player: Player, game: Game, selling: ResourceCount, buying: ResourceCount,
-        available_players: List[Tuple[Player, Optional[ResourceCount]]]
-    ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+        available_players: list[tuple[Player, ResourceCount | None]]
+    ) -> tuple[Player, ResourceCount | None] | None:
         """Choose the preferred trade partner from the available offers."""
         selection, _ = self.choose_trade_partner_with_explanation(player, game, selling, buying, available_players)
         return selection
 
     def choose_trade_partner_with_explanation(
         self, player: Player, game: Game, selling: ResourceCount, buying: ResourceCount,
-        available_players: List[Tuple[Player, Optional[ResourceCount]]]
-    ) -> Tuple[Optional[Tuple[Player, Optional[ResourceCount]]], Optional[ActionExplanation]]:
+        available_players: list[tuple[Player, ResourceCount | None]]
+    ) -> tuple[tuple[Player, ResourceCount | None] | None, ActionExplanation | None]:
         """Choose the trade partner with explanation."""
         if not self.decision_config.use_player_trading:
             return None, None
@@ -73,8 +72,8 @@ class TradePolicy:
         return (chosen_player, counter), explanation
 
     def explain_trade_partner_choice(self, player: Player, game: Game, selling: ResourceCount, buying: ResourceCount,
-                                     available_players: List[Tuple[Player, Optional[ResourceCount]]],
-                                     chosen_player: Player, counter: Optional[ResourceCount]) -> ActionExplanation:
+                                     available_players: list[tuple[Player, ResourceCount | None]],
+                                     chosen_player: Player, counter: ResourceCount | None) -> ActionExplanation:
         """Handle explain trade partner choice."""
         sim_game = make_sim_game_for_player(game, player)
         sim_us = sim_game.overlay.get_sim_player(player.player_number)
@@ -82,14 +81,14 @@ class TradePolicy:
                                                      chosen_player, counter)
 
     def respond_to_trade(self, player: Player, game: Game, opponent: Player, selling: ResourceCount,
-                         buying: ResourceCount) -> Tuple[bool, Optional[ResourceCount]]:
+                         buying: ResourceCount) -> tuple[bool, ResourceCount | None]:
         """Handle respond to trade."""
         accepted, counter, _ = self.respond_to_trade_with_explanation(player, game, opponent, selling, buying)
         return accepted, counter
 
     def respond_to_trade_with_explanation(
             self, player: Player, game: Game, opponent: Player, selling: ResourceCount,
-            buying: ResourceCount) -> Tuple[bool, Optional[ResourceCount], Optional[ActionExplanation]]:
+            buying: ResourceCount) -> tuple[bool, ResourceCount | None, ActionExplanation | None]:
         """Handle respond to trade with explanation."""
         if not self.decision_config.use_player_trading:
             return False, None, None
@@ -121,7 +120,7 @@ class TradePolicy:
 
     def explain_trade_response_choice(self, player: Player, game: Game, opponent: Player, selling: ResourceCount,
                                       buying: ResourceCount, accepted: bool,
-                                      counter: Optional[ResourceCount]) -> ActionExplanation:
+                                      counter: ResourceCount | None) -> ActionExplanation:
         """Handle explain trade response choice."""
         sim_game = make_sim_game_for_player(game, player)
         sim_us = sim_game.overlay.get_sim_player(player.player_number)
@@ -131,13 +130,13 @@ class TradePolicy:
                                                       opponents, accepted, counter)
 
     def _build_trade_partner_explanation(self, player: Player, sim_us: SimPlayerState, sim_game, selling: ResourceCount,
-                                         buying: ResourceCount, available_players: List[Tuple[Player,
-                                                                                              Optional[ResourceCount]]],
-                                         chosen_player: Player, counter: Optional[ResourceCount]) -> ActionExplanation:
+                                         buying: ResourceCount, available_players: list[tuple[Player,
+                                                                                              ResourceCount | None]],
+                                         chosen_player: Player, counter: ResourceCount | None) -> ActionExplanation:
         """Build the trade partner explanation."""
         batna_etw = self.etw_estimator.estimated_time_to_win(sim_us, sim_game, False,
                                                              **self._etw_kwargs(include_player_trades=False))
-        candidate_explanations: List[CandidateExplanation] = []
+        candidate_explanations: list[CandidateExplanation] = []
         all_sims = [sim_us] + [SimPlayerState(opp, opponent=True) for opp, _ in available_players]
         etw_by_player = {
             sim_player: self.etw_estimator.estimated_time_to_win(sim_player.copy(), sim_game, False,
@@ -261,8 +260,8 @@ class TradePolicy:
 
     def _build_trade_response_explanation(self, player: Player, opponent: Player, sim_us: SimPlayerState,
                                           opponent_sim: SimPlayerState, sim_game, selling_to_us: ResourceCount,
-                                          buying_from_us: ResourceCount, opponents: List[SimPlayerState],
-                                          accepted: bool, counter: Optional[ResourceCount]) -> ActionExplanation:
+                                          buying_from_us: ResourceCount, opponents: list[SimPlayerState],
+                                          accepted: bool, counter: ResourceCount | None) -> ActionExplanation:
         """Build the trade response explanation."""
         etw_before = self.etw_estimator.estimated_time_to_win(sim_us, sim_game, False,
                                                               **self._etw_kwargs(include_player_trades=False))
@@ -303,7 +302,7 @@ class TradePolicy:
 
         decision = "reject"
         payment = buying_from_us
-        reasons_for: List[Reason] = []
+        reasons_for: list[Reason] = []
         chosen_action = Action(ActionType.TRADE_WITH_PLAYER, (payment, selling_to_us))
         etw_after = etw_after_offer
         etw_delta = delta_offer

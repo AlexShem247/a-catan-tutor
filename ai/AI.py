@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from random import Random
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING
 
 from ai.actions import Action, Phase
 from game.Edge import Edge
@@ -27,19 +27,19 @@ class AI(ABC):
         game: "Game",
         selling: ResourceCount,
         buying: ResourceCount,
-        available_players: List[Tuple[Player, Optional[ResourceCount]]],
-    ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+        available_players: list[tuple[Player, ResourceCount | None]],
+    ) -> tuple[Player, ResourceCount | None] | None:
         """Choose the trade partner and offer to pursue."""
         ...
 
     @abstractmethod
-    def select_initial_settlement_location(self, player: Player, game: "Game", available_vertices: List[Vertex]) \
-            -> Optional[Vertex]:
+    def select_initial_settlement_location(self, player: Player, game: "Game", available_vertices: list[Vertex]) \
+            -> Vertex | None:
         """Select the opening settlement location."""
         ...
 
     @abstractmethod
-    def select_initial_road_location(self, player: Player, game: "Game", available_edges: List[Edge]) -> Optional[Edge]:
+    def select_initial_road_location(self, player: Player, game: "Game", available_edges: list[Edge]) -> Edge | None:
         """Select the opening road location."""
         ...
 
@@ -48,8 +48,8 @@ class AI(ABC):
         self,
         player: Player,
         game: "Game",
-        valid_hexes: List[HexTile],
-    ) -> Tuple[HexTile, Optional[Player]]:
+        valid_hexes: list[HexTile],
+    ) -> tuple[HexTile, Player | None]:
         """Select the robber placement and steal target."""
         ...
 
@@ -70,7 +70,7 @@ class AI(ABC):
 
     @abstractmethod
     def respond_to_trade(self, player: Player, game: "Game", opponent: Player, selling: ResourceCount,
-                         buying: ResourceCount) -> Tuple[bool, Optional[ResourceCount]]:
+                         buying: ResourceCount) -> tuple[bool, ResourceCount | None]:
         """Decide how to respond to a trade offer."""
         ...
 

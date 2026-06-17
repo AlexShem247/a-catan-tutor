@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Dict, Optional
 
 from ai.actions import Action, ActionType
 from ai.simulation.board_sim_utils import get_opponents
@@ -17,7 +16,7 @@ from game.Resources import ResourceCount
 
 @dataclass(frozen=True)
 class EtwTradeStateSnapshot:
-    last_trade_resources: Optional[ResourceCount]
+    last_trade_resources: ResourceCount | None
     last_trade_proposed: bool
 
 
@@ -25,7 +24,7 @@ class EtwEstimator:
 
     def __init__(self):
         self._eval_stats = {"cache_hits": 0, "cache_misses": 0, "evaluations": 0}
-        self._last_trade_resources: Optional[ResourceCount] = None
+        self._last_trade_resources: ResourceCount | None = None
         self._last_trade_proposed: bool = False
         self.timing = EtwTiming()
         self.candidates = EtwCandidateGenerator(self.timing, self)
@@ -83,7 +82,7 @@ class EtwEstimator:
         sim_game: SimGame,
         dev_played: bool,
         include_player_trades: bool = True,
-        max_depth_override: Optional[int] = None,
+        max_depth_override: int | None = None,
         allow_development_cards: bool = True,
         use_planning: bool = True,
     ) -> float:
@@ -111,7 +110,7 @@ class EtwEstimator:
         player,
         sim_game: SimGame,
         etw_before: float,
-        deferred_candidate: Optional[CandidateExplanation] = None,
+        deferred_candidate: CandidateExplanation | None = None,
         include_player_trades: bool = True,
         allow_development_cards: bool = True,
         use_planning: bool = True,
@@ -136,7 +135,7 @@ class EtwEstimator:
         dev_played: bool,
         candidates,
         etw_before: float,
-        opponents_etw_before: Dict[PlayerNumber, float],
+        opponents_etw_before: dict[PlayerNumber, float],
         include_player_trades: bool = True,
         allow_development_cards: bool = True,
         use_planning: bool = True,
@@ -185,7 +184,7 @@ class EtwEstimator:
             use_planning=use_planning,
         )
 
-        opponents_etw_before: Dict[PlayerNumber, float] = {}
+        opponents_etw_before: dict[PlayerNumber, float] = {}
         if not ignore_opponents:
             for opponent in get_opponents(sim_game, player_number):
                 opponents_etw_before[opponent.player_number] = self.estimated_time_to_win(
@@ -268,7 +267,7 @@ class EtwEstimator:
             use_planning=use_planning,
         )
 
-        opponents_etw_before: Dict[PlayerNumber, float] = {}
+        opponents_etw_before: dict[PlayerNumber, float] = {}
         if not ignore_opponents:
             for opponent in get_opponents(sim_game, player_number):
                 opponents_etw_before[opponent.player_number] = self.estimated_time_to_win(
@@ -377,7 +376,7 @@ class EtwEstimator:
             use_planning=use_planning,
         )
 
-        opponents_etw_before: Dict[PlayerNumber, float] = {}
+        opponents_etw_before: dict[PlayerNumber, float] = {}
         if not ignore_opponents:
             for opponent in get_opponents(sim_game, player_number):
                 opponents_etw_before[opponent.player_number] = self.estimated_time_to_win(

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import Enum, auto
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable
 
 from ai.actions import Action
 from ai.tutor.explanations import ActionExplanation
@@ -21,11 +21,15 @@ class GameMode(Enum):
     GUIDED = auto()
 
 
+class DemoControl(Enum):
+    NEXT_STATE = auto()
+
+
 class View(ABC):
     ai_decision_animation_delay: float
 
     @abstractmethod
-    def set_debug_tutor_shortcut_handler(self, handler: Optional[Callable[[], Any]]) -> None:
+    def set_debug_tutor_shortcut_handler(self, handler: Callable[[], Any] | None) -> None:
         """Store the debug tutor shortcut handler."""
         ...
 
@@ -35,7 +39,7 @@ class View(ABC):
         ...
 
     @abstractmethod
-    def display_board(self, player: Optional[Player] = None, msg: Optional[str] = None) -> None:
+    def display_board(self, player: Player | None = None, msg: str | None = None) -> None:
         """Render the current board state on the canvas."""
         ...
 
@@ -45,7 +49,7 @@ class View(ABC):
         ...
 
     @abstractmethod
-    def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int],
+    def display_board_turn(self, player: Player, dice_info: tuple[int, int, int],
                            played_dev_card: bool = False) -> Action:
         """Display the board and wait for the player turn action."""
         ...
@@ -54,7 +58,7 @@ class View(ABC):
     def display_board_turn_ai(
         self,
         player: Player,
-        dice_info: Tuple[int, int, int],
+        dice_info: tuple[int, int, int],
         msg: str,
         increase_delay=False,
     ) -> None:
@@ -62,7 +66,7 @@ class View(ABC):
         ...
 
     @abstractmethod
-    def display_board_turn_explanations(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
+    def display_board_turn_explanations(self, player: Player, dice_info: tuple[int, int, int] | None,
                                         explanation: ActionExplanation):
         """Display the board with tutor move explanations."""
         ...
@@ -78,34 +82,34 @@ class View(ABC):
         ...
 
     @abstractmethod
-    def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False) -> Vertex:
+    def draw_selectable_vertices(self, vertices: list[Vertex], disable_interactivity: bool = False) -> Vertex:
         """Draw selectable vertices on the board."""
         ...
 
     @abstractmethod
-    def draw_selectable_edges(self, edges: List[Edge], disable_interactivity: bool = False) -> Edge:
+    def draw_selectable_edges(self, edges: list[Edge], disable_interactivity: bool = False) -> Edge:
         """Draw selectable edges on the board."""
         ...
 
     @abstractmethod
-    def draw_selectable_tiles(self, tiles: List[HexTile]) -> HexTile:
+    def draw_selectable_tiles(self, tiles: list[HexTile]) -> HexTile:
         """Draw selectable tiles on the board."""
         ...
 
     @abstractmethod
-    def draw_buildables(self, buildables: Dict) -> None:
+    def draw_buildables(self, buildables: dict) -> None:
         """Draw the currently buildable board options."""
         ...
 
     @abstractmethod
     def show_resource_chooser(self, player: Player, num_resources: int, title: str,
-                              resource_caps: Optional[ResourceCount] = None) -> ResourceCount:
+                              resource_caps: ResourceCount | None = None) -> ResourceCount:
         """Display the resource chooser widget."""
         ...
 
     @abstractmethod
     def display_trade_manager(self, player: Player, selling: ResourceCount, buying: ResourceCount,
-                              selling_player: Player) -> Tuple[bool, Optional[ResourceCount]]:
+                              selling_player: Player) -> tuple[bool, ResourceCount | None]:
         """Display the trade manager widget."""
         ...
 
@@ -115,8 +119,8 @@ class View(ABC):
         player: Player,
         selling: ResourceCount,
         buying: ResourceCount,
-        willing_players: List[Tuple[Player, Optional[ResourceCount]]],
-    ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+        willing_players: list[tuple[Player, ResourceCount | None]],
+    ) -> tuple[Player, ResourceCount | None] | None:
         """Handle select player trade offer."""
         ...
 
@@ -138,4 +142,19 @@ class View(ABC):
     @abstractmethod
     def open_tutor_menu(self, open_menu: bool):
         """Toggle the tutor menu visibility."""
+        ...
+
+    @abstractmethod
+    def configure_demo_navigation(self, enabled: bool, has_next: bool) -> None:
+        """Configure demo-mode navigation controls."""
+        ...
+
+    @abstractmethod
+    def wait_for_demo_next_state(self):
+        """Wait for the next-demo-state request."""
+        ...
+
+    @abstractmethod
+    def set_window_title_suffix(self, suffix: str | None) -> None:
+        """Set an optional suffix for the OS window title."""
         ...

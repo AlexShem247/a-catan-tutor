@@ -5,7 +5,6 @@ import re
 import time
 from pathlib import Path
 from random import Random
-from typing import Dict, List, Optional, Tuple
 
 from tqdm import tqdm
 
@@ -37,7 +36,7 @@ class InstrumentedTutorAI(RuleBasedAI):
 
     def __init__(self, rng: Random, **kwargs):
         super().__init__(rng, **kwargs)
-        self._explanations: List[Dict[str, str]] = []
+        self._explanations: list[dict[str, str]] = []
 
     @staticmethod
     def _normalise_detail_text(text: str) -> str:
@@ -46,7 +45,7 @@ class InstrumentedTutorAI(RuleBasedAI):
         text = re.sub(r"\n{3,}", "\n\n", text)
         return text.strip()
 
-    def _record_explanation(self, explanation: Optional[ActionExplanation]) -> None:
+    def _record_explanation(self, explanation: ActionExplanation | None) -> None:
         if explanation is None:
             return
         if explanation.chosen_action.type == ActionType.ROLL:
@@ -57,7 +56,7 @@ class InstrumentedTutorAI(RuleBasedAI):
             "detailed_explanation": self._normalise_detail_text(explanation.generate_text_detail()),
         })
 
-    def export_explanation_rows(self, game_id: int) -> List[Dict[str, object]]:
+    def export_explanation_rows(self, game_id: int) -> list[dict[str, object]]:
         return [{
             "game_id": game_id,
             "explanation_num": explanation_num,
@@ -81,14 +80,14 @@ class InstrumentedTutorAI(RuleBasedAI):
         game,
         selling: ResourceCount,
         buying: ResourceCount,
-        available_players: List[Tuple[Player, Optional[ResourceCount]]],
+        available_players: list[tuple[Player, ResourceCount | None]],
     ):
         selection, explanation = self.choose_trade_partner_with_explanation(player, game, selling, buying,
                                                                             available_players)
         self._record_explanation(explanation)
         return selection
 
-    def select_robber_target(self, player: Player, game, valid_hexes: List[HexTile]):
+    def select_robber_target(self, player: Player, game, valid_hexes: list[HexTile]):
         tile, steal_from, explanation = self.select_robber_target_with_explanation(player, game, valid_hexes)
         self._record_explanation(explanation)
         return tile, steal_from
@@ -115,7 +114,7 @@ class InstrumentedTutorAI(RuleBasedAI):
         opponent: Player,
         selling: ResourceCount,
         buying: ResourceCount,
-    ) -> Tuple[bool, Optional[ResourceCount]]:
+    ) -> tuple[bool, ResourceCount | None]:
         accepted, counter, explanation = self.respond_to_trade_with_explanation(player, game, opponent, selling, buying)
         self._record_explanation(explanation)
         return accepted, counter
@@ -156,7 +155,7 @@ def _build_player_config(player_policies, order_seed: int):
     return {player_number: policy for player_number, policy in zip(ordered_player_numbers, ordered_policies)}
 
 
-def _collect_tutor_explanation_rows(controller: GameController, game_id: int) -> List[Dict[str, object]]:
+def _collect_tutor_explanation_rows(controller: GameController, game_id: int) -> list[dict[str, object]]:
     game = controller.get_game_state()
     tutor_policy = next(
         (player.policy for player in game.players if isinstance(player.policy, InstrumentedTutorAI)),
@@ -195,7 +194,7 @@ def _initialise_output_csv(output_path: Path) -> None:
         writer.writeheader()
 
 
-def _append_rows_to_csv(output_path: Path, rows: List[Dict[str, object]]) -> None:
+def _append_rows_to_csv(output_path: Path, rows: list[dict[str, object]]) -> None:
     if not rows:
         return
     with output_path.open("a", newline="", encoding="utf-8") as csv_file:
@@ -224,7 +223,7 @@ def run_simulations_parallel(
     aborted_games = 0
     attempts_started = 0
     max_attempts = max(num_runs, num_runs * MAX_ATTEMPTS_MULTIPLIER)
-    pending_rows: List[Dict[str, object]] = []
+    pending_rows: list[dict[str, object]] = []
     total_rows_written = 0
     progress = tqdm(total=num_runs, desc="Policy evaluation") if SHOW_PROGRESS_BAR else None
 

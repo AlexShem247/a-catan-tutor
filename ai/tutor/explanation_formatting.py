@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any
 
 from ai.actions import Action, ActionType
 from ai.tutor.explanations import (ActionExplanation, CandidateExplanation, ExplanationTemplate, Reason, ReasonLabel,
@@ -62,12 +62,12 @@ def strongest_plan_focus_phrase(explanation: ActionExplanation) -> str:
     return plan_action_phrase(action)
 
 
-def sorted_reasons(reasons: List[Reason]) -> List[Reason]:
+def sorted_reasons(reasons: list[Reason]) -> list[Reason]:
     """Return reasons sorted for display."""
     return sorted(reasons, key=lambda reason: reason.value, reverse=True)
 
 
-def top_reason_sentence(reasons: List[Reason], limit: int = 2) -> str:
+def top_reason_sentence(reasons: list[Reason], limit: int = 2) -> str:
     """Build a sentence from the top-ranked reasons."""
     top = sorted_reasons(reasons)[:limit]
     return reason_sentence_from_ordered(top)
@@ -75,14 +75,14 @@ def top_reason_sentence(reasons: List[Reason], limit: int = 2) -> str:
 
 def trade_concise_reason(candidate: CandidateExplanation, limit: int = 2) -> str:
     """Build a concise reason for a trade candidate."""
-    ordered: List[Reason] = []
+    ordered: list[Reason] = []
     ordered.extend(reason for reason in candidate.reasons_for if reason.type == ReasonType.REQUIRES_TRADE)
     ordered.extend(reason for reason in sorted_reasons(candidate.reasons_for)
                    if reason.type != ReasonType.REQUIRES_TRADE)
     return reason_sentence_from_ordered(ordered[:limit])
 
 
-def reason_sentence_from_ordered(reasons: List[Reason]) -> str:
+def reason_sentence_from_ordered(reasons: list[Reason]) -> str:
     """Build a sentence from ordered reasons."""
     labels = [normalise_reason_label(reason_label_text(reason)) for reason in reasons if reason.label]
     if not labels:
@@ -142,7 +142,11 @@ def reason_label_text(reason: Reason) -> str:
     if label == ReasonLabel.REQUIRES_TRADE:
         return "Uses a trade to make the preferred plan feasible"
     if label == ReasonLabel.HIDDEN_DEV_VALUE:
-        return "Has hidden strategic value through development-card outcomes"
+        return "It keeps a meaningful hidden-victory-point draw in play"
+    if label == ReasonLabel.DEV_KNIGHT_PRESSURE:
+        return "It gives you real Knight pressure toward Largest Army"
+    if label == ReasonLabel.DEV_PROGRESS_FLEXIBILITY:
+        return "It also keeps strong progress-card outcomes available"
     if label == ReasonLabel.EARLY_ATTENTION_RISK:
         return "May expose an early lead and attract attention"
     if label == ReasonLabel.NO_IMMEDIATE_ACTION:
@@ -241,6 +245,9 @@ def reason_to_detail_phrase(explanation: ActionExplanation, reason: Reason) -> s
             ReasonLabel.ROBBER_AVOIDS_OWN_HEX,
             ReasonLabel.DISCARD_PROTECTS_PLAN,
             ReasonLabel.DISCARD_USES_SURPLUS,
+            ReasonLabel.HIDDEN_DEV_VALUE,
+            ReasonLabel.DEV_KNIGHT_PRESSURE,
+            ReasonLabel.DEV_PROGRESS_FLEXIBILITY,
             ReasonLabel.YOP_FILLS_SHORTFALL,
             ReasonLabel.YOP_SUPPORTS_FOLLOW_UP,
             ReasonLabel.YOP_FLEXIBLE_PICK,
@@ -304,11 +311,11 @@ def final_benefit_text(explanation: ActionExplanation, candidate: CandidateExpla
     return f"This is strong because {joined}."
 
 
-def resource_count_text(resource_count: Dict[Any, int]) -> str:
+def resource_count_text(resource_count: dict[Any, int]) -> str:
     """Format a resource bundle for display."""
     if not resource_count:
         return ""
-    parts: List[str] = []
+    parts: list[str] = []
     for resource, amount in resource_count.items():
         if amount <= 0:
             continue
@@ -323,7 +330,7 @@ def resource_count_text(resource_count: Dict[Any, int]) -> str:
     return ", ".join(parts[:-1]) + f", and {parts[-1]}"
 
 
-def trade_exchange_text(payment: Dict[Any, int], buying: Dict[Any, int]) -> str:
+def trade_exchange_text(payment: dict[Any, int], buying: dict[Any, int]) -> str:
     """Format a trade exchange for display."""
     pay_text = resource_count_text(payment)
     receive_text = resource_count_text(buying)
@@ -405,7 +412,7 @@ def follow_up_action_text(action: Any) -> str:
     return "the next thing we want to do"
 
 
-def trade_detail_sentence_from_reasons(explanation: ActionExplanation, reasons: List[Reason]) -> str:
+def trade_detail_sentence_from_reasons(explanation: ActionExplanation, reasons: list[Reason]) -> str:
     """Build a detailed trade sentence from reasons."""
     if not reasons:
         return "This is the best trade available here."
@@ -422,7 +429,7 @@ def trade_detail_sentence_from_reasons(explanation: ActionExplanation, reasons: 
     return f"This is better because {joined}."
 
 
-def detail_sentence_from_reasons(explanation: ActionExplanation, reasons: List[Reason]) -> str:
+def detail_sentence_from_reasons(explanation: ActionExplanation, reasons: list[Reason]) -> str:
     """Build a detailed sentence from reasons."""
     if not reasons:
         return "This is the strongest available setup choice here."
@@ -459,6 +466,17 @@ def discard_protected_plan_text(explanation: ActionExplanation) -> str:
     if next_text:
         return f"This keeps your stronger follow-up plan available: {next_text}."
     return ""
+
+
+def strip_follow_up_prefix(text: str) -> str:
+    """Strip boilerplate prefixes from follow-up text."""
+    for prefix in (
+        "the next thing we want to build: ",
+        "the next thing we want to do: ",
+    ):
+        if text.startswith(prefix):
+            return text[len(prefix):]
+    return text
 
 
 def initial_road_target_sentence(explanation: ActionExplanation) -> str:
@@ -523,7 +541,7 @@ def display_name(value: Any) -> str:
     return name.replace("_", " ").title()
 
 
-def resource_list_text(resources: List[Any]) -> str:
+def resource_list_text(resources: list[Any]) -> str:
     """Format a resource list for display."""
     names = [f"<b>{getattr(resource, 'name', str(resource)).upper()}</b>" for resource in resources]
     if not names:
@@ -615,7 +633,7 @@ def gerund_phrase(action: Action, action_text: str) -> str:
     return action_text
 
 
-def trade_opening_text(plan: List[Action]) -> str:
+def trade_opening_text(plan: list[Action]) -> str:
     """Build the opening text for a trade plan."""
     if len(plan) < 2:
         return ""
@@ -631,7 +649,7 @@ def trade_opening_text(plan: List[Action]) -> str:
     return f"The plan starts by {gerund_phrase(first_action, first_text)}."
 
 
-def plan_linking_text(plan: List[Action]) -> str:
+def plan_linking_text(plan: list[Action]) -> str:
     """Build the linking text between plan actions."""
     if not plan:
         return ""

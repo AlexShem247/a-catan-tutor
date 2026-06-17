@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from ai.actions import Action, ActionType
 from ai.tutor.move_quality import clamp_move_quality, move_quality_label, tutor_move_quality_label
@@ -41,6 +41,8 @@ class ReasonLabel(Enum):
     ADVANCES_LARGEST_ARMY = auto()
     REQUIRES_TRADE = auto()
     HIDDEN_DEV_VALUE = auto()
+    DEV_KNIGHT_PRESSURE = auto()
+    DEV_PROGRESS_FLEXIBILITY = auto()
     EARLY_ATTENTION_RISK = auto()
     NO_IMMEDIATE_ACTION = auto()
     PRE_ROLL_NO_DEV_PLAY = auto()
@@ -102,14 +104,14 @@ class Reason:
     type: ReasonType
     label: Any
     value: float = 0.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class CandidateExplanation:
     action: Action
-    full_plan: List[Action]
-    next_plan: List[Action] = field(default_factory=list)
+    full_plan: list[Action]
+    next_plan: list[Action] = field(default_factory=list)
     waiting_resources: ResourceCount = field(default_factory=dict)
 
     etb: float = 0.0
@@ -125,22 +127,22 @@ class CandidateExplanation:
 
     expected_vp_gain: float = 0.0
 
-    reasons_for: List[Reason] = field(default_factory=list)
-    reasons_against: List[Reason] = field(default_factory=list)
+    reasons_for: list[Reason] = field(default_factory=list)
+    reasons_against: list[Reason] = field(default_factory=list)
 
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class ActionExplanation:
     chosen_action: Action
     chosen_candidate: CandidateExplanation
-    alternatives: List[CandidateExplanation] = field(default_factory=list)
+    alternatives: list[CandidateExplanation] = field(default_factory=list)
 
     move_quality: float = 0.0
 
-    assumptions: List[Any] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    assumptions: list[Any] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         self.move_quality = clamp_move_quality(self.move_quality)
@@ -155,7 +157,7 @@ class ActionExplanation:
         """Return the tutor-facing label for the move quality."""
         return tutor_move_quality_label(self.move_quality)
 
-    def generate_text_concise(self) -> Tuple[str, str]:
+    def generate_text_concise(self) -> tuple[str, str]:
         """Generate the concise explanation text."""
         from ai.tutor.explanation_text import generate_text_concise
 
@@ -185,19 +187,19 @@ class ActionExplanation:
 
         return strongest_plan_focus_phrase(self)
 
-    def sorted_reasons_for(self) -> List[Reason]:
+    def sorted_reasons_for(self) -> list[Reason]:
         """Return the supporting reasons sorted for display."""
         from ai.tutor.explanation_formatting import sorted_reasons
 
         return sorted_reasons(self.chosen_candidate.reasons_for)
 
-    def sorted_reasons_against(self) -> List[Reason]:
+    def sorted_reasons_against(self) -> list[Reason]:
         """Return the opposing reasons sorted for display."""
         from ai.tutor.explanation_formatting import sorted_reasons
 
         return sorted_reasons(self.chosen_candidate.reasons_against)
 
-    def get_visual_build_plan(self) -> List[Tuple]:
+    def get_visual_build_plan(self) -> list[tuple]:
         """Return the visual build plan for the explanation."""
         custom_plan = self.metadata.get("visual_plan") or self.chosen_candidate.metadata.get("visual_plan")
         if isinstance(custom_plan, list):

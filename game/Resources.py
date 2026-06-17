@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Dict, Literal, TypeAlias
+from typing import Literal, TypeAlias
 
 
 class HexType(Enum):
@@ -19,9 +19,9 @@ class Resource(Enum):
     ORE = 4
 
 
-ResourceCount: TypeAlias = Dict[Resource, int]
+ResourceCount: TypeAlias = dict[Resource, int]
 
-HEX_TO_RESOURCE: Dict[HexType, Resource] = {
+HEX_TO_RESOURCE: dict[HexType, Resource] = {
     HexType.FOREST: Resource.WOOD,
     HexType.HILLS: Resource.BRICK,
     HexType.PASTURE: Resource.SHEEP,

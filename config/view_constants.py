@@ -1,4 +1,3 @@
-from typing import Dict, Tuple
 
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QColor
@@ -91,6 +90,7 @@ AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE = 0.05  # Seconds
 TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS = 3.0
 TUTOR_FEEDBACK_MAX_DISPLAY_SECONDS = 7.0
 TUTOR_FEEDBACK_FADE_STEPS = 12
+DEMO_MODE_SEED = 1279526801
 
 # Shared colours
 OUTLINE_COLOR = QColor(Qt.GlobalColor.black)
@@ -113,7 +113,7 @@ ENDGAME_RANK_CARD_PADDING = "10px 12px"
 ENDGAME_RANK_CARD_FONT_WEIGHT = 600
 
 # Game board colour mappings
-TERRAIN_COLORS: Dict[HexType, QColor] = {
+TERRAIN_COLORS: dict[HexType, QColor] = {
     HexType.FIELDS: QColor(255, 184, 38),
     HexType.FOREST: QColor(27, 126, 36),
     HexType.PASTURE: QColor(162, 211, 49),
@@ -123,7 +123,7 @@ TERRAIN_COLORS: Dict[HexType, QColor] = {
 }
 
 # Asset paths
-RESOURCE_ICONS: Dict[Resource, str] = {
+RESOURCE_ICONS: dict[Resource, str] = {
     Resource.WOOD: "assets/wood.png",
     Resource.BRICK: "assets/brick.png",
     Resource.SHEEP: "assets/sheep.png",
@@ -144,7 +144,7 @@ TUTOR_ICON = "assets/tutor.png"
 TROPHY_ICON = "assets/trophy.png"
 
 # Port and player assets
-PORT_ICONS: Dict[Port, str] = {
+PORT_ICONS: dict[Port, str] = {
     Port.THREE_TO_ONE: "assets/port_generic.png",
     Port.WOOD: "assets/port_wood.png",
     Port.BRICK: "assets/port_brick.png",
@@ -152,7 +152,7 @@ PORT_ICONS: Dict[Port, str] = {
     Port.WHEAT: "assets/port_wheat.png",
     Port.ORE: "assets/port_ore.png",
 }
-PLAYER_COLORS: Dict[PlayerNumber, QColor] = {
+PLAYER_COLORS: dict[PlayerNumber, QColor] = {
     PlayerNumber.P1: QColor(0, 0, 255),
     PlayerNumber.P2: QColor(255, 0, 0),
     PlayerNumber.P3: QColor(0, 255, 0),
@@ -160,7 +160,7 @@ PLAYER_COLORS: Dict[PlayerNumber, QColor] = {
 }
 
 # Building sprites
-SETTLEMENT_ICONS: Dict[Tuple[PlayerNumber, Building], str] = {
+SETTLEMENT_ICONS: dict[tuple[PlayerNumber, Building], str] = {
     (PlayerNumber.P1, Building.SETTLEMENT): "assets/settlement_1.png",
     (PlayerNumber.P1, Building.CITY): "assets/city_1.png",
     (PlayerNumber.P2, Building.SETTLEMENT): "assets/settlement_2.png",

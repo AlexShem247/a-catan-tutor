@@ -3,7 +3,6 @@ import multiprocessing as mp
 import time
 from dataclasses import dataclass
 from random import Random
-from typing import Dict, List, Optional, Tuple
 
 from tqdm import tqdm
 
@@ -63,7 +62,7 @@ class MoveCategoryStats:
         self.utility_gap_total += float(utility_gap)
 
 
-def _empty_move_stats() -> Dict[str, MoveCategoryStats]:
+def _empty_move_stats() -> dict[str, MoveCategoryStats]:
     return {category: MoveCategoryStats() for category in CATEGORY_ORDER}
 
 
@@ -73,7 +72,7 @@ class InstrumentedTutorAI(RuleBasedAI):
         super().__init__(rng, **kwargs)
         self._move_stats = _empty_move_stats()
 
-    def export_move_stats(self) -> Dict[str, Dict[str, float]]:
+    def export_move_stats(self) -> dict[str, dict[str, float]]:
         return {
             category: {
                 "count": stats.count,
@@ -83,13 +82,13 @@ class InstrumentedTutorAI(RuleBasedAI):
             for category, stats in self._move_stats.items() if stats.count > 0
         }
 
-    def _record(self, category: Optional[str], move_quality: float, utility_gap: float) -> None:
+    def _record(self, category: str | None, move_quality: float, utility_gap: float) -> None:
         if category is None:
             return
         self._move_stats[category].add(move_quality, max(0.0, utility_gap))
 
     @staticmethod
-    def _normalised_gap_from_scores(scores: List[float]) -> float:
+    def _normalised_gap_from_scores(scores: list[float]) -> float:
         if not scores:
             return 0.0
         ranked = sorted((float(score) for score in scores), reverse=True)
@@ -114,7 +113,7 @@ class InstrumentedTutorAI(RuleBasedAI):
         return move_quality_from_margin(chosen_utility, second_utility, worst_utility)
 
     @staticmethod
-    def _main_action_category(action: Action) -> Optional[str]:
+    def _main_action_category(action: Action) -> str | None:
         if action.type == ActionType.BUILD and isinstance(action.payload, tuple):
             buildable = action.payload[0]
             if buildable in {Buildable.SETTLEMENT, Buildable.CITY}:
@@ -132,7 +131,7 @@ class InstrumentedTutorAI(RuleBasedAI):
         self,
         player: Player,
         game,
-        available_vertices: List[Vertex],
+        available_vertices: list[Vertex],
     ) -> float:
         _, scores = self._opening_settlement_baseline_scores(player, game, available_vertices)
         if not scores:
@@ -143,8 +142,8 @@ class InstrumentedTutorAI(RuleBasedAI):
         self,
         player: Player,
         game,
-        available_vertices: List[Vertex],
-    ) -> List[Vertex]:
+        available_vertices: list[Vertex],
+    ) -> list[Vertex]:
         if not available_vertices:
             return []
 
@@ -152,7 +151,7 @@ class InstrumentedTutorAI(RuleBasedAI):
         if not own_vertices:
             return list(game.get_all_vertices())
 
-        baseline_vertices: List[Vertex] = []
+        baseline_vertices: list[Vertex] = []
         for vertex in game.get_all_vertices():
             if vertex in own_vertices:
                 continue
@@ -165,8 +164,8 @@ class InstrumentedTutorAI(RuleBasedAI):
         self,
         player: Player,
         game,
-        available_vertices: List[Vertex],
-    ) -> Tuple[List[Vertex], List[float]]:
+        available_vertices: list[Vertex],
+    ) -> tuple[list[Vertex], list[float]]:
         baseline_vertices = self._opening_settlement_baseline_vertices(player, game, available_vertices)
         if not baseline_vertices:
             return [], []
@@ -188,8 +187,8 @@ class InstrumentedTutorAI(RuleBasedAI):
         self,
         player: Player,
         game,
-        available_vertices: List[Vertex],
-        chosen_vertex: Optional[Vertex],
+        available_vertices: list[Vertex],
+        chosen_vertex: Vertex | None,
     ) -> float:
         if chosen_vertex is None:
             return 0.0
@@ -211,7 +210,7 @@ class InstrumentedTutorAI(RuleBasedAI):
         self,
         player: Player,
         game,
-        available_edges: List[Edge],
+        available_edges: list[Edge],
     ) -> float:
         if not available_edges:
             return 0.0
@@ -265,7 +264,7 @@ class InstrumentedTutorAI(RuleBasedAI):
         self,
         player: Player,
         game,
-        valid_hexes: List[HexTile],
+        valid_hexes: list[HexTile],
     ) -> float:
         if not valid_hexes or not self.decision_config.use_opponent_interference:
             return 0.0
@@ -277,7 +276,7 @@ class InstrumentedTutorAI(RuleBasedAI):
         best_opp_vp = max(opp_vps, default=0)
         diversion_boost = StrategyWeights.DIVERSION_BOOST if our_vp >= best_opp_vp else 1.0
 
-        opponent_importance: Dict[PlayerNumber, Dict[Resource, float]] = {}
+        opponent_importance: dict[PlayerNumber, dict[Resource, float]] = {}
         for opponent in game.players:
             if opponent == player:
                 continue
@@ -296,7 +295,7 @@ class InstrumentedTutorAI(RuleBasedAI):
                 for res, amt in required.items() if amt > 0
             } if total > 0 else {})
 
-        scores: List[float] = []
+        scores: list[float] = []
         for hex_tile in valid_hexes:
             players_on_hex = [p for p in game.get_players_on_hex(hex_tile) if p != player]
             if not players_on_hex:
@@ -325,7 +324,7 @@ class InstrumentedTutorAI(RuleBasedAI):
         selling: ResourceCount,
         buying: ResourceCount,
         accepted: bool,
-        counter: Optional[ResourceCount],
+        counter: ResourceCount | None,
     ) -> float:
         sim_game = make_sim_game_for_player(game, player)
         sim_us = sim_game.overlay.get_sim_player(player.player_number)
@@ -386,8 +385,8 @@ class InstrumentedTutorAI(RuleBasedAI):
         self,
         player: Player,
         game,
-        available_vertices: List[Vertex],
-    ) -> Optional[Vertex]:
+        available_vertices: list[Vertex],
+    ) -> Vertex | None:
         vertex, explanation = self.select_initial_settlement_location_with_explanation(player, game, available_vertices)
         if explanation is not None:
             self._record(
@@ -401,8 +400,8 @@ class InstrumentedTutorAI(RuleBasedAI):
         self,
         player: Player,
         game,
-        available_edges: List[Edge],
-    ) -> Optional[Edge]:
+        available_edges: list[Edge],
+    ) -> Edge | None:
         edge, explanation = self.select_initial_road_location_with_explanation(player, game, available_edges)
         if explanation is not None:
             self._record(
@@ -418,8 +417,8 @@ class InstrumentedTutorAI(RuleBasedAI):
         game,
         selling: ResourceCount,
         buying: ResourceCount,
-        available_players: List[Tuple[Player, Optional[ResourceCount]]],
-    ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+        available_players: list[tuple[Player, ResourceCount | None]],
+    ) -> tuple[Player, ResourceCount | None] | None:
         selection, explanation = self.choose_trade_partner_with_explanation(
             player,
             game,
@@ -435,8 +434,8 @@ class InstrumentedTutorAI(RuleBasedAI):
         self,
         player: Player,
         game,
-        valid_hexes: List[HexTile],
-    ) -> Tuple[HexTile, Optional[Player]]:
+        valid_hexes: list[HexTile],
+    ) -> tuple[HexTile, Player | None]:
         tile, target_player, explanation = self.select_robber_target_with_explanation(player, game, valid_hexes)
         if explanation is not None:
             self._record(CATEGORY_ROBBER, explanation.move_quality, self._robber_gap(player, game, valid_hexes))
@@ -449,7 +448,7 @@ class InstrumentedTutorAI(RuleBasedAI):
         opponent: Player,
         selling: ResourceCount,
         buying: ResourceCount,
-    ) -> Tuple[bool, Optional[ResourceCount]]:
+    ) -> tuple[bool, ResourceCount | None]:
         accepted, counter, explanation = self.respond_to_trade_with_explanation(player, game, opponent, selling, buying)
         if explanation is not None:
             self._record(
@@ -497,7 +496,7 @@ def _build_player_config(player_policies, order_seed: int):
     return {player_number: policy for player_number, policy in zip(ordered_player_numbers, ordered_policies)}
 
 
-def _collect_game_move_stats(controller: GameController) -> Dict[str, Dict[str, float]]:
+def _collect_game_move_stats(controller: GameController) -> dict[str, dict[str, float]]:
     aggregate = _empty_move_stats()
     for player in controller.get_game_state().players:
         if not isinstance(player.policy, InstrumentedTutorAI):
@@ -547,7 +546,7 @@ def run_single_game(job_args):
     }
 
 
-def _merge_move_stats(results) -> Dict[str, MoveCategoryStats]:
+def _merge_move_stats(results) -> dict[str, MoveCategoryStats]:
     merged = _empty_move_stats()
     for game_result in results:
         for category, values in game_result.get("move_stats", {}).items():
@@ -557,7 +556,7 @@ def _merge_move_stats(results) -> Dict[str, MoveCategoryStats]:
     return merged
 
 
-def _format_move_table(summary: Dict[str, MoveCategoryStats]) -> str:
+def _format_move_table(summary: dict[str, MoveCategoryStats]) -> str:
     headers = ["Action Type", "Avg Move Quality", "Avg Utility Gap"]
     rows = []
     for category in CATEGORY_ORDER:

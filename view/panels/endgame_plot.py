@@ -1,5 +1,4 @@
 import math
-from typing import Dict, List, Tuple
 
 import pyqtgraph as pg
 from PyQt6.QtCore import QPoint, QPointF, Qt
@@ -18,7 +17,7 @@ from view.panels.endgame_summary import describe_round_vp_events, format_endgame
 
 class IntegerAxisItem(pg.AxisItem):
 
-    def tickSpacing(self, minVal: float, maxVal: float, size: float) -> List[Tuple[float, float]]:
+    def tickSpacing(self, minVal: float, maxVal: float, size: float) -> list[tuple[float, float]]:
         """Calculate sensible tick spacing for the integer axis."""
         value_range = abs(maxVal - minVal)
         if value_range <= 0 or size <= 0:
@@ -37,7 +36,7 @@ class IntegerAxisItem(pg.AxisItem):
         spacing = max(1.0, round(magnitude * 10))
         return [(float(spacing), 0.0)]
 
-    def tickStrings(self, values: List[float], scale: float, spacing: float) -> List[str]:
+    def tickStrings(self, values: list[float], scale: float, spacing: float) -> list[str]:
         """Format axis tick values as whole-number labels."""
         return [str(int(round(value))) for value in values]
 
@@ -153,12 +152,12 @@ def handle_plot_hover(owner, scene_pos: QPointF) -> None:
 
 
 def build_endgame_plot_tooltips(
-    history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
-    players: List[Player],
-) -> Dict[int, str]:
+    history: list[tuple[int, dict[PlayerNumber, PlayerScoreSnapshot]]],
+    players: list[Player],
+) -> dict[int, str]:
     player_names = {player.player_number: player.name for player in players}
-    tooltips: Dict[int, str] = {}
-    previous_snapshot: Dict[PlayerNumber, PlayerScoreSnapshot] | None = None
+    tooltips: dict[int, str] = {}
+    previous_snapshot: dict[PlayerNumber, PlayerScoreSnapshot] | None = None
     for round_num, snapshot in history:
         ranked_players = sorted(snapshot.items(), key=lambda item: item[0].value)
         top_score = max(player_snapshot.total_vp for player_snapshot in snapshot.values())
@@ -218,8 +217,8 @@ def populate_tutor_endgame_performance(owner, controller: GameController) -> Non
     owner.plot_tooltips = build_endgame_plot_tooltips(review_history, controller.get_all_players())
 
     for player in controller.get_all_players():
-        player_rounds: List[int] = []
-        player_points: List[int] = []
+        player_rounds: list[int] = []
+        player_points: list[int] = []
         for round_num, snapshot in history:
             player_rounds.append(round_num)
             y_value = snapshot.get(player.player_number, 0) + 0.075 - 0.05 * player.player_number.value

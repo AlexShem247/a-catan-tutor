@@ -1,4 +1,3 @@
-from typing import List, Optional, Tuple
 
 from ai.actions import Action, ActionType
 from ai.simulation.board_sim_utils import get_opponents
@@ -23,12 +22,12 @@ class EtwSelection:
         self,
         player: SimPlayerState,
         sim_game: SimGame,
-        utilities: List[Tuple[Action, float]],
+        utilities: list[tuple[Action, float]],
         ignore_affordability: bool = False,
         include_player_trades: bool = True,
     ) -> Action:
         """Choose the max utility action."""
-        best_action: Optional[Action] = None
+        best_action: Action | None = None
         best_utility = float("-inf")
 
         for action, utility in utilities:
@@ -62,14 +61,14 @@ class EtwSelection:
         self,
         player: SimPlayerState,
         sim_game: SimGame,
-        candidates: List[CandidateExplanation],
+        candidates: list[CandidateExplanation],
         ignore_affordability: bool = False,
         include_player_trades: bool = True,
         use_time_discount: bool = True,
-    ) -> Tuple[Action, CandidateExplanation]:
+    ) -> tuple[Action, CandidateExplanation]:
         """Choose the max utility action with candidate."""
-        best_action: Optional[Action] = None
-        best_candidate: Optional[CandidateExplanation] = None
+        best_action: Action | None = None
+        best_candidate: CandidateExplanation | None = None
         best_utility = float("-inf")
 
         for candidate_explanation in candidates:

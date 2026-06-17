@@ -1,5 +1,4 @@
 import math
-from typing import Dict, List, Tuple
 
 from ai.tutor.feedback import TutorDecisionType, TutorFeedbackExplanation
 from ai.tutor.move_quality import move_quality_label
@@ -9,7 +8,7 @@ from game.PlayerAssets import DevelopmentCardType
 from view.rich_text import player_breakdown_html, strip_html_to_plain_text
 
 
-def get_player_victory_breakdown(player: Player) -> Dict[str, int]:
+def get_player_victory_breakdown(player: Player) -> dict[str, int]:
     return {
         "settlements": len(player.settlements),
         "cities": len(player.cities) * 2,
@@ -36,7 +35,7 @@ def format_player_breakdown_html(player: Player) -> str:
 
 
 def format_player_ranking_summary(player: Player) -> str:
-    summary_parts: List[str] = []
+    summary_parts: list[str] = []
     city_count = len(player.cities)
     if city_count:
         summary_parts.append(f"C:{city_count}")
@@ -85,7 +84,7 @@ def feedback_card_title(feedback: TutorFeedbackExplanation) -> str:
     return f"Turn {turn_num} - {action_text}"
 
 
-def endgame_feedback_filter_state_from_owner(owner) -> Dict[str, bool]:
+def endgame_feedback_filter_state_from_owner(owner) -> dict[str, bool]:
 
     def is_checked(label: str) -> bool:
         checkbox = owner.feedback_filter_checkboxes.get(label)
@@ -107,7 +106,7 @@ def replay_feedback_player_name(feedback: TutorFeedbackExplanation) -> str:
     return players[0].name if players else "Player"
 
 
-def format_replay_feedback_details(feedback: TutorFeedbackExplanation, total_turns: int) -> Dict[str, str]:
+def format_replay_feedback_details(feedback: TutorFeedbackExplanation, total_turns: int) -> dict[str, str]:
     turn_num = getattr(feedback.board_snapshot.game_state, "round_num", 0)
     player_name = replay_feedback_player_name(feedback)
     action_text = feedback.assessment.your_move or feedback.title
@@ -219,10 +218,10 @@ def performance_line(category: str, score: float, positive: bool) -> str:
 
 
 def overall_performance_summary(
-    feedback_items: List[TutorFeedbackExplanation],
+    feedback_items: list[TutorFeedbackExplanation],
     final_snapshot: PlayerScoreSnapshot | None = None,
     leader_vp: int | None = None,
-) -> Dict[str, str]:
+) -> dict[str, str]:
     if not feedback_items:
         return {
             "turn_and_player": "",
@@ -241,7 +240,7 @@ def overall_performance_summary(
     if vp_score is not None and win_bonus is not None:
         overall_score = max(0.0, min(1.0, 0.3 * weighted_quality + 0.6 * vp_score + 0.1 * win_bonus))
     overall_label = move_quality_label(overall_score)
-    category_scores: Dict[str, List[float]] = {}
+    category_scores: dict[str, list[float]] = {}
     for feedback in feedback_items:
         category = performance_category(feedback)
         category_scores.setdefault(category, []).append(feedback.assessment.internal_score)
@@ -286,7 +285,7 @@ def overall_performance_summary(
     }
 
 
-def format_endgame_players(names: List[str]) -> str:
+def format_endgame_players(names: list[str]) -> str:
     if not names:
         return "No one"
     if len(names) == 1:
@@ -297,13 +296,13 @@ def format_endgame_players(names: List[str]) -> str:
 
 
 def describe_round_vp_events(
-    previous_snapshot: Dict[PlayerNumber, PlayerScoreSnapshot] | None,
-    current_snapshot: Dict[PlayerNumber, PlayerScoreSnapshot],
-    player_names: Dict[PlayerNumber, str],
-) -> List[str]:
+    previous_snapshot: dict[PlayerNumber, PlayerScoreSnapshot] | None,
+    current_snapshot: dict[PlayerNumber, PlayerScoreSnapshot],
+    player_names: dict[PlayerNumber, str],
+) -> list[str]:
     if previous_snapshot is None:
         return []
-    events: List[str] = []
+    events: list[str] = []
     for player_number in sorted(current_snapshot.keys(), key=lambda number: number.value):
         previous = previous_snapshot[player_number]
         current = current_snapshot[player_number]
@@ -337,7 +336,7 @@ def describe_round_vp_events(
     return events
 
 
-def join_reasons(reasons: List[str]) -> str:
+def join_reasons(reasons: list[str]) -> str:
     if len(reasons) == 1:
         return reasons[0]
     if len(reasons) == 2:
@@ -345,8 +344,8 @@ def join_reasons(reasons: List[str]) -> str:
     return f"{', '.join(reasons[:-1])}, and {reasons[-1]}"
 
 
-def score_swing_reasons(previous: PlayerScoreSnapshot, current: PlayerScoreSnapshot) -> List[str]:
-    reasons: List[str] = []
+def score_swing_reasons(previous: PlayerScoreSnapshot, current: PlayerScoreSnapshot) -> list[str]:
+    reasons: list[str] = []
     if not previous.has_longest_road and current.has_longest_road:
         reasons.append("gained Longest Road")
     if not previous.has_largest_army and current.has_largest_army:
@@ -362,10 +361,10 @@ def score_swing_reasons(previous: PlayerScoreSnapshot, current: PlayerScoreSnaps
 
 
 def build_lead_change_label(
-    history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
-    player_names: Dict[PlayerNumber, str],
+    history: list[tuple[int, dict[PlayerNumber, PlayerScoreSnapshot]]],
+    player_names: dict[PlayerNumber, str],
 ) -> str:
-    leaders_by_round: List[Tuple[int, List[PlayerNumber], int]] = []
+    leaders_by_round: list[tuple[int, list[PlayerNumber], int]] = []
     for round_num, snapshot in history:
         top_score = max(player.total_vp for player in snapshot.values())
         leaders = sorted(
@@ -393,13 +392,13 @@ def build_lead_change_label(
 
 
 def build_biggest_swing_label(
-    history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
-    player_names: Dict[PlayerNumber, str],
+    history: list[tuple[int, dict[PlayerNumber, PlayerScoreSnapshot]]],
+    player_names: dict[PlayerNumber, str],
 ) -> str:
     best_round: int | None = None
     best_player: PlayerNumber | None = None
     best_delta = 0
-    best_reasons: List[str] = []
+    best_reasons: list[str] = []
     for index in range(1, len(history)):
         round_num, current_snapshot = history[index]
         _, previous_snapshot = history[index - 1]
@@ -424,13 +423,13 @@ def build_biggest_swing_label(
 
 
 def build_closest_moment_label(
-    history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
-    player_names: Dict[PlayerNumber, str],
+    history: list[tuple[int, dict[PlayerNumber, PlayerScoreSnapshot]]],
+    player_names: dict[PlayerNumber, str],
 ) -> str:
     best_round = history[0][0]
     best_gap = math.inf
     best_top_score = -1
-    best_leaders: List[PlayerNumber] = []
+    best_leaders: list[PlayerNumber] = []
     best_runner_up: PlayerNumber | None = None
     best_runner_up_score = -1
 
@@ -464,9 +463,9 @@ def build_closest_moment_label(
 
 
 def summarise_endgame_review_labels(
-    history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]],
-    players: List[Player],
-) -> Tuple[str, str, str]:
+    history: list[tuple[int, dict[PlayerNumber, PlayerScoreSnapshot]]],
+    players: list[Player],
+) -> tuple[str, str, str]:
     if not history:
         fallback = "No round history recorded."
         return fallback, fallback, fallback

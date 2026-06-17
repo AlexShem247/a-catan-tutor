@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Dict, Optional
 
 from ai.simulation.SimPlayerState import SimPlayerState
 from game.Edge import Edge
@@ -12,11 +11,11 @@ from game.Vertex import Vertex
 class BoardOverlay:
     """Counterfactual board state storing hypothetical ownership and simulated players."""
 
-    vertex_owner: Dict[Vertex, PlayerNumber] = field(default_factory=dict)
-    edge_owner: Dict[Edge, PlayerNumber] = field(default_factory=dict)
+    vertex_owner: dict[Vertex, PlayerNumber] = field(default_factory=dict)
+    edge_owner: dict[Edge, PlayerNumber] = field(default_factory=dict)
 
     # Simulated players indexed by player_number
-    sim_players: Dict[PlayerNumber, SimPlayerState] = field(default_factory=dict)
+    sim_players: dict[PlayerNumber, SimPlayerState] = field(default_factory=dict)
 
     def copy(self) -> "BoardOverlay":
         """Return a copy of this simulation state."""
@@ -34,7 +33,7 @@ class BoardOverlay:
         """Set the sim player."""
         self.sim_players[sim_player.player_number] = sim_player
 
-    def get_vertex_owner_num(self, vertex: Vertex) -> Optional[PlayerNumber]:
+    def get_vertex_owner_num(self, vertex: Vertex) -> PlayerNumber | None:
         """Return the vertex owner num."""
         if vertex.owner is not None:
             return vertex.owner.player_number
@@ -44,7 +43,7 @@ class BoardOverlay:
         """Handle is vertex taken."""
         return self.get_vertex_owner_num(vertex) is not None
 
-    def get_edge_owner_num(self, edge: Edge) -> Optional[PlayerNumber]:
+    def get_edge_owner_num(self, edge: Edge) -> PlayerNumber | None:
         """Return the edge owner num."""
         if edge.owner is not None:
             return edge.owner.player_number
@@ -85,7 +84,7 @@ class SimGame:
 
         return SimGame(game=game, overlay=overlay)
 
-    def copy_with_players(self, sim_players: Dict[PlayerNumber, SimPlayerState]) -> "SimGame":
+    def copy_with_players(self, sim_players: dict[PlayerNumber, SimPlayerState]) -> "SimGame":
         """Handle copy with players."""
         new_overlay = self.overlay.copy()
         new_overlay.sim_players = dict(sim_players)

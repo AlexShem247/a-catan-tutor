@@ -1,4 +1,3 @@
-from typing import Dict, List, Optional, Tuple
 
 from ai.actions import Action, ActionType
 from ai.tutor.explanations import ActionExplanation
@@ -10,7 +9,7 @@ from game.Player import Player
 from game.PlayerAssets import DevelopmentCardType
 from game.Resources import ResourceCount
 from game.Vertex import Vertex
-from view.View import GameMode, View
+from view.View import DemoControl, GameMode, View
 
 
 class HeadlessView(View):
@@ -28,7 +27,7 @@ class HeadlessView(View):
         """Consume and clear any pending return-home request."""
         return False
 
-    def display_board(self, player: Optional[Player] = None, msg: Optional[str] = None) -> None:
+    def display_board(self, player: Player | None = None, msg: str | None = None) -> None:
         """Render the current board state on the canvas."""
         pass
 
@@ -36,17 +35,17 @@ class HeadlessView(View):
         """Display the board while an AI status message is shown."""
         pass
 
-    def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int],
+    def display_board_turn(self, player: Player, dice_info: tuple[int, int, int],
                            played_dev_card: bool = False) -> Action:
         """Display the board and wait for the player turn action."""
         return Action(ActionType.END_TURN)
 
-    def display_board_turn_ai(self, player: Player, dice_info: Tuple[int, int, int], msg: str,
+    def display_board_turn_ai(self, player: Player, dice_info: tuple[int, int, int], msg: str,
                               increase_delay=False) -> None:
         """Display the board during an AI turn."""
         pass
 
-    def display_board_turn_explanations(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
+    def display_board_turn_explanations(self, player: Player, dice_info: tuple[int, int, int] | None,
                                         explanation: ActionExplanation):
         """Display the board with tutor move explanations."""
         return None
@@ -59,24 +58,24 @@ class HeadlessView(View):
         """Display tutor feedback for the player action."""
         return None
 
-    def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False) -> Vertex:
+    def draw_selectable_vertices(self, vertices: list[Vertex], disable_interactivity: bool = False) -> Vertex:
         """Draw selectable vertices on the board."""
         return vertices[0]
 
-    def draw_selectable_edges(self, edges: List[Edge], disable_interactivity: bool = False) -> Edge:
+    def draw_selectable_edges(self, edges: list[Edge], disable_interactivity: bool = False) -> Edge:
         """Draw selectable edges on the board."""
         return edges[0]
 
-    def draw_selectable_tiles(self, tiles: List[HexTile]) -> HexTile:
+    def draw_selectable_tiles(self, tiles: list[HexTile]) -> HexTile:
         """Draw selectable tiles on the board."""
         return tiles[0]
 
-    def draw_buildables(self, buildables: Dict) -> None:
+    def draw_buildables(self, buildables: dict) -> None:
         """Draw the currently buildable board options."""
         pass
 
     def show_resource_chooser(self, player: Player, num_resources: int, title: str,
-                              resource_caps: Optional[ResourceCount] = None) -> ResourceCount:
+                              resource_caps: ResourceCount | None = None) -> ResourceCount:
         """Display the resource chooser widget."""
         return {}
 
@@ -90,8 +89,8 @@ class HeadlessView(View):
         player: Player,
         selling: ResourceCount,
         buying: ResourceCount,
-        willing_players: List[Tuple[Player, Optional[ResourceCount]]],
-    ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+        willing_players: list[tuple[Player, ResourceCount | None]],
+    ) -> tuple[Player, ResourceCount | None] | None:
         """Handle select player trade offer."""
         return willing_players[0] if willing_players else None
 
@@ -109,4 +108,16 @@ class HeadlessView(View):
 
     def open_tutor_menu(self, open_menu: bool):
         """Toggle the tutor menu visibility."""
+        pass
+
+    def configure_demo_navigation(self, enabled: bool, has_next: bool) -> None:
+        """Configure demo-mode navigation controls."""
+        pass
+
+    def wait_for_demo_next_state(self):
+        """Wait for the next-demo-state request."""
+        return DemoControl.NEXT_STATE
+
+    def set_window_title_suffix(self, suffix: str | None) -> None:
+        """Set an optional suffix for the OS window title."""
         pass

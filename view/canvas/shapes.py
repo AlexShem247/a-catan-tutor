@@ -2,7 +2,6 @@ import math
 import time
 from abc import ABC, abstractmethod
 from collections import Counter
-from typing import Dict
 
 from PyQt6.QtCore import QPoint, QPointF, Qt
 from PyQt6.QtGui import QColor, QFontMetrics, QPen, QPixmap, QPolygonF
@@ -295,7 +294,7 @@ class PulsingLineShape(Shape):
 
 class HexTileShape(Shape):
 
-    def __init__(self, x: float, y: float, radius: float, tile: HexTile, icons: Dict[str, QPixmap]):
+    def __init__(self, x: float, y: float, radius: float, tile: HexTile, icons: dict[str, QPixmap]):
         """
         x, y = center of hex
         radius = hex radius
@@ -352,7 +351,7 @@ class HexTileShape(Shape):
 
 class VertexShape(Shape):
 
-    def __init__(self, x: float, y: float, radius: float, vertex: Vertex, icons: Dict):
+    def __init__(self, x: float, y: float, radius: float, vertex: Vertex, icons: dict):
         self.shapes = []
 
         if vertex.building and vertex.owner:

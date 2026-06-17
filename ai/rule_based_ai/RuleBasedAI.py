@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from functools import wraps
 from random import Random
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from ai.actions import Action, ActionType, Phase
 from ai.AI import AI
@@ -87,8 +87,8 @@ class RuleBasedAIStateSnapshot:
 
 class RuleBasedAI(AI):
 
-    def __init__(self, rng: Random, strategy_weights: Optional[StrategyWeights] = None,
-                 decision_config: Optional[RuleBasedAIDecisionConfig] = None, use_difficulty_randomness: bool = False):
+    def __init__(self, rng: Random, strategy_weights: StrategyWeights | None = None,
+                 decision_config: RuleBasedAIDecisionConfig | None = None, use_difficulty_randomness: bool = False):
         super().__init__(rng)
         self.strategy_weights = strategy_weights or StrategyWeights()
         self.decision_config = decision_config or RuleBasedAIDecisionConfig()
@@ -189,7 +189,7 @@ class RuleBasedAI(AI):
             },
         )
 
-    def _planner_kwargs(self, ignore_opponents: bool = False) -> Dict[str, object]:
+    def _planner_kwargs(self, ignore_opponents: bool = False) -> dict[str, object]:
         """Handle planner kwargs."""
         return {
             "include_player_trades": self.decision_config.use_player_trading,
@@ -199,7 +199,7 @@ class RuleBasedAI(AI):
             "use_planning": self.decision_config.use_etw_planning,
         }
 
-    def _etw_kwargs(self, include_player_trades: bool = True) -> Dict[str, object]:
+    def _etw_kwargs(self, include_player_trades: bool = True) -> dict[str, object]:
         """Handle etw kwargs."""
         return {
             "include_player_trades": include_player_trades,
@@ -207,7 +207,7 @@ class RuleBasedAI(AI):
             "use_planning": self.decision_config.use_etw_planning,
         }
 
-    def _trade_risk_kwargs(self) -> Dict[str, float]:
+    def _trade_risk_kwargs(self) -> dict[str, float]:
         """Handle trade risk kwargs."""
         if self.decision_config.use_opponent_interference:
             return {}
@@ -219,30 +219,30 @@ class RuleBasedAI(AI):
 
     @use_strategy_weights
     def select_initial_settlement_location(self, player: Player, game: Game,
-                                           available_vertices: List[Vertex]) -> Optional[Vertex]:
+                                           available_vertices: list[Vertex]) -> Vertex | None:
         """Select the initial settlement location."""
         return self.opening_policy.select_initial_settlement_location(player, game, available_vertices)
 
     @use_strategy_weights
-    def select_initial_road_location(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
+    def select_initial_road_location(self, player: Player, game: Game, available_edges: list[Edge]) -> Edge | None:
         """Select the initial road location."""
         return self.opening_policy.select_initial_road_location(player, game, available_edges)
 
     @use_strategy_weights
     def select_initial_settlement_location_with_explanation(
             self, player: Player, game: Game,
-            available_vertices: List[Vertex]) -> Tuple[Optional[Vertex], Optional[ActionExplanation]]:
+            available_vertices: list[Vertex]) -> tuple[Vertex | None, ActionExplanation | None]:
         """Select the initial settlement location with explanation."""
         return self.opening_policy.select_initial_settlement_location_with_explanation(player, game, available_vertices)
 
     @use_strategy_weights
-    def explain_initial_settlement_choice(self, player: Player, game: Game, available_vertices: List[Vertex],
+    def explain_initial_settlement_choice(self, player: Player, game: Game, available_vertices: list[Vertex],
                                           chosen_vertex: Vertex) -> ActionExplanation:
         """Handle explain initial settlement choice."""
         return self.opening_policy.explain_initial_settlement_choice(player, game, available_vertices, chosen_vertex)
 
     @use_strategy_weights
-    def score_initial_settlement_choice(self, player: Player, game: Game, available_vertices: List[Vertex],
+    def score_initial_settlement_choice(self, player: Player, game: Game, available_vertices: list[Vertex],
                                         chosen_vertex: Vertex) -> float:
         """Score the initial settlement choice."""
         return self.opening_policy.score_initial_settlement_choice(player, game, available_vertices, chosen_vertex)
@@ -250,24 +250,24 @@ class RuleBasedAI(AI):
     @use_strategy_weights
     def select_initial_road_location_with_explanation(
             self, player: Player, game: Game,
-            available_edges: List[Edge]) -> Tuple[Optional[Edge], Optional[ActionExplanation]]:
+            available_edges: list[Edge]) -> tuple[Edge | None, ActionExplanation | None]:
         """Select the initial road location with explanation."""
         return self.opening_policy.select_initial_road_location_with_explanation(player, game, available_edges)
 
     @use_strategy_weights
-    def explain_initial_road_choice(self, player: Player, game: Game, available_edges: List[Edge],
+    def explain_initial_road_choice(self, player: Player, game: Game, available_edges: list[Edge],
                                     chosen_edge: Edge) -> ActionExplanation:
         """Handle explain initial road choice."""
         return self.opening_policy.explain_initial_road_choice(player, game, available_edges, chosen_edge)
 
     @use_strategy_weights
-    def score_initial_road_choice(self, player: Player, game: Game, available_edges: List[Edge],
+    def score_initial_road_choice(self, player: Player, game: Game, available_edges: list[Edge],
                                   chosen_edge: Edge) -> float:
         """Score the initial road choice."""
         return self.opening_policy.score_initial_road_choice(player, game, available_edges, chosen_edge)
 
     @staticmethod
-    def vertex_utility(vertex: Vertex, player: Player, game: Game, available_vertices: List[Vertex],
+    def vertex_utility(vertex: Vertex, player: Player, game: Game, available_vertices: list[Vertex],
                        first_settlement: bool = True, use_opponent_interference: bool = True) -> float:
         """Handle vertex utility."""
         return OpeningPolicy.vertex_utility(vertex, player, game, available_vertices, first_settlement,
@@ -276,43 +276,43 @@ class RuleBasedAI(AI):
     @use_strategy_weights
     def choose_trade_partner(
         self, player: Player, game: Game, selling: ResourceCount, buying: ResourceCount,
-        available_players: List[Tuple[Player, Optional[ResourceCount]]]
-    ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+        available_players: list[tuple[Player, ResourceCount | None]]
+    ) -> tuple[Player, ResourceCount | None] | None:
         """Choose the preferred trade partner from the available offers."""
         return self.trade_policy.choose_trade_partner(player, game, selling, buying, available_players)
 
     @use_strategy_weights
     def choose_trade_partner_with_explanation(
         self, player: Player, game: Game, selling: ResourceCount, buying: ResourceCount,
-        available_players: List[Tuple[Player, Optional[ResourceCount]]]
-    ) -> Tuple[Optional[Tuple[Player, Optional[ResourceCount]]], Optional[ActionExplanation]]:
+        available_players: list[tuple[Player, ResourceCount | None]]
+    ) -> tuple[tuple[Player, ResourceCount | None] | None, ActionExplanation | None]:
         """Choose the trade partner with explanation."""
         return self.trade_policy.choose_trade_partner_with_explanation(player, game, selling, buying, available_players)
 
     @use_strategy_weights
     def explain_trade_partner_choice(self, player: Player, game: Game, selling: ResourceCount, buying: ResourceCount,
-                                     available_players: List[Tuple[Player, Optional[ResourceCount]]],
-                                     chosen_player: Player, counter: Optional[ResourceCount]) -> ActionExplanation:
+                                     available_players: list[tuple[Player, ResourceCount | None]],
+                                     chosen_player: Player, counter: ResourceCount | None) -> ActionExplanation:
         """Handle explain trade partner choice."""
         return self.trade_policy.explain_trade_partner_choice(player, game, selling, buying, available_players,
                                                               chosen_player, counter)
 
     @use_strategy_weights
     def select_robber_target(self, player: Player, game: Game,
-                             valid_hexes: List[HexTile]) -> Tuple[HexTile, Optional[Player]]:
+                             valid_hexes: list[HexTile]) -> tuple[HexTile, Player | None]:
         """Select the robber target hex and victim."""
         return self.robber_policy.select_robber_target(player, game, valid_hexes)
 
     @use_strategy_weights
     def select_robber_target_with_explanation(
             self, player: Player, game: Game,
-            valid_hexes: List[HexTile]) -> Tuple[HexTile, Optional[Player], Optional[ActionExplanation]]:
+            valid_hexes: list[HexTile]) -> tuple[HexTile, Player | None, ActionExplanation | None]:
         """Select the robber target with explanation."""
         return self.robber_policy.select_robber_target_with_explanation(player, game, valid_hexes)
 
     @use_strategy_weights
-    def explain_robber_choice(self, player: Player, game: Game, _valid_hexes: List[HexTile], chosen_hex: HexTile,
-                              chosen_player: Optional[Player]) -> ActionExplanation:
+    def explain_robber_choice(self, player: Player, game: Game, _valid_hexes: list[HexTile], chosen_hex: HexTile,
+                              chosen_player: Player | None) -> ActionExplanation:
         """Handle explain robber choice."""
         return self.robber_policy.explain_robber_choice(player, game, _valid_hexes, chosen_hex, chosen_player)
 
@@ -323,7 +323,7 @@ class RuleBasedAI(AI):
 
     @use_strategy_weights
     def select_discard_resources_with_explanation(
-            self, player: Player, game: Game, num_resources: int) -> Tuple[ResourceCount, Optional[ActionExplanation]]:
+            self, player: Player, game: Game, num_resources: int) -> tuple[ResourceCount, ActionExplanation | None]:
         """Select the discard resources with explanation."""
         return self.discard_policy.select_discard_resources_with_explanation(player, game, num_resources)
 
@@ -339,7 +339,7 @@ class RuleBasedAI(AI):
 
     @use_strategy_weights
     def select_year_of_plenty_resources_with_explanation(
-            self, player: Player, game: Game) -> Tuple[ResourceCount, Optional[ActionExplanation]]:
+            self, player: Player, game: Game) -> tuple[ResourceCount, ActionExplanation | None]:
         """Select the year of plenty resources with explanation."""
         return self.dev_card_policy.select_year_of_plenty_resources_with_explanation(player, game)
 
@@ -355,7 +355,7 @@ class RuleBasedAI(AI):
 
     @use_strategy_weights
     def select_monopoly_resource_with_explanation(self, player: Player,
-                                                  game: Game) -> Tuple[Resource, Optional[ActionExplanation]]:
+                                                  game: Game) -> tuple[Resource, ActionExplanation | None]:
         """Select the monopoly resource with explanation."""
         return self.dev_card_policy.select_monopoly_resource_with_explanation(player, game)
 
@@ -366,33 +366,33 @@ class RuleBasedAI(AI):
 
     @use_strategy_weights
     def respond_to_trade(self, player: Player, game: Game, opponent: Player, selling: ResourceCount,
-                         buying: ResourceCount) -> Tuple[bool, Optional[ResourceCount]]:
+                         buying: ResourceCount) -> tuple[bool, ResourceCount | None]:
         """Handle respond to trade."""
         return self.trade_policy.respond_to_trade(player, game, opponent, selling, buying)
 
     @use_strategy_weights
     def respond_to_trade_with_explanation(
             self, player: Player, game: Game, opponent: Player, selling: ResourceCount,
-            buying: ResourceCount) -> Tuple[bool, Optional[ResourceCount], Optional[ActionExplanation]]:
+            buying: ResourceCount) -> tuple[bool, ResourceCount | None, ActionExplanation | None]:
         """Handle respond to trade with explanation."""
         return self.trade_policy.respond_to_trade_with_explanation(player, game, opponent, selling, buying)
 
     @use_strategy_weights
     def explain_trade_response_choice(self, player: Player, game: Game, opponent: Player, selling: ResourceCount,
                                       buying: ResourceCount, accepted: bool,
-                                      counter: Optional[ResourceCount]) -> ActionExplanation:
+                                      counter: ResourceCount | None) -> ActionExplanation:
         """Handle explain trade response choice."""
         return self.trade_policy.explain_trade_response_choice(player, game, opponent, selling, buying, accepted,
                                                                counter)
 
     @use_strategy_weights
-    def road_building_placement(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
+    def road_building_placement(self, player: Player, game: Game, available_edges: list[Edge]) -> Edge | None:
         """Handle road building placement."""
         return self.opening_policy.road_building_placement(player, game, available_edges)
 
     @use_strategy_weights
     def next_action_with_explanation(self, player: Player, game: Game, phase: Phase,
-                                     dev_played: bool) -> Tuple[Action, ActionExplanation]:
+                                     dev_played: bool) -> tuple[Action, ActionExplanation]:
         """Return the next action together with its explanation."""
         if not self._use_strategic_move():
             action = self.random_ai.next_action(player, game, phase, dev_played)

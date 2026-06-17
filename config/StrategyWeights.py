@@ -1,5 +1,9 @@
 from contextlib import contextmanager
 from dataclasses import dataclass, fields
+from threading import RLock
+
+
+_STRATEGY_WEIGHT_LOCK = RLock()
 
 
 @dataclass(frozen=True)
@@ -85,14 +89,15 @@ class StrategyWeights:
 
     @contextmanager
     def applied(self):
-        old_values = {name: getattr(type(self), name) for name in self.field_names()}
-        for name in self.field_names():
-            setattr(type(self), name, getattr(self, name))
-        try:
-            yield self
-        finally:
-            for name, value in old_values.items():
-                setattr(type(self), name, value)
+        with _STRATEGY_WEIGHT_LOCK:
+            old_values = {name: getattr(type(self), name) for name in self.field_names()}
+            for name in self.field_names():
+                setattr(type(self), name, getattr(self, name))
+            try:
+                yield self
+            finally:
+                for name, value in old_values.items():
+                    setattr(type(self), name, value)
 
 
 EVO_STRATEGY_WEIGHTS = StrategyWeights(

@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from enum import Enum, IntEnum
-from typing import TYPE_CHECKING, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING
 
 from game.HexTile import HexTile
 from game.PlayerAssets import Building
@@ -28,7 +30,7 @@ class Port(Enum):
     THREE_TO_ONE = 5
 
     @classmethod
-    def resource_to_port(cls, resource: Resource) -> Optional["Port"]:
+    def resource_to_port(cls, resource: Resource) -> Port | None:
         """Convert a resource type into its matching port type."""
         resource_to_port = {
             Resource.WOOD: cls.WOOD,
@@ -42,20 +44,20 @@ class Port(Enum):
 
 class Vertex:
 
-    def __init__(self, pos: Tuple[int, int, VertexDirection]):
-        self.hexes: List[HexTile] = []
-        self.edges: List[Edge] = []
-        self.owner: Optional[Player] = None
-        self.building: Optional[Building] = None
+    def __init__(self, pos: tuple[int, int, VertexDirection]):
+        self.hexes: list[HexTile] = []
+        self.edges: list[Edge] = []
+        self.owner: Player | None = None
+        self.building: Building | None = None
         self.pos = pos
-        self.port: Optional[Port] = None
+        self.port: Port | None = None
 
     def get_pos(self) -> str:
         """Return the board position label for this object."""
         q, r, direction = self.pos
         return f"{q}, {r}, {direction.name.title().replace('_', ' ')}"
 
-    def get_neighbours(self) -> Set["Vertex"]:
+    def get_neighbours(self) -> set[Vertex]:
         """Return the neighboring vertices connected by edges."""
         neighbor_vertices = set()
         for edge in self.edges:
@@ -66,7 +68,7 @@ class Vertex:
                 neighbor_vertices.add(edge.vertices[1])
         return neighbor_vertices
 
-    def get_edge_between(self, neighbour: "Vertex") -> Optional["Edge"]:
+    def get_edge_between(self, neighbour: Vertex) -> Edge | None:
         """Return the edge connecting this vertex to the neighbor."""
         for edge in self.edges:
             if edge.vertices[0] == neighbour or edge.vertices[1] == neighbour:

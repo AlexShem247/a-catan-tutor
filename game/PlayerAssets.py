@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum, auto
 from random import Random
-from typing import Dict
 
 
 class Buildable(Enum):
@@ -85,7 +84,7 @@ class DevelopmentDeck:
         """Return a copy of the current development deck cards."""
         return list(self._deck)
 
-    def played_counts(self) -> Dict[DevelopmentCardType, int]:
+    def played_counts(self) -> dict[DevelopmentCardType, int]:
         """Return how many development cards of each type were played."""
         return dict(self._played)
 
@@ -102,7 +101,7 @@ class DevelopmentDeck:
         self._played[ctype] += 1
 
     def get_probability(self, ctype: DevelopmentCardType,
-                        private_cards: Dict[DevelopmentCardType, int] | None = None) -> float:
+                        private_cards: dict[DevelopmentCardType, int] | None = None) -> float:
         """Return the probability of drawing a card of the given type."""
 
         # Unknown = initial - publicly played

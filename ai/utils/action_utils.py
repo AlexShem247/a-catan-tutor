@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any
 
 from ai.actions import Action, ActionType
 from ai.simulation.board_sim_utils import get_opponents, legal_settlement_vertex
@@ -20,12 +20,26 @@ if TYPE_CHECKING:
     from ai.simulation.EtwEstimator import EtwEstimator
 
 
+def _vertex_order_key(vertex: Vertex) -> tuple[int, int, int]:
+    q, r, direction = vertex.pos
+    return q, r, int(direction)
+
+
+def _edge_order_key(edge) -> tuple[int, int, int]:
+    q, r, direction = edge.pos
+    return q, r, int(direction)
+
+
+def _path_order_key(edges: tuple) -> tuple[tuple[int, int, int], ...]:
+    return tuple(_edge_order_key(edge) for edge in edges)
+
+
 def distant_settlement_candidates(
     player: SimPlayerState,
     sim_game: SimGame,
     etw_estimator: "EtwEstimator",
-    max_extra_roads_override: Optional[int] = None,
-) -> List[Tuple[List[Action], float, float]]:
+    max_extra_roads_override: int | None = None,
+) -> list[tuple[list[Action], float, float]]:
     """Return promising distant settlement candidates."""
 
     # Can't build more settlements.
@@ -100,9 +114,9 @@ def distant_settlement_candidates(
     return all_candidates[:MAX_SETTLEMENT_CANDIDATES]
 
 
-def play_development_card_action(player: SimPlayerState, sim_game: SimGame) -> List[Tuple[List[Action], float, float]]:
+def play_development_card_action(player: SimPlayerState, sim_game: SimGame) -> list[tuple[list[Action], float, float]]:
     """Generate simulated development-card actions."""
-    actions: List[Tuple[List[Action], float, float]] = []
+    actions: list[tuple[list[Action], float, float]] = []
     etb = 0.0  # Playing a dev card is instantaneous (no build time)
 
     for card_type, qty in player.dev_cards.items():
@@ -129,7 +143,7 @@ def purchase_development_card_action(
     player: SimPlayerState,
     sim_game: SimGame,
     etw_estimator: "EtwEstimator",
-) -> List[Tuple[List[Action], float, float]]:
+) -> list[tuple[list[Action], float, float]]:
     """Generate the simulated development-card purchase action."""
     deck = sim_game.game.development_deck
     if deck.empty():
@@ -158,7 +172,7 @@ def purchase_development_card_action(
     return [(actions, card_purchase_etb, expected_vp)]
 
 
-def get_bank_trade_for_action(player: SimPlayerState, cost: ResourceCount) -> Optional[Action]:
+def get_bank_trade_for_action(player: SimPlayerState, cost: ResourceCount) -> Action | None:
     """Return a bank trade that enables the target cost."""
 
     # Find the first resource we are short on, then see if we can convert a surplus via bank/ports.
@@ -279,9 +293,9 @@ def expected_vp_from_knight(player: SimPlayerState, sim_game: SimGame) -> float:
     return 0.0
 
 
-def _get_network_vertices(player: SimPlayerState) -> Set[Vertex]:
+def _get_network_vertices(player: SimPlayerState) -> set[Vertex]:
     """Return the vertices connected to the player's network."""
-    network: Set[Vertex] = set()
+    network: set[Vertex] = set()
     for road in player.roads:
         network.update(road.vertices)
     network.update(player.settlements)
@@ -289,9 +303,9 @@ def _get_network_vertices(player: SimPlayerState) -> Set[Vertex]:
     return network
 
 
-def _vertex_score_fn() -> Tuple[Dict[Vertex, float], Any]:
+def _vertex_score_fn() -> tuple[dict[Vertex, float], Any]:
     """Build the cached settlement scoring function."""
-    cache: Dict[Vertex, float] = {}
+    cache: dict[Vertex, float] = {}
 
     def score(vertex: Vertex) -> float:
         if vertex in cache:
@@ -308,7 +322,7 @@ def _vertex_score_fn() -> Tuple[Dict[Vertex, float], Any]:
     return cache, score
 
 
-def _road_edge_available_fn(player_roads_set: Set, ov: BoardOverlay):
+def _road_edge_available_fn(player_roads_set: set, ov: BoardOverlay):
     """Build the road-availability predicate for the overlay."""
 
     def ok(edge) -> bool:
@@ -325,7 +339,7 @@ def _calc_etb_actions_fast(
     etw_estimator: "EtwEstimator",
     player: SimPlayerState,
     sim_game: SimGame,
-    actions: List[Action],
+    actions: list[Action],
 ) -> float:
     """Estimate settlement paths and ETB values efficiently."""
 
@@ -347,14 +361,14 @@ def _calc_etb_actions_fast(
 
 
 def _select_start_vertices(
-    network_vertices: Set[Vertex],
+    network_vertices: set[Vertex],
     vertex_score,
     road_edge_available,
-) -> List[Vertex]:
+) -> list[Vertex]:
     """Select starting vertices for the path search."""
 
     # Rank starting points by local yield and how many directions they can expand.
-    start_scored: List[Tuple[float, Vertex]] = []
+    start_scored: list[tuple[float, Vertex]] = []
 
     for v in network_vertices:
         free_out = sum(1 for e in v.edges if road_edge_available(e))
@@ -364,35 +378,35 @@ def _select_start_vertices(
 
     # Fallback: if everything is blocked, expand from anywhere.
     if not start_scored:
-        return list(network_vertices)
+        return sorted(network_vertices, key=_vertex_order_key)
 
-    start_scored.sort(key=lambda x: x[0], reverse=True)
+    start_scored.sort(key=lambda x: (-x[0], _vertex_order_key(x[1])))
     return [v for _, v in start_scored[:START_LIMIT]]
 
 
 def _direct_settlement_candidates(
     player: SimPlayerState,
     sim_game: SimGame,
-    network_vertices: Set[Vertex],
-    all_player_vertices: Set[Vertex],
+    network_vertices: set[Vertex],
+    all_player_vertices: set[Vertex],
     vertex_score,
     etw_estimator: "EtwEstimator",
-) -> List[Tuple[List[Action], float, float]]:
+) -> list[tuple[list[Action], float, float]]:
     """Return directly reachable settlement candidates."""
 
     # First consider settlements that can be placed immediately without road extensions.
-    direct_vertices: List[Tuple[float, Vertex]] = []
+    direct_vertices: list[tuple[float, Vertex]] = []
 
-    for v in network_vertices:
+    for v in sorted(network_vertices, key=_vertex_order_key):
         if v in all_player_vertices:
             continue
         if legal_settlement_vertex(player, v, sim_game):
             direct_vertices.append((vertex_score(v), v))
 
     # Prefer high-yield spots.
-    direct_vertices.sort(key=lambda x: x[0], reverse=True)
+    direct_vertices.sort(key=lambda x: (-x[0], _vertex_order_key(x[1])))
 
-    direct_candidates: List[Tuple[List[Action], float, float]] = []
+    direct_candidates: list[tuple[list[Action], float, float]] = []
     for _, v in direct_vertices[:DIRECT_LIMIT]:
         actions = [Action(ActionType.BUILD, (Buildable.SETTLEMENT, v))]
         etb = _calc_etb_actions_fast(etw_estimator, player, sim_game, actions)
@@ -404,36 +418,36 @@ def _direct_settlement_candidates(
 @dataclass(frozen=True)
 class _PathState:
     vertex: Vertex
-    edges: Tuple
+    edges: tuple
 
 
 def _beam_search_settlement_candidates(
     player: SimPlayerState,
     sim_game: SimGame,
-    start_vertices: List[Vertex],
-    all_player_vertices: Set[Vertex],
+    start_vertices: list[Vertex],
+    all_player_vertices: set[Vertex],
     max_extra_roads: int,
     vertex_score,
     road_edge_available,
     etw_estimator: "EtwEstimator",
-) -> List[Tuple[List[Action], float, float]]:
+) -> list[tuple[list[Action], float, float]]:
     """Search settlement candidates with beam search."""
 
     # Track the shallowest depth at which each vertex has been reached.
-    visited_best_depth: Dict[Vertex, int] = {}
+    visited_best_depth: dict[Vertex, int] = {}
 
     # Store promising endpoints keyed by (vertex, road_path).
-    cheap_pool: Dict[Tuple[Vertex, Tuple], float] = {}
+    cheap_pool: dict[tuple[Vertex, tuple], float] = {}
 
     # Initialise beam frontier from selected starting vertices.
-    frontier: List[_PathState] = [_PathState(v, tuple()) for v in start_vertices]
+    frontier: list[_PathState] = [_PathState(v, tuple()) for v in start_vertices]
 
     for depth in range(1, max_extra_roads + 1):
-        next_states_scored: List[Tuple[float, _PathState]] = []
+        next_states_scored: list[tuple[float, _PathState]] = []
 
         for state in frontier:
             from_v = state.vertex
-            possible_moves: List[Tuple[float, Vertex, Any]] = []
+            possible_moves: list[tuple[float, Vertex, Any]] = []
 
             # Expand along available road edges.
             for edge in from_v.edges:
@@ -455,7 +469,7 @@ def _beam_search_settlement_candidates(
                 continue
 
             # Keep only the best few expansions per state.
-            possible_moves.sort(key=lambda x: x[0], reverse=True)
+            possible_moves.sort(key=lambda x: (-x[0], _vertex_order_key(x[1]), _edge_order_key(x[2])))
             possible_moves = possible_moves[:MAX_EXPANSIONS_PER_STATE]
 
             for score, to_v, edge in possible_moves:
@@ -469,7 +483,7 @@ def _beam_search_settlement_candidates(
             break
 
         # Keep only the strongest beam states.
-        next_states_scored.sort(key=lambda x: x[0])
+        next_states_scored.sort(key=lambda x: (x[0], _vertex_order_key(x[1].vertex), _path_order_key(x[1].edges)))
         frontier = [st for _, st in next_states_scored[:MAX_BEAM_PER_DEPTH]]
 
         # From the frontier, collect legal settlement endpoints.
@@ -501,11 +515,10 @@ def _beam_search_settlement_candidates(
     # Perform expensive ETB evaluation only on the best cheap candidates.
     shortlisted = sorted(
         cheap_pool.items(),
-        key=lambda kv: kv[1],
-        reverse=True,
+        key=lambda kv: (-kv[1], _vertex_order_key(kv[0][0]), _path_order_key(kv[0][1])),
     )[:K_ETB_EVAL]
 
-    bfs_candidates: List[Tuple[List[Action], float, float]] = []
+    bfs_candidates: list[tuple[list[Action], float, float]] = []
     for (v, edges), _ in shortlisted:
         actions = [Action(ActionType.BUILD, (Buildable.ROAD, e)) for e in edges]
         actions.append(Action(ActionType.BUILD, (Buildable.SETTLEMENT, v)))

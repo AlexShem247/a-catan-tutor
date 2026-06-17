@@ -4,7 +4,6 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass
 from random import Random
-from typing import Dict, List
 
 from tqdm import tqdm
 
@@ -130,7 +129,7 @@ def run_single_game(job_args):
     final_vp = {player.player_number: player.calc_victory_points()[1] for player in game.players}
     sorted_vps = sorted(final_vp.values(), reverse=True)
 
-    player_results: List[PlayerResult] = []
+    player_results: list[PlayerResult] = []
     for player in game.players:
         player_vp = final_vp[player.player_number]
         player_results.append(
@@ -149,7 +148,7 @@ def run_single_game(job_args):
     }
 
 
-def _format_results_table(summary: Dict[str, Dict[str, float]]) -> str:
+def _format_results_table(summary: dict[str, dict[str, float]]) -> str:
     headers = ["Policy", "Win Rate (%)", "Avg VP"]
     rows = [[
         policy_name,

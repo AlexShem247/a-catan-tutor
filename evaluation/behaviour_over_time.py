@@ -4,7 +4,7 @@ import multiprocessing as mp
 import time
 from pathlib import Path
 from random import Random
-from typing import List, Optional, TypedDict
+from typing import TypedDict
 
 from tqdm import tqdm
 
@@ -53,10 +53,10 @@ class InstrumentedTutorAI(RuleBasedAI):
 
     def __init__(self, rng: Random, **kwargs):
         super().__init__(rng, **kwargs)
-        self._action_rows: List[ActionRow] = []
+        self._action_rows: list[ActionRow] = []
 
     @staticmethod
-    def _tracked_action_type(action: Action) -> Optional[str]:
+    def _tracked_action_type(action: Action) -> str | None:
         if action.type == ActionType.BUILD and isinstance(action.payload, tuple):
             buildable = action.payload[0]
             if buildable == Buildable.ROAD:
@@ -84,11 +84,11 @@ class InstrumentedTutorAI(RuleBasedAI):
             "action_type": tracked_action_type,
         })
 
-    def export_action_rows(self, game_id: int, final_turns: int) -> List[ExportedActionRow]:
+    def export_action_rows(self, game_id: int, final_turns: int) -> list[ExportedActionRow]:
         if final_turns <= 0:
             return []
 
-        exported_rows: List[ExportedActionRow] = []
+        exported_rows: list[ExportedActionRow] = []
         for row in self._action_rows:
             turn = row["turn"]
             exported_rows.append({
@@ -136,7 +136,7 @@ def _build_player_config(player_policies, order_seed: int):
     return {player_number: policy for player_number, policy in zip(ordered_player_numbers, ordered_policies)}
 
 
-def _collect_tutor_action_rows(controller: GameController, game_id: int) -> List[ExportedActionRow]:
+def _collect_tutor_action_rows(controller: GameController, game_id: int) -> list[ExportedActionRow]:
     game = controller.get_game_state()
     final_turns = int(game.round_num)
     tutor_policy = next(
@@ -176,7 +176,7 @@ def _initialise_output_csv(output_path: Path) -> None:
         writer.writeheader()
 
 
-def _append_rows_to_csv(output_path: Path, rows: List[ExportedActionRow]) -> None:
+def _append_rows_to_csv(output_path: Path, rows: list[ExportedActionRow]) -> None:
     if not rows:
         return
     with output_path.open("a", newline="", encoding="utf-8") as csv_file:
@@ -206,7 +206,7 @@ def run_simulations_parallel(
     aborted_games = 0
     attempts_started = 0
     max_attempts = max(num_runs, num_runs * MAX_ATTEMPTS_MULTIPLIER)
-    pending_rows: List[ExportedActionRow] = []
+    pending_rows: list[ExportedActionRow] = []
     total_rows_written = 0
     progress = tqdm(total=num_runs, desc="Policy evaluation") if SHOW_PROGRESS_BAR else None
 

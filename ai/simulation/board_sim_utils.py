@@ -1,4 +1,3 @@
-from typing import Dict, List, Optional, Set
 
 from ai.simulation.SimGame import SimGame
 from ai.simulation.SimPlayerState import SimPlayerState, dice_probability
@@ -10,10 +9,10 @@ from game.Vertex import Vertex
 
 
 def get_reachable_vertices(start_vertex: Vertex, player_number: PlayerNumber, sim_game: SimGame,
-                           available_vertices: List[Vertex]) -> Set[Vertex]:
+                           available_vertices: list[Vertex]) -> set[Vertex]:
     """Return all vertices reachable from start_vertex along roads owned by player_number."""
-    visited: Set[Vertex] = set()
-    stack: List[Vertex] = [start_vertex]
+    visited: set[Vertex] = set()
+    stack: list[Vertex] = [start_vertex]
     ov = sim_game.overlay
 
     while stack:
@@ -48,7 +47,7 @@ def legal_settlement_vertex(player: SimPlayerState, vertex: Vertex, sim_game: Si
     return True
 
 
-def find_edge_toward_vertex(from_vertex: Vertex, target_vertex: Vertex, available_edges: List[Edge]) -> Optional[Edge]:
+def find_edge_toward_vertex(from_vertex: Vertex, target_vertex: Vertex, available_edges: list[Edge]) -> Edge | None:
     """Return the available edge adjacent to from_vertex that minimises estimated distance to target_vertex."""
     best_edge = None
     best_distance = float("inf")
@@ -90,12 +89,12 @@ def moves_toward_vertex(from_vertex: Vertex, target_vertex: Vertex) -> bool:
     return estimate_distance(from_vertex, target_vertex) <= 2
 
 
-def find_gap_connection(player_number: PlayerNumber, sim_game: SimGame, available_edges: List[Edge]) -> Optional[Edge]:
+def find_gap_connection(player_number: PlayerNumber, sim_game: SimGame, available_edges: list[Edge]) -> Edge | None:
     """Return an edge that connects a structure to the road network or joins disconnected road segments."""
     ov = sim_game.overlay
     sp = ov.get_sim_player(player_number)
 
-    road_vertices: Set[Vertex] = set()
+    road_vertices: set[Vertex] = set()
     for road in sp.roads:
         road_vertices.update(road.vertices)
 
@@ -117,12 +116,12 @@ def find_gap_connection(player_number: PlayerNumber, sim_game: SimGame, availabl
 
 
 def find_edge_toward_vertex_from_any(player_number: PlayerNumber, sim_game: SimGame, target_vertex: Vertex,
-                                     available_edges: List[Edge]) -> Optional[Edge]:
+                                     available_edges: list[Edge]) -> Edge | None:
     """Return the edge extending from any player structure/endpoint that minimises estimated distance to target."""
     ov = sim_game.overlay
     sp = ov.get_sim_player(player_number)
 
-    our_structures: List[Vertex] = list(sp.settlements + sp.cities)
+    our_structures: list[Vertex] = list(sp.settlements + sp.cities)
     for road in sp.roads:
         our_structures.extend(road.vertices)
 
@@ -142,7 +141,7 @@ def find_edge_toward_vertex_from_any(player_number: PlayerNumber, sim_game: SimG
 
 
 def score_hex_for_opponent(opponent_number: PlayerNumber, sim_game: SimGame, hex_tile: HexTile,
-                           importance: Dict[Resource, float]) -> float:
+                           importance: dict[Resource, float]) -> float:
     """Return a heuristic score of blocking hex_tile for opponent_number given resource importance weights."""
     resource = hex_tile.resource
     if resource not in importance:
@@ -156,10 +155,10 @@ def score_hex_for_opponent(opponent_number: PlayerNumber, sim_game: SimGame, hex
     return imp * production
 
 
-def get_legal_settlement_vertices(sim_game: SimGame) -> List[Vertex]:
+def get_legal_settlement_vertices(sim_game: SimGame) -> list[Vertex]:
     """Return vertices that satisfy the distance rule under overlay-aware occupancy."""
     ov = sim_game.overlay
-    legal_vertices: List[Vertex] = []
+    legal_vertices: list[Vertex] = []
 
     for vertex in sim_game.game.get_all_vertices():
         if ov.is_vertex_taken(vertex):
@@ -178,6 +177,6 @@ def get_legal_settlement_vertices(sim_game: SimGame) -> List[Vertex]:
     return legal_vertices
 
 
-def get_opponents(sim_game: SimGame, player_number) -> List[SimPlayerState]:
+def get_opponents(sim_game: SimGame, player_number) -> list[SimPlayerState]:
     """Return opponent SimPlayerStates from the overlay."""
     return [sp for num, sp in sim_game.overlay.sim_players.items() if num != player_number]
