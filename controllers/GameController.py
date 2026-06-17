@@ -2,7 +2,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass
 from random import Random
-from threading import Lock
+from threading import Condition, Lock
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ai.actions import Action, ActionType, Phase
@@ -77,9 +77,11 @@ class GameController(
         self._pending_tutor_robber_choice = None
         self._demo_state_index = 0
         self._demo_snapshot_cache: Dict[int, DemoStateSnapshot] = {}
-        self._demo_snapshot_futures: Dict[int, Future[DemoStateSnapshot]] = {}
         self._demo_snapshot_lock = Lock()
+        self._demo_snapshot_condition = Condition(self._demo_snapshot_lock)
         self._demo_snapshot_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="demo-snapshots")
+        self._demo_snapshot_pipeline_future: Future[None] | None = None
+        self._demo_snapshot_pipeline_error: BaseException | None = None
         self.tutor_ai = self._new_tutor_ai()
         self.tutor_evaluator = TutorEvaluator(self.tutor_ai, lambda: self.game_rng.getstate())
         self.reset_game()
@@ -201,6 +203,7 @@ class GameController(
     def _run_demo_mode(self) -> None:
         """Run demo mode by loading hardcoded tutor states on demand."""
         self._demo_state_index = 0
+        self._prefetch_demo_states(0)
         while True:
             definition = DEMO_MODE_STATES[self._demo_state_index]
             has_next = self._demo_state_index < len(DEMO_MODE_STATES) - 1
@@ -241,42 +244,92 @@ class GameController(
 
     def _get_demo_state_snapshot(self, definition: DemoStateDefinition) -> DemoStateSnapshot:
         """Return a cached demo snapshot, waiting for background work when available."""
-        with self._demo_snapshot_lock:
-            cached = self._demo_snapshot_cache.get(definition.moveNumber)
-            if cached is not None:
-                return cached
-            future = self._demo_snapshot_futures.get(definition.moveNumber)
-
-        if future is not None:
-            snapshot = future.result()
-            with self._demo_snapshot_lock:
-                self._demo_snapshot_cache[definition.moveNumber] = snapshot
-                self._demo_snapshot_futures.pop(definition.moveNumber, None)
-            return snapshot
+        self._prefetch_demo_states(self._demo_state_index)
+        with self._demo_snapshot_condition:
+            while True:
+                cached = self._demo_snapshot_cache.get(definition.moveNumber)
+                if cached is not None:
+                    return cached
+                if self._demo_snapshot_pipeline_error is not None:
+                    raise RuntimeError("Demo snapshot precompute failed.") from self._demo_snapshot_pipeline_error
+                future = self._demo_snapshot_pipeline_future
+                if future is None or future.done():
+                    break
+                self._demo_snapshot_condition.wait()
 
         snapshot = self._capture_demo_state(definition)
-        with self._demo_snapshot_lock:
+        with self._demo_snapshot_condition:
             self._demo_snapshot_cache[definition.moveNumber] = snapshot
+            self._demo_snapshot_condition.notify_all()
         return snapshot
 
     def _prefetch_demo_states(self, start_index: int) -> None:
-        """Queue background snapshot generation for the next demo state only."""
+        """Ensure a forward background replay is generating later demo states."""
         if start_index >= len(DEMO_MODE_STATES):
             return
-
-        definition = DEMO_MODE_STATES[start_index]
-        with self._demo_snapshot_lock:
-            if definition.moveNumber in self._demo_snapshot_cache:
+        with self._demo_snapshot_condition:
+            remaining_definitions = DEMO_MODE_STATES[start_index:]
+            if all(definition.moveNumber in self._demo_snapshot_cache for definition in remaining_definitions):
                 return
-            if definition.moveNumber in self._demo_snapshot_futures:
+            if self._demo_snapshot_pipeline_future is not None and not self._demo_snapshot_pipeline_future.done():
                 return
-            future = self._demo_snapshot_executor.submit(self._capture_demo_state, definition)
-            self._demo_snapshot_futures[definition.moveNumber] = future
+            self._demo_snapshot_pipeline_error = None
+            self._demo_snapshot_pipeline_future = self._demo_snapshot_executor.submit(
+                self._capture_demo_state_sequence,
+                start_index,
+            )
 
     def _capture_demo_state(self, definition: DemoStateDefinition) -> DemoStateSnapshot:
         """Simulate the fixed-seed tutor game until the requested move number."""
         with _DEMO_CAPTURE_LOCK:
             return self._capture_demo_state_unlocked(definition)
+
+    def _capture_demo_state_sequence(self, start_index: int) -> None:
+        """Generate remaining demo snapshots in one deterministic forward replay."""
+        try:
+            with _DEMO_CAPTURE_LOCK:
+                self._capture_demo_state_sequence_unlocked(start_index)
+        except BaseException as exc:
+            with self._demo_snapshot_condition:
+                self._demo_snapshot_pipeline_error = exc
+                self._demo_snapshot_condition.notify_all()
+            raise
+        else:
+            with self._demo_snapshot_condition:
+                self._demo_snapshot_condition.notify_all()
+
+    def _capture_demo_state_sequence_unlocked(self, start_index: int) -> None:
+        """Simulate once and capture all remaining configured demo states in order."""
+        definitions = DEMO_MODE_STATES[start_index:]
+        if not definitions:
+            return
+
+        collector = _DemoStateCollectorController(
+            game_players=self.game_players,
+            simulation_players=self.simulation_players,
+            game_seed=DEMO_MODE_SEED,
+        )
+        collector.game_mode = GameMode.TUTOR
+        collector.reset_game()
+        collector_view = _DemoStateSequenceCollectorView(collector, definitions, self._store_demo_state_snapshot)
+        collector.view = collector_view
+        try:
+            collector.start_game()
+        except _DemoStateSequenceCapturedAll:
+            return
+        missing_move = next(
+            (definition.moveNumber for definition in definitions
+             if definition.moveNumber not in self._demo_snapshot_cache),
+            None,
+        )
+        if missing_move is not None:
+            raise RuntimeError(f"Demo state move {missing_move} was not found.")
+
+    def _store_demo_state_snapshot(self, snapshot: DemoStateSnapshot) -> None:
+        """Store a demo snapshot produced by the background replay worker."""
+        with self._demo_snapshot_condition:
+            self._demo_snapshot_cache[snapshot.definition.moveNumber] = snapshot
+            self._demo_snapshot_condition.notify_all()
 
     def _capture_demo_state_unlocked(self, definition: DemoStateDefinition) -> DemoStateSnapshot:
         """Simulate the fixed-seed tutor game until the requested move number."""
@@ -851,6 +904,10 @@ class _DemoStateCaptured(Exception):
         super().__init__(f"Captured demo state for move {snapshot.definition.moveNumber}.")
 
 
+class _DemoStateSequenceCapturedAll(Exception):
+    pass
+
+
 class _DemoStateCollectorController(GameController):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -992,6 +1049,18 @@ class _DemoStateCollectorView(HeadlessView):
         self._decision_index += 1
         if self._decision_index != self.definition.moveNumber:
             return
+        snapshot = self._build_snapshot(decision_kind, player, dice_info, played_dev_card, self.definition)
+        raise _DemoStateCaptured(snapshot)
+
+    def _build_snapshot(
+        self,
+        decision_kind: str,
+        player: Optional[Player],
+        dice_info: Optional[Tuple[int, int, int]],
+        played_dev_card: bool,
+        definition: DemoStateDefinition,
+    ) -> DemoStateSnapshot:
+        """Build a demo snapshot from the collector's current state."""
         if decision_kind not in {
             "INITIAL_SETTLEMENT",
             "INITIAL_ROAD",
@@ -1001,11 +1070,11 @@ class _DemoStateCollectorView(HeadlessView):
             "MAIN_TURN",
         }:
             raise RuntimeError(
-                f"Demo state move {self.definition.moveNumber} resolved to unsupported phase {decision_kind}.")
+                f"Demo state move {definition.moveNumber} resolved to unsupported phase {decision_kind}.")
         if player is None:
             raise RuntimeError("Demo state capture did not resolve a player.")
-        snapshot = DemoStateSnapshot(
-            definition=self.definition,
+        return DemoStateSnapshot(
+            definition=definition,
             decision_kind=decision_kind,
             game_state=deepcopy(self.controller.get_game_state()),
             game_rng_state=self.controller.game_rng.getstate(),
@@ -1015,7 +1084,40 @@ class _DemoStateCollectorView(HeadlessView):
             dice_info=dice_info or self.controller.current_dice_info,
             played_dev_card=played_dev_card,
         )
-        raise _DemoStateCaptured(snapshot)
+
+
+class _DemoStateSequenceCollectorView(_DemoStateCollectorView):
+    def __init__(
+        self,
+        controller: _DemoStateCollectorController,
+        definitions: List[DemoStateDefinition],
+        snapshot_callback: Callable[[DemoStateSnapshot], None],
+    ):
+        super().__init__(controller, definitions[0])
+        self.definitions = definitions
+        self.snapshot_callback = snapshot_callback
+        self._target_index = 0
+
+    def _increment_or_capture(
+        self,
+        decision_kind: str,
+        player: Optional[Player],
+        dice_info: Optional[Tuple[int, int, int]] = None,
+        played_dev_card: bool = False,
+    ) -> None:
+        self._decision_index += 1
+        while self._target_index < len(self.definitions):
+            definition = self.definitions[self._target_index]
+            if self._decision_index < definition.moveNumber:
+                return
+            if self._decision_index > definition.moveNumber:
+                raise RuntimeError(f"Demo state move {definition.moveNumber} was skipped during precompute.")
+            snapshot = self._build_snapshot(decision_kind, player, dice_info, played_dev_card, definition)
+            self.snapshot_callback(snapshot)
+            self._target_index += 1
+            if self._target_index >= len(self.definitions):
+                raise _DemoStateSequenceCapturedAll
+            return
 
 
 class _DemoAutoPlayView(HeadlessView):
