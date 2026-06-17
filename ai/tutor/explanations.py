@@ -41,6 +41,8 @@ class ReasonLabel(Enum):
     ADVANCES_LARGEST_ARMY = auto()
     REQUIRES_TRADE = auto()
     HIDDEN_DEV_VALUE = auto()
+    DEV_KNIGHT_PRESSURE = auto()
+    DEV_PROGRESS_FLEXIBILITY = auto()
     EARLY_ATTENTION_RISK = auto()
     NO_IMMEDIATE_ACTION = auto()
     PRE_ROLL_NO_DEV_PLAY = auto()

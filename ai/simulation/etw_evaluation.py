@@ -418,6 +418,11 @@ class EtwEvaluation:
         reasons_for: List[Reason] = []
         reasons_against: List[Reason] = []
         final_step = actions[-1]
+        metadata: Dict[str, Any] = {
+            "blocks_opponent": blocks_opponent,
+            "improves_longest_road": improves_longest_road,
+            "improves_largest_army": improves_largest_army,
+        }
         if final_step.type == ActionType.BUILD:
             building, _ = final_step.payload
             if building == Buildable.SETTLEMENT:
@@ -474,8 +479,67 @@ class EtwEvaluation:
                 ))
         if next_step.type in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER):
             reasons_for.append(Reason(type=ReasonType.REQUIRES_TRADE, label=ReasonLabel.REQUIRES_TRADE, value=1.0))
-        if next_step.type == ActionType.BUY_DEV_CARD and vp_inc > 0:
-            reasons_for.append(Reason(type=ReasonType.HIDDEN_VALUE, label=ReasonLabel.HIDDEN_DEV_VALUE, value=vp_inc))
+        if next_step.type == ActionType.BUY_DEV_CARD:
+            deck = sim_game.game.development_deck
+            unknown_count = deck.size()
+            vp_prob = deck.get_probability(DevelopmentCardType.VICTORY_POINT, player.dev_cards)
+            knight_prob = deck.get_probability(DevelopmentCardType.KNIGHT, player.dev_cards)
+            progress_prob = sum(
+                deck.get_probability(card_type, player.dev_cards)
+                for card_type in (
+                    DevelopmentCardType.ROAD_BUILDING,
+                    DevelopmentCardType.YEAR_OF_PLENTY,
+                    DevelopmentCardType.MONOPOLY,
+                )
+            )
+            opponent_best_army = max(
+                (
+                    opponent.army_size
+                    for opponent in sim_game.overlay.sim_players.values()
+                    if opponent.player_number != player.player_number
+                ),
+                default=0,
+            )
+            largest_army_target = max(3, opponent_best_army + 1)
+            largest_army_distance = max(0, largest_army_target - player.army_size)
+            metadata.update({
+                "dev_card_unknown_count": unknown_count,
+                "dev_card_vp_probability": vp_prob,
+                "dev_card_knight_probability": knight_prob,
+                "dev_card_progress_probability": progress_prob,
+                "dev_card_largest_army_distance": largest_army_distance,
+                "dev_card_largest_army_target": largest_army_target,
+            })
+            if vp_prob > 0:
+                reasons_for.append(
+                    Reason(
+                        type=ReasonType.HIDDEN_VALUE,
+                        label=ReasonLabel.HIDDEN_DEV_VALUE,
+                        value=max(vp_inc, vp_prob),
+                        metadata={"vp_probability": vp_prob},
+                    )
+                )
+            if knight_prob > 0 and largest_army_distance <= 2:
+                reasons_for.append(
+                    Reason(
+                        type=ReasonType.ADVANCES_LARGEST_ARMY,
+                        label=ReasonLabel.DEV_KNIGHT_PRESSURE,
+                        value=max(knight_prob * 2.0, 0.5),
+                        metadata={
+                            "knight_probability": knight_prob,
+                            "largest_army_distance": largest_army_distance,
+                        },
+                    )
+                )
+            if progress_prob > 0:
+                reasons_for.append(
+                    Reason(
+                        type=ReasonType.HEURISTIC_CHOICE,
+                        label=ReasonLabel.DEV_PROGRESS_FLEXIBILITY,
+                        value=max(float(progress_prob), 0.25),
+                        metadata={"progress_probability": progress_prob},
+                    )
+                )
         if utility_attention < 0:
             reasons_against.append(
                 Reason(
@@ -503,11 +567,7 @@ class EtwEvaluation:
             expected_vp_gain=vp_inc,
             reasons_for=reasons_for,
             reasons_against=reasons_against,
-            metadata={
-                "blocks_opponent": blocks_opponent,
-                "improves_longest_road": improves_longest_road,
-                "improves_largest_army": improves_largest_army,
-            },
+            metadata=metadata,
         )
 
     def evaluate_action_plan(

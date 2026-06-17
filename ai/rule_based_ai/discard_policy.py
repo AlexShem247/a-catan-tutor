@@ -103,13 +103,43 @@ class DiscardPolicy:
                                    needed: ResourceCount,
                                    best_plan_explanation: ActionExplanation) -> ActionExplanation:
         """Build the discard explanation."""
-        protected_resources = sum(min(needed.get(resource, 0), amount) for resource, amount in discard.items())
-        surplus_discarded = sum(discard.values()) - protected_resources
+        kept_resources = {
+            resource: max(0, int(current_resources.get(resource, 0)) - int(discard.get(resource, 0)))
+            for resource in Resource
+        }
+        discarded_needed_resources = {
+            resource: min(int(discard.get(resource, 0)), int(needed.get(resource, 0)))
+            for resource in Resource
+        }
+        discarded_surplus_resources = {
+            resource: max(0, int(discard.get(resource, 0)) - discarded_needed_resources.get(resource, 0))
+            for resource in Resource
+        }
+        kept_needed_resources = {
+            resource: min(int(kept_resources.get(resource, 0)), int(needed.get(resource, 0)))
+            for resource in Resource
+        }
+        plan_survives_after_discard = all(
+            kept_resources.get(resource, 0) >= int(needed.get(resource, 0))
+            for resource in Resource
+            if int(needed.get(resource, 0)) > 0
+        )
         plan_metadata = self._discard_plan_metadata(best_plan_explanation)
-        reasons_for = [
-            Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.DISCARD_PROTECTS_PLAN, float(sum(needed.values()))),
-            Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.DISCARD_USES_SURPLUS, float(max(0, surplus_discarded))),
-        ]
+        reasons_for = []
+        kept_plan_value = float(sum(kept_needed_resources.values()))
+        discarded_surplus_value = float(sum(discarded_surplus_resources.values()))
+        if kept_plan_value > 0:
+            reasons_for.append(
+                Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.DISCARD_PROTECTS_PLAN, kept_plan_value)
+            )
+        if discarded_surplus_value > 0:
+            reasons_for.append(
+                Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.DISCARD_USES_SURPLUS, discarded_surplus_value)
+            )
+        if not reasons_for:
+            reasons_for.append(
+                Reason(ReasonType.HEURISTIC_CHOICE, ReasonLabel.DISCARD_PROTECTS_PLAN, 1.0)
+            )
         action = Action(ActionType.END_TURN, discard)
         candidate = CandidateExplanation(
             action=action,
@@ -118,6 +148,13 @@ class DiscardPolicy:
             metadata={
                 "template": ExplanationTemplate.DISCARD_RESOURCES,
                 "discard_resources": discard,
+                "current_resources": current_resources,
+                "kept_resources": kept_resources,
+                "needed_resources": needed,
+                "kept_needed_resources": kept_needed_resources,
+                "discarded_needed_resources": discarded_needed_resources,
+                "discarded_surplus_resources": discarded_surplus_resources,
+                "plan_survives_after_discard": plan_survives_after_discard,
                 **plan_metadata,
             },
         )

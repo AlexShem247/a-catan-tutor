@@ -88,6 +88,11 @@ class ControllerSupport(ABC):
         ...
 
     @abstractmethod
+    def run_tutor_decision(self, callback: Callable[[], T]) -> T:
+        """Run a decision through the public tutor wrapper."""
+        ...
+
+    @abstractmethod
     def _set_tutor_shortcut_handlers(self, recommended_handler: Optional[Callable[[], Any]]) -> None:
         """Set the tutor shortcut handlers for the current decision."""
         ...
@@ -115,6 +120,11 @@ class ControllerSupport(ABC):
     @abstractmethod
     def _show_tutor_action_feedback(self, player: Player, feedback: Optional[TutorFeedbackExplanation]) -> None:
         """Show tutor feedback for the completed player action."""
+        ...
+
+    @abstractmethod
+    def _should_explain_ai_turns(self) -> bool:
+        """Return whether AI turns should render the explainer flow."""
         ...
 
     @abstractmethod
@@ -164,6 +174,11 @@ class ControllerSupport(ABC):
     @abstractmethod
     def roll_dice(self, player: Player):
         """Roll the dice and handle any resulting events."""
+        ...
+
+    @abstractmethod
+    def handle_robber_action(self, player) -> Optional[Tuple[Player, Any]]:
+        """Run the robber placement and theft flow."""
         ...
 
     @abstractmethod

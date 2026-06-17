@@ -142,7 +142,11 @@ def reason_label_text(reason: Reason) -> str:
     if label == ReasonLabel.REQUIRES_TRADE:
         return "Uses a trade to make the preferred plan feasible"
     if label == ReasonLabel.HIDDEN_DEV_VALUE:
-        return "Has hidden strategic value through development-card outcomes"
+        return "It keeps a meaningful hidden-victory-point draw in play"
+    if label == ReasonLabel.DEV_KNIGHT_PRESSURE:
+        return "It gives you real Knight pressure toward Largest Army"
+    if label == ReasonLabel.DEV_PROGRESS_FLEXIBILITY:
+        return "It also keeps strong progress-card outcomes available"
     if label == ReasonLabel.EARLY_ATTENTION_RISK:
         return "May expose an early lead and attract attention"
     if label == ReasonLabel.NO_IMMEDIATE_ACTION:
@@ -241,6 +245,9 @@ def reason_to_detail_phrase(explanation: ActionExplanation, reason: Reason) -> s
             ReasonLabel.ROBBER_AVOIDS_OWN_HEX,
             ReasonLabel.DISCARD_PROTECTS_PLAN,
             ReasonLabel.DISCARD_USES_SURPLUS,
+            ReasonLabel.HIDDEN_DEV_VALUE,
+            ReasonLabel.DEV_KNIGHT_PRESSURE,
+            ReasonLabel.DEV_PROGRESS_FLEXIBILITY,
             ReasonLabel.YOP_FILLS_SHORTFALL,
             ReasonLabel.YOP_SUPPORTS_FOLLOW_UP,
             ReasonLabel.YOP_FLEXIBLE_PICK,
@@ -459,6 +466,17 @@ def discard_protected_plan_text(explanation: ActionExplanation) -> str:
     if next_text:
         return f"This keeps your stronger follow-up plan available: {next_text}."
     return ""
+
+
+def strip_follow_up_prefix(text: str) -> str:
+    """Strip boilerplate prefixes from follow-up text."""
+    for prefix in (
+        "the next thing we want to build: ",
+        "the next thing we want to do: ",
+    ):
+        if text.startswith(prefix):
+            return text[len(prefix):]
+    return text
 
 
 def initial_road_target_sentence(explanation: ActionExplanation) -> str:

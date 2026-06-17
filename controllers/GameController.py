@@ -3,7 +3,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from random import Random
 from threading import Condition, Lock
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 from ai.actions import Action, ActionType, Phase
 from ai.tutor.evaluator import TutorEvaluator
@@ -42,7 +42,7 @@ class DemoStateSnapshot:
     definition: DemoStateDefinition
     decision_kind: str
     game_state: Game
-    game_rng_state: object
+    game_rng_state: Tuple[Any, ...]
     victory_point_history: List[Tuple[int, Dict[PlayerNumber, int]]]
     endgame_review_history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]]
     player_number: PlayerNumber
@@ -51,11 +51,11 @@ class DemoStateSnapshot:
 
 
 class GameController(
-        BoardDisplaySource,
-        TutorController,
-        InitialPlacementController,
-        TurnController,
-        ActionHandlers,
+    BoardDisplaySource,
+    TutorController,
+    InitialPlacementController,
+    TurnController,
+    ActionHandlers,
 ):
     _game: Game
     game_mode = GameMode.PLAY
@@ -130,8 +130,7 @@ class GameController(
         if isinstance(value, Action) and value.type == ActionType.RETURN_HOME:
             raise ReturnToStart
 
-    @staticmethod
-    def _raise_if_next_demo_state(value: object) -> None:
+    def _raise_if_next_demo_state(self, value: object) -> None:
         """Raise when demo mode should advance to the next saved state."""
         if value == DemoControl.NEXT_STATE:
             raise AdvanceDemoState
@@ -753,12 +752,12 @@ class GameController(
         return self._game.get_vertex(q, r, corner_index)
 
     def try_build_settlement(
-        self,
-        player: Player,
-        vertex: Vertex,
-        build: bool = True,
-        use_resources: bool = True,
-        road_restriction: bool = True,
+            self,
+            player: Player,
+            vertex: Vertex,
+            build: bool = True,
+            use_resources: bool = True,
+            road_restriction: bool = True,
     ) -> tuple[bool, str]:
         """Try to build a settlement through the controller workflow."""
         result = self._game.try_build_settlement(player, vertex, build, use_resources, road_restriction)
@@ -772,12 +771,12 @@ class GameController(
         return self._game.get_edge(q, r, edge_index)
 
     def try_build_road(
-        self,
-        player: Player,
-        edge: Edge,
-        on_vertex: Optional[Vertex] = None,
-        build: bool = True,
-        use_resources: bool = True,
+            self,
+            player: Player,
+            edge: Edge,
+            on_vertex: Optional[Vertex] = None,
+            build: bool = True,
+            use_resources: bool = True,
     ) -> tuple[bool, str]:
         """Try to build a road through the controller workflow."""
         result = self._game.try_build_road(player, edge, on_vertex, build, use_resources)
@@ -791,11 +790,11 @@ class GameController(
         return self._game.get_buildable_options(player)
 
     def try_build_city(
-        self,
-        player: Player,
-        vertex: Vertex,
-        build: bool = True,
-        use_resources: bool = True,
+            self,
+            player: Player,
+            vertex: Vertex,
+            build: bool = True,
+            use_resources: bool = True,
     ) -> tuple[bool, str]:
         """Try to build a city through the controller workflow."""
         result = self._game.try_build_city(player, vertex, build, use_resources)
@@ -813,11 +812,11 @@ class GameController(
         return success
 
     def trade_between_players(
-        self,
-        player: Player,
-        selling: ResourceCount,
-        buying_player: Player,
-        buying: ResourceCount,
+            self,
+            player: Player,
+            selling: ResourceCount,
+            buying_player: Player,
+            buying: ResourceCount,
     ):
         """Run the trade flow between two players."""
         result = self._game.trade_between_players(player, selling, buying_player, buying)
@@ -924,7 +923,7 @@ class _DemoStateCollectorController(GameController):
 
     def roll_dice(self, player: Player):
         result = super().roll_dice(player)
-        self.current_dice_info = result[:3]
+        self.current_dice_info = cast(Tuple[int, int, int], result[:3])
         return result
 
     def _record_current_dice_info(self, dice_info: Tuple[int, int, int]) -> None:
@@ -962,8 +961,9 @@ class _DemoStateCollectorView(HeadlessView):
 
     def pre_roll(self, player: Player):
         self._increment_or_capture("PRE_ROLL", player)
-        recommended_action = self.controller._run_tutor_decision(
-            lambda: self.controller.tutor_ai.next_action(player, self.controller.get_game_state(), Phase.PRE_ROLL, False))
+        recommended_action = self.controller.run_tutor_decision(
+            lambda: self.controller.tutor_ai.next_action(player, self.controller.get_game_state(), Phase.PRE_ROLL,
+                                                         False))
         if recommended_action.type == ActionType.PLAY_DEV_CARD:
             return recommended_action.payload
         return False
@@ -1022,11 +1022,11 @@ class _DemoStateCollectorView(HeadlessView):
         return self._call_debug_handler((False, None))
 
     def select_player_trade_offer(
-        self,
-        player: Player,
-        selling: ResourceCount,
-        buying: ResourceCount,
-        willing_players: List[Tuple[Player, Optional[ResourceCount]]],
+            self,
+            player: Player,
+            selling: ResourceCount,
+            buying: ResourceCount,
+            willing_players: List[Tuple[Player, Optional[ResourceCount]]],
     ):
         self._increment_or_capture("TRADE_PARTNER", player)
         self._latest_stage = None
@@ -1040,11 +1040,11 @@ class _DemoStateCollectorView(HeadlessView):
         return fallback if result is None else result
 
     def _increment_or_capture(
-        self,
-        decision_kind: str,
-        player: Optional[Player],
-        dice_info: Optional[Tuple[int, int, int]] = None,
-        played_dev_card: bool = False,
+            self,
+            decision_kind: str,
+            player: Optional[Player],
+            dice_info: Optional[Tuple[int, int, int]] = None,
+            played_dev_card: bool = False,
     ) -> None:
         self._decision_index += 1
         if self._decision_index != self.definition.moveNumber:
@@ -1053,12 +1053,12 @@ class _DemoStateCollectorView(HeadlessView):
         raise _DemoStateCaptured(snapshot)
 
     def _build_snapshot(
-        self,
-        decision_kind: str,
-        player: Optional[Player],
-        dice_info: Optional[Tuple[int, int, int]],
-        played_dev_card: bool,
-        definition: DemoStateDefinition,
+            self,
+            decision_kind: str,
+            player: Optional[Player],
+            dice_info: Optional[Tuple[int, int, int]],
+            played_dev_card: bool,
+            definition: DemoStateDefinition,
     ) -> DemoStateSnapshot:
         """Build a demo snapshot from the collector's current state."""
         if decision_kind not in {
@@ -1073,6 +1073,7 @@ class _DemoStateCollectorView(HeadlessView):
                 f"Demo state move {definition.moveNumber} resolved to unsupported phase {decision_kind}.")
         if player is None:
             raise RuntimeError("Demo state capture did not resolve a player.")
+        snapshot_dice_info = dice_info if dice_info is not None else self.controller.current_dice_info
         return DemoStateSnapshot(
             definition=definition,
             decision_kind=decision_kind,
@@ -1081,17 +1082,17 @@ class _DemoStateCollectorView(HeadlessView):
             victory_point_history=deepcopy(self.controller.get_victory_point_history()),
             endgame_review_history=deepcopy(self.controller.get_endgame_review_history()),
             player_number=player.player_number,
-            dice_info=dice_info or self.controller.current_dice_info,
+            dice_info=snapshot_dice_info,
             played_dev_card=played_dev_card,
         )
 
 
 class _DemoStateSequenceCollectorView(_DemoStateCollectorView):
     def __init__(
-        self,
-        controller: _DemoStateCollectorController,
-        definitions: List[DemoStateDefinition],
-        snapshot_callback: Callable[[DemoStateSnapshot], None],
+            self,
+            controller: _DemoStateCollectorController,
+            definitions: List[DemoStateDefinition],
+            snapshot_callback: Callable[[DemoStateSnapshot], None],
     ):
         super().__init__(controller, definitions[0])
         self.definitions = definitions
@@ -1099,11 +1100,11 @@ class _DemoStateSequenceCollectorView(_DemoStateCollectorView):
         self._target_index = 0
 
     def _increment_or_capture(
-        self,
-        decision_kind: str,
-        player: Optional[Player],
-        dice_info: Optional[Tuple[int, int, int]] = None,
-        played_dev_card: bool = False,
+            self,
+            decision_kind: str,
+            player: Optional[Player],
+            dice_info: Optional[Tuple[int, int, int]] = None,
+            played_dev_card: bool = False,
     ) -> None:
         self._decision_index += 1
         while self._target_index < len(self.definitions):
@@ -1135,8 +1136,9 @@ class _DemoAutoPlayView(HeadlessView):
         return self.controller.get_tutor_recommended_main_action(player, played_dev_card)
 
     def pre_roll(self, player: Player):
-        recommended_action = self.controller._run_tutor_decision(
-            lambda: self.controller.tutor_ai.next_action(player, self.controller.get_game_state(), Phase.PRE_ROLL, False))
+        recommended_action = self.controller.run_tutor_decision(
+            lambda: self.controller.tutor_ai.next_action(player, self.controller.get_game_state(), Phase.PRE_ROLL,
+                                                         False))
         if recommended_action.type == ActionType.PLAY_DEV_CARD:
             return recommended_action.payload
         return False
@@ -1153,17 +1155,20 @@ class _DemoAutoPlayView(HeadlessView):
                     return vertex
         return vertices[0]
 
-    def draw_selectable_edges(self, edges: List[Edge], disable_interactivity: bool = False) -> Edge:
+    def draw_selectable_edges(self, edges: List[Edge], disable_interactivity: bool = False) -> Edge | object:
         if disable_interactivity:
             return edges[0]
         player = self._latest_player
         if player is not None:
             if self._latest_stage == TutorStage.ROAD_BUILDING:
-                return self.controller._run_tutor_decision(
-                    lambda: self.controller.tutor_ai.road_building_placement(player, self.controller.get_game_state(), edges))
+                return self.controller.run_tutor_decision(
+                    lambda: self.controller.tutor_ai.road_building_placement(player, self.controller.get_game_state(),
+                                                                             edges))
             if self._latest_stage == TutorStage.INITIAL_ROAD:
-                return self.controller._run_tutor_decision(
-                    lambda: self.controller.tutor_ai.select_initial_road_location(player, self.controller.get_game_state(), edges))
+                return self.controller.run_tutor_decision(
+                    lambda: self.controller.tutor_ai.select_initial_road_location(player,
+                                                                                  self.controller.get_game_state(),
+                                                                                  edges))
         return edges[0]
 
     def draw_selectable_tiles(self, tiles: List[HexTile]) -> HexTile:
@@ -1175,22 +1180,25 @@ class _DemoAutoPlayView(HeadlessView):
         return tiles[0]
 
     def show_resource_chooser(self, player: Player, num_resources: int, title: str,
-                              resource_caps: Optional[ResourceCount] = None) -> ResourceCount:
+                              resource_caps: Optional[ResourceCount] = None) -> (
+            object | dict[object, int] | dict[Any, Any]):
         if self._latest_stage == TutorStage.DISCARD_RESOURCES:
-            return self.controller._run_tutor_decision(
-                lambda: self.controller.tutor_ai.select_discard_resources(player, self.controller.get_game_state(), num_resources))
+            return self.controller.run_tutor_decision(
+                lambda: self.controller.tutor_ai.select_discard_resources(player, self.controller.get_game_state(),
+                                                                          num_resources))
         if self._latest_stage == TutorStage.YEAR_OF_PLENTY:
-            return self.controller._run_tutor_decision(
-                lambda: self.controller.tutor_ai.select_year_of_plenty_resources(player, self.controller.get_game_state()))
+            return self.controller.run_tutor_decision(
+                lambda: self.controller.tutor_ai.select_year_of_plenty_resources(player,
+                                                                                 self.controller.get_game_state()))
         if self._latest_stage == TutorStage.MONOPOLY:
-            resource = self.controller._run_tutor_decision(
+            resource = self.controller.run_tutor_decision(
                 lambda: self.controller.tutor_ai.select_monopoly_resource(player, self.controller.get_game_state()))
             return {resource: 1}
         return {}
 
     def display_trade_manager(self, player: Player, selling: ResourceCount, buying: ResourceCount,
                               selling_player: Player):
-        return self.controller._run_tutor_decision(
+        return self.controller.run_tutor_decision(
             lambda: self.controller.tutor_ai.respond_to_trade(
                 player,
                 self.controller.get_game_state(),
@@ -1200,11 +1208,11 @@ class _DemoAutoPlayView(HeadlessView):
             ))
 
     def select_player_trade_offer(
-        self,
-        player: Player,
-        selling: ResourceCount,
-        buying: ResourceCount,
-        willing_players: List[Tuple[Player, Optional[ResourceCount]]],
+            self,
+            player: Player,
+            selling: ResourceCount,
+            buying: ResourceCount,
+            willing_players: List[Tuple[Player, Optional[ResourceCount]]],
     ):
         affordable_offers = [
             (candidate_player, counter)
@@ -1213,7 +1221,7 @@ class _DemoAutoPlayView(HeadlessView):
         ]
         if not affordable_offers:
             return None
-        return self.controller._run_tutor_decision(
+        return self.controller.run_tutor_decision(
             lambda: self.controller.tutor_ai.choose_trade_partner(
                 player,
                 self.controller.get_game_state(),

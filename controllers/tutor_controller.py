@@ -20,7 +20,9 @@ class TutorController(ControllerSupport, ABC):
         """Create a new tutor RNG instance."""
         seed_getter = getattr(self, "_get_active_game_seed", None)
         if callable(seed_getter):
-            return Random(seed_getter())
+            seed = seed_getter()
+            if seed is None or isinstance(seed, (int, float, str, bytes, bytearray)):
+                return Random(seed)
         return Random(self.game_seed)
 
     def _new_tutor_ai(self) -> RuleBasedAI:
@@ -69,7 +71,8 @@ class TutorController(ControllerSupport, ABC):
         explanation: Optional[ActionExplanation],
     ) -> None:
         """Show the tutor introduction for the current decision stage."""
-        if self.game_mode in {self.GameMode.TUTOR, self.GameMode.GUIDED} and player.is_human and explanation is not None:
+        if (self.game_mode in {self.GameMode.TUTOR, self.GameMode.GUIDED} and player.is_human and explanation is
+                not None):
             self.view.display_tutor_init(player, stage, explanation)
 
     def _should_collect_tutor_feedback(self, player: Player) -> bool:
@@ -112,7 +115,8 @@ class TutorController(ControllerSupport, ABC):
 
     def _refresh_tutor_turn_explanation(self, player: Player) -> None:
         """Refresh the cached tutor turn explanation."""
-        if self.game_mode not in {self.GameMode.TUTOR, self.GameMode.GUIDED} or not player.is_human or self.view is None:
+        if (self.game_mode not in {self.GameMode.TUTOR, self.GameMode.GUIDED} or not player.is_human or self.view
+                is None):
             return
         explanation = self.get_tutor_turn_explanation(player)
         if explanation is not None:

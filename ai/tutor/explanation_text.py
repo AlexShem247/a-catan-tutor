@@ -2,13 +2,14 @@ from typing import List, Tuple
 
 from ai.actions import Action, ActionType
 from ai.tutor.explanation_formatting import (action_to_text, capitalise, detail_sentence_from_reasons,
-                                             discard_protected_plan_text, end_turn_concise_reason, explanation_template,
-                                             final_benefit_text, follow_up_action_text, gerund_phrase,
-                                             initial_road_target_sentence, plan_linking_text, plan_timing_text,
-                                             port_reason_text, resource_count_text, sorted_reasons, top_reason_sentence,
-                                             trade_concise_reason, trade_detail_sentence_from_reasons,
+                                             end_turn_concise_reason, explanation_template, final_benefit_text,
+                                             follow_up_action_text, gerund_phrase, initial_road_target_sentence,
+                                             plan_linking_text, plan_timing_text, port_reason_text,
+                                             resource_count_text, top_reason_sentence, trade_concise_reason,
+                                             trade_detail_sentence_from_reasons,
                                              trade_exchange_text, trade_opening_text, vertex_intersection_text)
 from ai.tutor.explanations import ActionExplanation, CandidateExplanation, ExplanationTemplate
+from game.Resources import Resource
 
 
 def generate_text_concise(explanation: ActionExplanation) -> Tuple[str, str]:
@@ -30,6 +31,8 @@ def generate_text_concise(explanation: ActionExplanation) -> Tuple[str, str]:
         return year_of_plenty_concise(explanation)
     if template == ExplanationTemplate.MONOPOLY_RESOURCE:
         return monopoly_resource_concise(explanation)
+    if explanation.chosen_candidate.action.type == ActionType.BUY_DEV_CARD:
+        return buy_development_card_concise(explanation)
 
     action_text = capitalise(action_to_text(explanation.chosen_candidate.action, short=True))
     if explanation.chosen_candidate.action.type == ActionType.END_TURN and explanation.chosen_candidate.next_plan:
@@ -60,6 +63,8 @@ def generate_text_detail(explanation: ActionExplanation) -> str:
         return year_of_plenty_detail(explanation)
     if template == ExplanationTemplate.MONOPOLY_RESOURCE:
         return monopoly_resource_detail(explanation)
+    if explanation.chosen_candidate.action.type == ActionType.BUY_DEV_CARD:
+        return buy_development_card_detail(explanation)
 
     candidate = explanation.chosen_candidate
     plan = candidate.full_plan
@@ -258,19 +263,18 @@ def robber_target_detail(explanation: ActionExplanation) -> str:
 def discard_resources_concise(explanation: ActionExplanation) -> Tuple[str, str]:
     """Generate concise text for a discard explanation."""
     discard_text = resource_count_text(explanation.chosen_candidate.metadata.get("discard_resources", {}))
-    if discard_text:
-        return "Discard These Resources", f"Discard {discard_text}."
-    return "Discard These Resources", "Discard the highlighted resources."
+    if not discard_text:
+        return "Discard These Resources", "Discard the highlighted resources."
+    flexibility_reason = _discard_flexibility_reason(explanation)
+    return "Discard These Resources", f"Discard {discard_text}. {flexibility_reason}"
 
 
 def discard_resources_detail(explanation: ActionExplanation) -> str:
     """Generate detailed text for a discard explanation."""
     discard_text = resource_count_text(explanation.chosen_candidate.metadata.get("discard_resources", {}))
-    protected_plan = discard_protected_plan_text(explanation)
-    parts = [f"Discard {discard_text}." if discard_text else "Discard the highlighted resources."]
-    if protected_plan:
-        parts.append(protected_plan)
-    parts.append(detail_sentence_from_reasons(explanation, explanation.chosen_candidate.reasons_for))
+    parts = [f"Discard {discard_text}." if discard_text else "Discard the highlighted resources.",
+             _discard_flexibility_reason(explanation), _discard_mix_reason(explanation)]
+
     return "<br><br>".join(part for part in parts if part)
 
 
@@ -332,3 +336,137 @@ def monopoly_resource_detail(explanation: ActionExplanation) -> str:
         detail_sentence_from_reasons(explanation, explanation.chosen_candidate.reasons_for),
     ]
     return "<br><br>".join(part for part in parts if part)
+
+
+def buy_development_card_concise(explanation: ActionExplanation) -> Tuple[str, str]:
+    """Generate concise text for a development-card purchase explanation."""
+    candidate = explanation.chosen_candidate
+    vp_prob = float(candidate.metadata.get("dev_card_vp_probability", 0.0) or 0.0)
+    knight_prob = float(candidate.metadata.get("dev_card_knight_probability", 0.0) or 0.0)
+    progress_prob = float(candidate.metadata.get("dev_card_progress_probability", 0.0) or 0.0)
+
+    if vp_prob >= 0.12 and knight_prob >= 0.25 and progress_prob >= 0.15:
+        return (
+            "Buy A Development Card",
+            "It provides access to hidden victory points, Knight cards for Largest Army pressure, and progress cards, "
+            "creating multiple routes to future victory.",
+        )
+    if knight_prob >= 0.25:
+        return (
+            "Buy A Development Card",
+            "Knight cards contribute toward Largest Army while victory point cards can directly advance your score.",
+        )
+    return (
+        "Buy A Development Card",
+        "Rather than committing to a single board expansion plan, a development card keeps several strategic options "
+        "available.",
+    )
+
+
+def buy_development_card_detail(explanation: ActionExplanation) -> str:
+    """Generate detailed text for a development-card purchase explanation."""
+    candidate = explanation.chosen_candidate
+    vp_prob = float(candidate.metadata.get("dev_card_vp_probability", 0.0) or 0.0)
+    knight_prob = float(candidate.metadata.get("dev_card_knight_probability", 0.0) or 0.0)
+    progress_prob = float(candidate.metadata.get("dev_card_progress_probability", 0.0) or 0.0)
+    army_distance = int(candidate.metadata.get("dev_card_largest_army_distance", 99) or 99)
+    alternative = explanation.alternatives[0].action if explanation.alternatives else None
+
+    parts = ["Buy a development card."]
+    strategic_parts: List[str] = []
+    if vp_prob >= 0.12:
+        strategic_parts.append("it keeps hidden victory points live as a way to increase your score without revealing "
+                               "that plan on the board")
+    if knight_prob >= 0.25:
+        if army_distance <= 2:
+            strategic_parts.append("Knight cards matter because they create a live route toward Largest Army")
+        else:
+            strategic_parts.append("Knight cards still add robber control and a credible alternative victory route")
+    if progress_prob >= 0.15:
+        strategic_parts.append("progress cards add strategic flexibility by supporting several different follow-up "
+                               "plans")
+
+    if strategic_parts:
+        if len(strategic_parts) == 1:
+            joined = strategic_parts[0]
+        elif len(strategic_parts) == 2:
+            joined = f"{strategic_parts[0]}, and {strategic_parts[1]}"
+        else:
+            joined = ", ".join(strategic_parts[:-1]) + f", and {strategic_parts[-1]}"
+        parts.append(f"This is strong because {joined}.")
+    else:
+        parts.append("This is strong because it keeps several strategic options available instead of locking you into "
+                     "a single immediate board plan.")
+
+    if alternative is not None:
+        parts.append(
+            f"It is preferable to {action_to_text(alternative, short=False)} here because the card keeps alternative "
+            f"victory routes available instead of committing immediately to one visible expansion line."
+        )
+
+    timing = plan_timing_text(candidate)
+    if timing:
+        parts.append(timing)
+    return "<br><br>".join(part for part in parts if part)
+
+
+def _discard_flexibility_reason(explanation: ActionExplanation) -> str:
+    """Build a presentation-oriented discard explanation."""
+    current_resources = explanation.chosen_candidate.metadata.get("current_resources", {})
+    discard_resources = explanation.chosen_candidate.metadata.get("discard_resources", {})
+    kept_resources = explanation.chosen_candidate.metadata.get("kept_resources", {})
+    discarded_surplus = explanation.chosen_candidate.metadata.get("discarded_surplus_resources", {})
+
+    discarded_resource, discarded_amount = _largest_resource_entry(discard_resources)
+    current_amount = int(current_resources.get(discarded_resource, 0)) if discarded_resource is not None else 0
+    kept_types = sum(1 for amount in kept_resources.values() if int(amount) > 0) if isinstance(kept_resources, dict) \
+        else 0
+
+    if discarded_resource is not None and discarded_amount > 0 and current_amount >= max(3, discarded_amount * 2):
+        resource_name = discarded_resource.name.replace("_", " ").title()
+        return (
+            f"{resource_name} is heavily overrepresented in this hand, so removing it preserves a more flexible set "
+            f"of resources."
+        )
+
+    if isinstance(discarded_surplus, dict) and sum(int(amount) for amount in discarded_surplus.values()) > 0:
+        return "This removes the largest surplus while keeping a broader mix of resources available."
+
+    if kept_types >= 3:
+        return "This keeps the hand more balanced and preserves flexibility across several future options."
+
+    return ("The discarded cards provide the least additional value compared with the other resources currently being "
+            "held.")
+
+
+def _discard_mix_reason(explanation: ActionExplanation) -> str:
+    """Add a supporting sentence for discard explanations."""
+    kept_resources = explanation.chosen_candidate.metadata.get("kept_resources", {})
+    discard_resources = explanation.chosen_candidate.metadata.get("discard_resources", {})
+    kept_types = sum(1 for amount in kept_resources.values() if int(amount) > 0) if isinstance(kept_resources, dict) \
+        else 0
+    discarded_resource, _ = _largest_resource_entry(discard_resources)
+
+    if kept_types >= 3:
+        return ("The remaining hand still covers a broader mix of resource types, which is more useful than "
+                "concentrating further into one resource.")
+    if discarded_resource is not None:
+        resource_name = discarded_resource.name.replace("_", " ").lower()
+        return f"That makes {resource_name} the most expendable resource in relative terms."
+    return ""
+
+
+def _largest_resource_entry(resources: object) -> tuple[Resource | None, int]:
+    """Return the largest resource entry from a resource-count mapping."""
+    if not isinstance(resources, dict):
+        return None, 0
+    best_resource: Resource | None = None
+    best_amount = 0
+    for resource, amount in resources.items():
+        if not isinstance(resource, Resource):
+            continue
+        amount_int = int(amount)
+        if amount_int > best_amount:
+            best_resource = resource
+            best_amount = amount_int
+    return best_resource, best_amount
