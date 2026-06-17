@@ -21,6 +21,10 @@ class GameMode(Enum):
     GUIDED = auto()
 
 
+class DemoControl(Enum):
+    NEXT_STATE = auto()
+
+
 class View(ABC):
     ai_decision_animation_delay: float
 
@@ -138,4 +142,19 @@ class View(ABC):
     @abstractmethod
     def open_tutor_menu(self, open_menu: bool):
         """Toggle the tutor menu visibility."""
+        ...
+
+    @abstractmethod
+    def configure_demo_navigation(self, enabled: bool, has_next: bool) -> None:
+        """Configure demo-mode navigation controls."""
+        ...
+
+    @abstractmethod
+    def wait_for_demo_next_state(self):
+        """Wait for the next-demo-state request."""
+        ...
+
+    @abstractmethod
+    def set_window_title_suffix(self, suffix: Optional[str]) -> None:
+        """Set an optional suffix for the OS window title."""
         ...

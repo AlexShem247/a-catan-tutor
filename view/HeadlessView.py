@@ -10,7 +10,7 @@ from game.Player import Player
 from game.PlayerAssets import DevelopmentCardType
 from game.Resources import ResourceCount
 from game.Vertex import Vertex
-from view.View import GameMode, View
+from view.View import DemoControl, GameMode, View
 
 
 class HeadlessView(View):
@@ -109,4 +109,16 @@ class HeadlessView(View):
 
     def open_tutor_menu(self, open_menu: bool):
         """Toggle the tutor menu visibility."""
+        pass
+
+    def configure_demo_navigation(self, enabled: bool, has_next: bool) -> None:
+        """Configure demo-mode navigation controls."""
+        pass
+
+    def wait_for_demo_next_state(self):
+        """Wait for the next-demo-state request."""
+        return DemoControl.NEXT_STATE
+
+    def set_window_title_suffix(self, suffix: Optional[str]) -> None:
+        """Set an optional suffix for the OS window title."""
         pass

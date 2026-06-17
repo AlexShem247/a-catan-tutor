@@ -98,6 +98,11 @@ class ControllerSupport(ABC):
         ...
 
     @abstractmethod
+    def _raise_if_next_demo_state(self, value: object) -> None:
+        """Raise when demo mode should advance to the next saved state."""
+        ...
+
+    @abstractmethod
     def _raise_if_view_requested_home(self) -> None:
         """Raise when the view has requested a return home."""
         ...

@@ -21,7 +21,7 @@ class ActionHandlers(ControllerSupport, ABC):
             if player != selling_player:
                 if player.is_human:
                     if player.can_afford(buying):
-                        if self.game_mode == self.GameMode.TUTOR:
+                        if self.game_mode in {self.GameMode.TUTOR, self.GameMode.GUIDED}:
                             explanation = self._preview_tutor_explanation(
                                 lambda: self.tutor_ai.respond_to_trade_with_explanation(
                                     player,
@@ -47,6 +47,7 @@ class ActionHandlers(ControllerSupport, ABC):
                         finally:
                             self._set_tutor_shortcut_handlers(None)
                         self._raise_if_return_home(trade_decision)
+                        self._raise_if_next_demo_state(trade_decision)
                         interested, counter = trade_decision
                         if self._should_collect_tutor_feedback(player):
                             trade_response_feedback = self.tutor_evaluator.evaluate_trade_response_choice(
@@ -64,7 +65,7 @@ class ActionHandlers(ControllerSupport, ABC):
                         interested, counter = False, None
                 else:
                     if player.can_afford(buying):
-                        if self.game_mode == self.GameMode.GUIDED and isinstance(player.policy, RuleBasedAI):
+                        if self._should_explain_ai_turns() and isinstance(player.policy, RuleBasedAI):
                             interested, counter, explanation = player.policy.respond_to_trade_with_explanation(
                                 player, self._game, selling_player, selling, buying)
                             if explanation is not None:
@@ -79,7 +80,7 @@ class ActionHandlers(ControllerSupport, ABC):
                 if interested:
                     results.append((player, counter))
 
-        if self.game_mode == self.GameMode.TUTOR and selling_player.is_human and results:
+        if self.game_mode in {self.GameMode.TUTOR, self.GameMode.GUIDED} and selling_player.is_human and results:
             explanation = self._preview_tutor_explanation(lambda: self.tutor_ai.choose_trade_partner_with_explanation(
                 selling_player, self._game, selling, buying, results))
             self._show_tutor_init(selling_player, TutorStage.TRADE_DECISION, explanation)
@@ -90,6 +91,9 @@ class ActionHandlers(ControllerSupport, ABC):
         """Roll the dice and handle any resulting events."""
         self.view.display_board()
         d1, d2, total = self._game.roll_dice()
+        dice_recorder = getattr(self, "_record_current_dice_info", None)
+        if callable(dice_recorder):
+            dice_recorder((d1, d2, total))
         msg = None
         if total == Game.ROBBER_DICE_NUM:
             for p in self._game.players:
@@ -98,7 +102,7 @@ class ActionHandlers(ControllerSupport, ABC):
                     resources_to_discard = {}
                     discard_feedback = None
                     if p.is_human:
-                        if self.game_mode == self.GameMode.TUTOR:
+                        if self.game_mode in {self.GameMode.TUTOR, self.GameMode.GUIDED}:
                             explanation = self._preview_tutor_explanation(
                                 lambda: self.tutor_ai.select_discard_resources_with_explanation(
                                     p,
@@ -119,6 +123,7 @@ class ActionHandlers(ControllerSupport, ABC):
                         finally:
                             self._set_tutor_shortcut_handlers(None)
                         self._raise_if_return_home(resources_to_discard)
+                        self._raise_if_next_demo_state(resources_to_discard)
                         if self._should_collect_tutor_feedback(p):
                             discard_feedback = self.tutor_evaluator.evaluate_discard_choice(
                                 p,
@@ -128,7 +133,7 @@ class ActionHandlers(ControllerSupport, ABC):
                                 title="Discard",
                             )
                     elif p.policy is not None:
-                        if self.game_mode == self.GameMode.GUIDED and isinstance(p.policy, RuleBasedAI):
+                        if self._should_explain_ai_turns() and isinstance(p.policy, RuleBasedAI):
                             resources_to_discard, explanation = p.policy.select_discard_resources_with_explanation(
                                 p, self._game, discard_count)
                             if explanation is not None:
@@ -150,7 +155,7 @@ class ActionHandlers(ControllerSupport, ABC):
         self._pending_tutor_robber_choice = None
         if player.is_human:
             available_hexes = [tile for tile in self._game.get_all_hexes() if not tile.robber]
-            if self.game_mode == self.GameMode.TUTOR:
+            if self.game_mode in {self.GameMode.TUTOR, self.GameMode.GUIDED}:
                 robber_explanation = self._preview_tutor_explanation(
                     lambda: self.tutor_ai.select_robber_target_with_explanation(
                         player,
@@ -169,6 +174,7 @@ class ActionHandlers(ControllerSupport, ABC):
             finally:
                 self._set_tutor_shortcut_handlers(None)
             self._raise_if_return_home(selected_hex)
+            self._raise_if_next_demo_state(selected_hex)
             if self._should_collect_tutor_feedback(player):
                 robber_placement_feedback = self.tutor_evaluator.evaluate_robber_choice(
                     player,
@@ -192,7 +198,7 @@ class ActionHandlers(ControllerSupport, ABC):
             if not adjacent_player_buildings:
                 tile, steal_from = selected_hex, None
             else:
-                if self.game_mode == self.GameMode.TUTOR:
+                if self.game_mode in {self.GameMode.TUTOR, self.GameMode.GUIDED}:
                     robber_explanation = self._preview_tutor_explanation(
                         lambda: self.tutor_ai.select_robber_target_with_explanation(
                             player,
@@ -215,6 +221,7 @@ class ActionHandlers(ControllerSupport, ABC):
                 finally:
                     self._set_tutor_shortcut_handlers(None)
                 self._raise_if_return_home(selected_player_building)
+                self._raise_if_next_demo_state(selected_player_building)
                 selected_player = selected_player_building.owner
                 if self._should_collect_tutor_feedback(player):
                     robber_target_feedback = self.tutor_evaluator.evaluate_robber_choice(
@@ -231,7 +238,7 @@ class ActionHandlers(ControllerSupport, ABC):
             self._pending_tutor_robber_choice = None
         else:
             valid_hexes = [hex_tile for hex_tile in self._game.get_all_hexes() if not hex_tile.robber]
-            if self.game_mode == self.GameMode.GUIDED and isinstance(player.policy, RuleBasedAI):
+            if self._should_explain_ai_turns() and isinstance(player.policy, RuleBasedAI):
                 tile, steal_from, explanation = player.policy.select_robber_target_with_explanation(
                     player, self._game, valid_hexes)
                 if explanation is not None:
@@ -274,7 +281,7 @@ class ActionHandlers(ControllerSupport, ABC):
                 if available_edges:
                     road_building_feedback = None
                     if player.is_human:
-                        if self.game_mode == self.GameMode.TUTOR:
+                        if self.game_mode in {self.GameMode.TUTOR, self.GameMode.GUIDED}:
                             explanation = self._preview_tutor_explanation(
                                 lambda: self.tutor_ai.select_initial_road_location_with_explanation(
                                     player,
@@ -309,7 +316,7 @@ class ActionHandlers(ControllerSupport, ABC):
         elif card_type == DevelopmentCardType.YEAR_OF_PLENTY:
             year_of_plenty_feedback = None
             if player.is_human:
-                if self.game_mode == self.GameMode.TUTOR:
+                if self.game_mode in {self.GameMode.TUTOR, self.GameMode.GUIDED}:
                     explanation = self._preview_tutor_explanation(
                         lambda: self.tutor_ai.select_year_of_plenty_resources_with_explanation(
                             player,
@@ -328,6 +335,7 @@ class ActionHandlers(ControllerSupport, ABC):
                 finally:
                     self._set_tutor_shortcut_handlers(None)
                 self._raise_if_return_home(resources)
+                self._raise_if_next_demo_state(resources)
                 if self._should_collect_tutor_feedback(player):
                     year_of_plenty_feedback = self.tutor_evaluator.evaluate_year_of_plenty_choice(
                         player,
@@ -336,7 +344,7 @@ class ActionHandlers(ControllerSupport, ABC):
                         title="Year Of Plenty",
                     )
             else:
-                if self.game_mode == self.GameMode.GUIDED and isinstance(player.policy, RuleBasedAI):
+                if self._should_explain_ai_turns() and isinstance(player.policy, RuleBasedAI):
                     resources, explanation = player.policy.select_year_of_plenty_resources_with_explanation(
                         player, self._game)
                     if explanation is not None:
@@ -353,7 +361,7 @@ class ActionHandlers(ControllerSupport, ABC):
         elif card_type == DevelopmentCardType.MONOPOLY:
             monopoly_feedback = None
             if player.is_human:
-                if self.game_mode == self.GameMode.TUTOR:
+                if self.game_mode in {self.GameMode.TUTOR, self.GameMode.GUIDED}:
                     explanation = self._preview_tutor_explanation(
                         lambda: self.tutor_ai.select_monopoly_resource_with_explanation(
                             player,
@@ -378,6 +386,7 @@ class ActionHandlers(ControllerSupport, ABC):
                 finally:
                     self._set_tutor_shortcut_handlers(None)
                 self._raise_if_return_home(chosen)
+                self._raise_if_next_demo_state(chosen)
                 resource = next(iter(chosen.keys()))
                 if self._should_collect_tutor_feedback(player):
                     monopoly_feedback = self.tutor_evaluator.evaluate_monopoly_choice(
@@ -387,7 +396,7 @@ class ActionHandlers(ControllerSupport, ABC):
                         title="Monopoly",
                     )
             else:
-                if self.game_mode == self.GameMode.GUIDED and isinstance(player.policy, RuleBasedAI):
+                if self._should_explain_ai_turns() and isinstance(player.policy, RuleBasedAI):
                     resource, explanation = player.policy.select_monopoly_resource_with_explanation(player, self._game)
                     if explanation is not None:
                         self._raise_if_return_home(self.view.display_board_turn_explanations(player, None, explanation))

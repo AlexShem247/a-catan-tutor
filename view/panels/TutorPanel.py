@@ -81,6 +81,7 @@ class TutorPanel:
         """Update the visibility of the previous-feedback button."""
         visible = (self.history_available_in_mode and self.history_enabled_on_turn and bool(self.tutor_feedback_history)
                    and not self.history_mode_active)
+        self.widget.previous_feedback_btn.setText("Previous Feedback")
         self.widget.previous_feedback_btn.setVisible(visible)
         self.widget.previous_feedback_btn.setEnabled(visible)
 
@@ -380,6 +381,7 @@ class TutorPanel:
 
     def display_tutor_action_feedback(self, feedback: TutorFeedbackExplanation) -> None:
         """Display tutor feedback for the player action."""
+        demo_mode = getattr(self.window, "demo_navigation_enabled", False)
         self.history_mode_active = False
         self.window.canvas.clear_planned_builds()
         self.window.canvas.clear_feedback_builds()
@@ -399,18 +401,39 @@ class TutorPanel:
         self.widget.continue_btn.setEnabled(False)
         self.widget.continue_btn.setText("Continue")
 
-        def switch_to_manual_continue() -> None:
+        def show_concise_feedback() -> None:
+            self.window.canvas.clear_planned_builds()
+            self.widget.action_label.setText(feedback.title)
+            self.widget.explanation_edit.setHtml(feedback.concise_html)
+            self.widget.explain_btn.show()
+            self.widget.explain_btn.setEnabled(True)
+            self.widget.explain_btn.setText("Explain Further")
+            self.widget.continue_btn.hide()
+            self.window.safe_connect(self.widget.explain_btn, show_detailed_feedback)
+            self.update_previous_feedback_button()
+
+        def show_detailed_feedback() -> None:
             self.stop_auto_feedback()
             self.window.canvas.clear_planned_builds()
             if feedback.recommended_visual_plan:
                 self.window.canvas.render_planned_builds(feedback.recommended_visual_plan)
             self.widget.explanation_edit.setHtml(feedback.detailed_html)
-            self.widget.explain_btn.hide()
-            self.widget.continue_btn.show()
-            self.widget.continue_btn.setEnabled(True)
-            self.window.safe_connect(self.widget.continue_btn, self.continue_after_tutor_feedback)
+            if demo_mode:
+                self.widget.explain_btn.show()
+                self.widget.explain_btn.setEnabled(True)
+                self.widget.explain_btn.setText("Show Less")
+                self.widget.continue_btn.hide()
+                self.window.safe_connect(self.widget.explain_btn, show_concise_feedback)
+            else:
+                self.widget.explain_btn.hide()
+                self.widget.continue_btn.show()
+                self.widget.continue_btn.setEnabled(True)
+                self.window.safe_connect(self.widget.continue_btn, self.continue_after_tutor_feedback)
 
-        self.window.safe_connect(self.widget.explain_btn, switch_to_manual_continue)
+        self.window.safe_connect(self.widget.explain_btn, show_detailed_feedback)
+        if demo_mode:
+            self.stop_auto_feedback()
+            return
         self.start_feedback_fade(self.tutor_feedback_display_seconds(feedback))
 
     def prepare_ai_wait_state(self) -> None:

@@ -185,6 +185,18 @@ class QtView(View):
         self.window.configure_tutor_panel(self.controller.game_mode)
         self.window.open_tutor_menu(open_menu)
 
+    def configure_demo_navigation(self, enabled: bool, has_next: bool) -> None:
+        """Configure demo-mode navigation controls."""
+        self.window.configure_demo_navigation(enabled, has_next)
+
+    def wait_for_demo_next_state(self):
+        """Wait for the next-demo-state request."""
+        return select_blocking(self, self.window.turnMade, lambda: None)
+
+    def set_window_title_suffix(self, suffix: Optional[str]) -> None:
+        """Set an optional suffix for the OS window title."""
+        self.window.set_window_title_suffix(suffix)
+
     def _restore_selectable_vertices(self, vertices: List[Vertex]):
         """Restore the selectable vertex overlay."""
         self.canvas.display_board(self.controller)

@@ -25,7 +25,7 @@ class InitialPlacementController(ControllerSupport, ABC):
         for player, gain_resource in players_order:
             vertices = self._game.get_available_vertices(player, Buildable.SETTLEMENT, road_restriction=False)
             if player.is_human:
-                if self.game_mode == self.GameMode.TUTOR:
+                if self.game_mode in {self.GameMode.TUTOR, self.GameMode.GUIDED}:
                     explanation = self._preview_tutor_explanation(
                         lambda: self.tutor_ai.select_initial_settlement_location_with_explanation(
                             player,
@@ -47,7 +47,7 @@ class InitialPlacementController(ControllerSupport, ABC):
                 self._raise_if_return_home(vertex)
                 self.view.display_board()
             else:
-                if self.game_mode == self.GameMode.GUIDED and isinstance(player.policy, RuleBasedAI):
+                if self._should_explain_ai_turns() and isinstance(player.policy, RuleBasedAI):
                     vertex, explanation = player.policy.select_initial_settlement_location_with_explanation(
                         player,
                         self._game,
@@ -83,7 +83,7 @@ class InitialPlacementController(ControllerSupport, ABC):
             if vertex is not None:
                 available_edges = [edge for edge in available_edges if vertex in edge.vertices]
             if player.is_human:
-                if self.game_mode == self.GameMode.TUTOR:
+                if self.game_mode in {self.GameMode.TUTOR, self.GameMode.GUIDED}:
                     explanation = self._preview_tutor_explanation(
                         lambda: self.tutor_ai.select_initial_road_location_with_explanation(
                             player,
@@ -148,7 +148,7 @@ class InitialPlacementController(ControllerSupport, ABC):
         if not available_edges:
             return None
 
-        if self.game_mode == self.GameMode.GUIDED and isinstance(player.policy, RuleBasedAI):
+        if self._should_explain_ai_turns() and isinstance(player.policy, RuleBasedAI):
             edge, explanation = player.policy.select_initial_road_location_with_explanation(
                 player,
                 self._game,

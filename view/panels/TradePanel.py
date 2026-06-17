@@ -32,6 +32,44 @@ class TradePanel:
         self.trade_manager_widget = trade_manager_widget
         self.active_trade_preview_widget: QWidget | None = None
 
+    def _set_discard_resource_selector_sizing(self, discard_mode: bool) -> None:
+        """Match discard controls to the counter-offer menu sizing."""
+        selector = self.resource_selector_widget
+        trade_manager = self.trade_manager_widget
+        resource_labels = ("label_49", "label_50", "label_51", "label_53", "label_54")
+
+        for res in Resource:
+            selector_quantity = getattr(selector, f"{res.name.lower()}_quantity")
+            if discard_mode:
+                reference_quantity = getattr(trade_manager, f"{res.name.lower()}_quantity")
+                selector_quantity.setFont(reference_quantity.font())
+            else:
+                self.window._set_widget_point_size(selector_quantity, 8)
+
+            for suffix in ("dec", "inc"):
+                selector_button = getattr(selector, f"{res.name.lower()}_quantity_{suffix}")
+                if discard_mode:
+                    reference_button = getattr(trade_manager, f"{res.name.lower()}_quantity_{suffix}")
+                    selector_button.setFont(reference_button.font())
+                    selector_button.setMinimumSize(reference_button.minimumSize())
+                else:
+                    selector_button.setMinimumSize(0, 0)
+                    self.window._set_widget_point_size(selector_button, 8)
+
+        for label_name in resource_labels:
+            selector_label = getattr(selector, label_name)
+            if discard_mode:
+                selector_label.setFont(getattr(trade_manager, label_name).font())
+            else:
+                self.window._set_widget_point_size(selector_label, 8)
+
+        if discard_mode:
+            selector.submit_btn.setFont(trade_manager.accept_btn.font())
+            selector.submit_btn.setMinimumSize(trade_manager.accept_btn.minimumSize())
+        else:
+            selector.submit_btn.setMinimumSize(0, 0)
+            self.window._set_widget_point_size(selector.submit_btn, 8)
+
     @staticmethod
     def _fit_list_to_contents(list_widget) -> None:
         """Resize a list widget to exactly fit its current rows."""
@@ -427,6 +465,8 @@ class TradePanel:
         self.clear_trade_preview()
         selection_widget = self.resource_selector_widget
         selection_widget.setParent(self.window.main_menu)
+        discard_mode = "robber" in title.lower() or "discard" in title.lower()
+        self._set_discard_resource_selector_sizing(discard_mode)
 
         quantity_btns = {
             res: (
@@ -450,6 +490,7 @@ class TradePanel:
         self.window.minimise_spacer()
         self.window.main_menu.action_btn_layout.addWidget(selection_widget)
         selection_widget.submit_btn.show()
+        selection_widget.submit_btn.setText("Discard" if discard_mode else "Submit")
 
         def update_labels() -> None:
             total_remaining = num_resources - sum(chosen.values())
@@ -471,6 +512,8 @@ class TradePanel:
             self.window.restore_spacer()
             self.window.main_menu.action_btn_layout.removeWidget(selection_widget)
             selection_widget.setParent(None)
+            self._set_discard_resource_selector_sizing(False)
+            selection_widget.submit_btn.setText("Submit")
             self.window.set_debug_tutor_shortcut_finalizer(None)
             self.window.resourcesPicked.emit(chosen)
 
@@ -478,6 +521,8 @@ class TradePanel:
             self.window.restore_spacer()
             self.window.main_menu.action_btn_layout.removeWidget(selection_widget)
             selection_widget.setParent(None)
+            self._set_discard_resource_selector_sizing(False)
+            selection_widget.submit_btn.setText("Submit")
             self.window.set_debug_tutor_shortcut_finalizer(None)
 
         self.window.set_debug_tutor_shortcut_finalizer(cleanup_selection_widget)

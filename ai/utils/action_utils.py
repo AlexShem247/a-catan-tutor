@@ -20,6 +20,20 @@ if TYPE_CHECKING:
     from ai.simulation.EtwEstimator import EtwEstimator
 
 
+def _vertex_order_key(vertex: Vertex) -> tuple[int, int, int]:
+    q, r, direction = vertex.pos
+    return q, r, int(direction)
+
+
+def _edge_order_key(edge) -> tuple[int, int, int]:
+    q, r, direction = edge.pos
+    return q, r, int(direction)
+
+
+def _path_order_key(edges: Tuple) -> tuple[tuple[int, int, int], ...]:
+    return tuple(_edge_order_key(edge) for edge in edges)
+
+
 def distant_settlement_candidates(
     player: SimPlayerState,
     sim_game: SimGame,
@@ -364,9 +378,9 @@ def _select_start_vertices(
 
     # Fallback: if everything is blocked, expand from anywhere.
     if not start_scored:
-        return list(network_vertices)
+        return sorted(network_vertices, key=_vertex_order_key)
 
-    start_scored.sort(key=lambda x: x[0], reverse=True)
+    start_scored.sort(key=lambda x: (-x[0], _vertex_order_key(x[1])))
     return [v for _, v in start_scored[:START_LIMIT]]
 
 
@@ -383,14 +397,14 @@ def _direct_settlement_candidates(
     # First consider settlements that can be placed immediately without road extensions.
     direct_vertices: List[Tuple[float, Vertex]] = []
 
-    for v in network_vertices:
+    for v in sorted(network_vertices, key=_vertex_order_key):
         if v in all_player_vertices:
             continue
         if legal_settlement_vertex(player, v, sim_game):
             direct_vertices.append((vertex_score(v), v))
 
     # Prefer high-yield spots.
-    direct_vertices.sort(key=lambda x: x[0], reverse=True)
+    direct_vertices.sort(key=lambda x: (-x[0], _vertex_order_key(x[1])))
 
     direct_candidates: List[Tuple[List[Action], float, float]] = []
     for _, v in direct_vertices[:DIRECT_LIMIT]:
@@ -455,7 +469,7 @@ def _beam_search_settlement_candidates(
                 continue
 
             # Keep only the best few expansions per state.
-            possible_moves.sort(key=lambda x: x[0], reverse=True)
+            possible_moves.sort(key=lambda x: (-x[0], _vertex_order_key(x[1]), _edge_order_key(x[2])))
             possible_moves = possible_moves[:MAX_EXPANSIONS_PER_STATE]
 
             for score, to_v, edge in possible_moves:
@@ -469,7 +483,7 @@ def _beam_search_settlement_candidates(
             break
 
         # Keep only the strongest beam states.
-        next_states_scored.sort(key=lambda x: x[0])
+        next_states_scored.sort(key=lambda x: (x[0], _vertex_order_key(x[1].vertex), _path_order_key(x[1].edges)))
         frontier = [st for _, st in next_states_scored[:MAX_BEAM_PER_DEPTH]]
 
         # From the frontier, collect legal settlement endpoints.
@@ -501,8 +515,7 @@ def _beam_search_settlement_candidates(
     # Perform expensive ETB evaluation only on the best cheap candidates.
     shortlisted = sorted(
         cheap_pool.items(),
-        key=lambda kv: kv[1],
-        reverse=True,
+        key=lambda kv: (-kv[1], _vertex_order_key(kv[0][0]), _path_order_key(kv[0][1])),
     )[:K_ETB_EVAL]
 
     bfs_candidates: List[Tuple[List[Action], float, float]] = []

@@ -87,10 +87,12 @@ class EndgameReviewPanel:
         self.final_board_source = None
         self.human_final_snapshot: PlayerScoreSnapshot | None = None
         self.final_leader_vp: int | None = None
+        self._plot_controller: GameController | None = None
 
         scene = self.victory_points_plot.scene()
         if scene is not None and hasattr(scene, "sigMouseMoved"):
             scene.sigMouseMoved.connect(self.handle_plot_hover)
+        self.widget.reviewTabs.currentChanged.connect(self.refresh_performance_plot_if_visible)
 
         self.configure_endgame_feedback_filters()
 
@@ -430,6 +432,15 @@ class EndgameReviewPanel:
         """Populate the tutor endgame performance chart."""
         populate_tutor_endgame_performance(self, controller)
 
+    def refresh_performance_plot_if_visible(self, _index: int | None = None) -> None:
+        """Re-render the performance plot once the tab is visible."""
+        if self._plot_controller is None:
+            return
+        performance_index = self.widget.reviewTabs.indexOf(self.widget.performanceTab)
+        if self.widget.reviewTabs.currentIndex() != performance_index:
+            return
+        self.populate_tutor_endgame_performance(self._plot_controller)
+
     @classmethod
     def build_endgame_plot_tooltips(
         cls,
@@ -494,6 +505,7 @@ class EndgameReviewPanel:
     def populate_tutor_endgame_review(self, controller: GameController) -> None:
         """Populate the tutor endgame review view."""
         self.configure_tutor_endgame_layout()
+        self._plot_controller = controller
         sorted_players = sorted(controller.get_all_players(), key=lambda p: p.calc_victory_points()[1], reverse=True)
         winner = sorted_players[0]
         winner_total_vp = winner.calc_victory_points()[1]
@@ -592,6 +604,7 @@ class EndgameReviewPanel:
         self.window.safe_connect(self.widget.main_menu_btn, return_to_main_menu)
         self.window.safe_connect(self.widget.quit_btn, self.window.close)
         self.window._show_fullscreen_panel(self.widget)
+        QTimer.singleShot(0, self.refresh_performance_plot_if_visible)
         QTimer.singleShot(0, self.sync_replay_layout)
 
     def display_results(self, controller: GameController) -> None:
@@ -602,11 +615,7 @@ class EndgameReviewPanel:
         self.window.canvas.interactive_shapes.clear()
         self.window.canvas.display_board(controller)
         self.window.display_resources(controller)
-
-        sizes = self.window.splitter_layout.sizes()
-        self.window.main_menu.setParent(None)
-        self.window.splitter_layout.addWidget(self.results_menu)
-        self.window.splitter_layout.setSizes([sizes[0], sizes[1]])
+        self.window._set_primary_side_panel(self.results_menu)
 
         all_labels = {}
         for i in range(1, 5):
@@ -653,11 +662,7 @@ class EndgameReviewPanel:
                 labels["victory_cards"].show()
 
         def return_to_main_menu() -> None:
-            layout_sizes = self.window.splitter_layout.sizes()
-            self.results_menu.setParent(None)
-            self.window.splitter_layout.addWidget(self.window.main_menu)
-            self.window.splitter_layout.setSizes(layout_sizes)
-            self.window.main_menu.show()
+            self.window._set_primary_side_panel(self.window.main_menu)
             controller.start_game()
 
         self.window.safe_connect(self.results_menu.main_menu_btn, return_to_main_menu)

@@ -69,16 +69,17 @@ class TutorController(ControllerSupport, ABC):
         explanation: Optional[ActionExplanation],
     ) -> None:
         """Show the tutor introduction for the current decision stage."""
-        if self.game_mode == self.GameMode.TUTOR and player.is_human and explanation is not None:
+        if self.game_mode in {self.GameMode.TUTOR, self.GameMode.GUIDED} and player.is_human and explanation is not None:
             self.view.display_tutor_init(player, stage, explanation)
 
     def _should_collect_tutor_feedback(self, player: Player) -> bool:
         """Check whether tutor feedback should be collected."""
-        return player.is_human and self.game_mode in {self.GameMode.PLAY, self.GameMode.TUTOR}
+        return player.is_human and self.game_mode in {self.GameMode.PLAY, self.GameMode.TUTOR, self.GameMode.GUIDED}
 
     def _should_show_tutor_feedback(self, player: Player) -> bool:
         """Check whether tutor feedback should be shown."""
-        return self.view is not None and player.is_human and self.game_mode == self.GameMode.TUTOR
+        return (self.view is not None and player.is_human
+                and self.game_mode in {self.GameMode.TUTOR, self.GameMode.GUIDED})
 
     def get_tutor_turn_explanation(
         self,
@@ -86,7 +87,7 @@ class TutorController(ControllerSupport, ABC):
         played_dev_card: Optional[bool] = None,
     ) -> Optional[ActionExplanation]:
         """Return the tutor explanation for the current turn."""
-        if self.game_mode != self.GameMode.TUTOR or not player.is_human:
+        if self.game_mode not in {self.GameMode.TUTOR, self.GameMode.GUIDED} or not player.is_human:
             return None
         if played_dev_card is None:
             played_dev_card = self._tutor_dev_played
@@ -111,7 +112,7 @@ class TutorController(ControllerSupport, ABC):
 
     def _refresh_tutor_turn_explanation(self, player: Player) -> None:
         """Refresh the cached tutor turn explanation."""
-        if self.game_mode != self.GameMode.TUTOR or not player.is_human or self.view is None:
+        if self.game_mode not in {self.GameMode.TUTOR, self.GameMode.GUIDED} or not player.is_human or self.view is None:
             return
         explanation = self.get_tutor_turn_explanation(player)
         if explanation is not None:
@@ -134,7 +135,7 @@ class TutorController(ControllerSupport, ABC):
         """Set the tutor shortcut handlers for the current decision."""
         if self.view is None:
             return
-        if self.game_mode in {self.GameMode.PLAY, self.GameMode.TUTOR}:
+        if self.game_mode in {self.GameMode.PLAY, self.GameMode.TUTOR, self.GameMode.GUIDED}:
             self.view.set_debug_tutor_shortcut_handler(recommended_handler)
         else:
             self.view.set_debug_tutor_shortcut_handler(None)
@@ -159,7 +160,11 @@ class TutorController(ControllerSupport, ABC):
             return
         self.tutor_feedback_history.append(feedback)
         if self._should_show_tutor_feedback(player):
-            self.view.display_tutor_action_feedback(feedback)
+            result = self.view.display_tutor_action_feedback(feedback)
+            self._raise_if_return_home(result)
+            next_demo_handler = getattr(self, "_raise_if_next_demo_state", None)
+            if callable(next_demo_handler):
+                next_demo_handler(result)
 
     def _get_tutor_recommended_robber_choice(
         self,
