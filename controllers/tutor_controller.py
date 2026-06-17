@@ -1,6 +1,6 @@
 from abc import ABC
 from random import Random
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, Callable, TypeVar
 
 from ai.actions import Action, Phase
 from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
@@ -68,7 +68,7 @@ class TutorController(ControllerSupport, ABC):
         self,
         player: Player,
         stage: TutorStage,
-        explanation: Optional[ActionExplanation],
+        explanation: ActionExplanation | None,
     ) -> None:
         """Show the tutor introduction for the current decision stage."""
         if (self.game_mode in {self.GameMode.TUTOR, self.GameMode.GUIDED} and player.is_human and explanation is
@@ -87,8 +87,8 @@ class TutorController(ControllerSupport, ABC):
     def get_tutor_turn_explanation(
         self,
         player: Player,
-        played_dev_card: Optional[bool] = None,
-    ) -> Optional[ActionExplanation]:
+        played_dev_card: bool | None = None,
+    ) -> ActionExplanation | None:
         """Return the tutor explanation for the current turn."""
         if self.game_mode not in {self.GameMode.TUTOR, self.GameMode.GUIDED} or not player.is_human:
             return None
@@ -105,7 +105,7 @@ class TutorController(ControllerSupport, ABC):
     def _preview_tutor_explanation(
         self,
         callback: Callable[[], tuple[Any, ...]],
-    ) -> Optional[ActionExplanation]:
+    ) -> ActionExplanation | None:
         """Preview the tutor explanation for a pending decision."""
         preview_result = self._run_tutor_preview(callback)
         if not isinstance(preview_result, tuple) or len(preview_result) < 2:
@@ -134,7 +134,7 @@ class TutorController(ControllerSupport, ABC):
 
     def _set_tutor_shortcut_handlers(
         self,
-        recommended_handler: Optional[Callable[[], Any]],
+        recommended_handler: Callable[[], Any] | None,
     ) -> None:
         """Set the tutor shortcut handlers for the current decision."""
         if self.view is None:
@@ -145,7 +145,7 @@ class TutorController(ControllerSupport, ABC):
             self.view.set_debug_tutor_shortcut_handler(None)
 
     def _prepare_tutor_main_action_comparison(self, player: Player, action: Action,
-                                              played_dev_card: bool) -> Optional[TutorFeedbackExplanation]:
+                                              played_dev_card: bool) -> TutorFeedbackExplanation | None:
         """Prepare tutor comparison data for a main action."""
         if not self._should_collect_tutor_feedback(player):
             return None
@@ -158,7 +158,7 @@ class TutorController(ControllerSupport, ABC):
             title="Main Turn",
         ))
 
-    def _show_tutor_action_feedback(self, player: Player, feedback: Optional[TutorFeedbackExplanation]) -> None:
+    def _show_tutor_action_feedback(self, player: Player, feedback: TutorFeedbackExplanation | None) -> None:
         """Show tutor feedback for the completed player action."""
         if feedback is None or not self._should_collect_tutor_feedback(player):
             return

@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 from enum import Enum
 from random import Random
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING
 
 from game.Edge import Edge
 from game.PlayerAssets import DevelopmentCard, DevelopmentCardType
@@ -21,7 +23,7 @@ class PlayerNumber(Enum):
 class Player:
 
     def __init__(self, is_human: bool, player_number: PlayerNumber, bank_resources: ResourceCount, rng: Random,
-                 name: Optional[str] = None, policy: Optional["AI"] = None):
+                 name: str | None = None, policy: AI | None = None):
         self.is_human = is_human
         self.name = player_number.name if name is None else name
         self.player_number = player_number
@@ -33,9 +35,9 @@ class Player:
         self.resources: ResourceCount = {resource: 0 for resource in Resource}
 
         # Assets on the board
-        self.settlements: List[Vertex] = []
-        self.cities: List[Vertex] = []
-        self.roads: List[Edge] = []
+        self.settlements: list[Vertex] = []
+        self.cities: list[Vertex] = []
+        self.roads: list[Edge] = []
 
         # Game metrics
         self.longest_road_length: int = 0
@@ -44,9 +46,9 @@ class Player:
         self.has_largest_army: bool = False
         self.best_opponents_victory_point: int = 0
 
-        self.development_cards: List[DevelopmentCard] = []
+        self.development_cards: list[DevelopmentCard] = []
 
-    def calc_victory_points(self) -> Tuple[int, int]:
+    def calc_victory_points(self) -> tuple[int, int]:
         """Calculate the visible and total victory points for the player."""
         visible_points = 0
 
@@ -116,7 +118,7 @@ class Player:
         """Record a new road for the player."""
         self.roads.append(edge)
 
-    def get_ports(self) -> List[Port]:
+    def get_ports(self) -> list[Port]:
         """Return the board ports and their attached vertices."""
         return [v.port for v in self.settlements + self.cities if v.port is not None]
 

@@ -1,4 +1,4 @@
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable
 
 from PyQt6 import uic
 from PyQt6.QtCore import QEvent, QObject, Qt, pyqtSignal
@@ -58,7 +58,7 @@ class MainWindow(QMainWindow):
 
         self.root_layout = QHBoxLayout(central)
         self.root_layout.setContentsMargins(0, 0, 0, 0)
-        self.panel_hosts: Dict[QWidget, QWidget] = {}
+        self.panel_hosts: dict[QWidget, QWidget] = {}
 
         # Splitter
         self.splitter_layout = QSplitter(Qt.Orientation.Horizontal, self)
@@ -145,16 +145,16 @@ class MainWindow(QMainWindow):
         self.verticalSpacer = self.find_last_vertical_spacer()
         self._configure_main_menu_spacer()
         self.live_board_source: BoardDisplaySource | None = None
-        self.fullscreen_panel: Optional[QWidget] = None
-        self.debug_tutor_shortcut_handler: Optional[Callable[[], object]] = None
-        self.debug_tutor_shortcut_finalizer: Optional[Callable[[], None]] = None
-        self.main_action_btn_enabled_states: List[bool] = []
-        self.restore_board_state_callback: Optional[Callable[[], None]] = None
+        self.fullscreen_panel: QWidget | None = None
+        self.debug_tutor_shortcut_handler: Callable[[], object] | None = None
+        self.debug_tutor_shortcut_finalizer: Callable[[], None] | None = None
+        self.main_action_btn_enabled_states: list[bool] = []
+        self.restore_board_state_callback: Callable[[], None] | None = None
         self.return_home_requested = False
         self.app_closing = False
         self.debug_fast_animation_requested = False
-        self.pending_action_status_message: Optional[str] = None
-        self.window_title_suffix: Optional[str] = None
+        self.pending_action_status_message: str | None = None
+        self.window_title_suffix: str | None = None
         self.demo_navigation_enabled = False
         self.demo_navigation_has_next = False
         self.safe_connect(self.main_menu.end_turn_btn, lambda: self.turnMade.emit(Action(ActionType.END_TURN)))
@@ -211,7 +211,7 @@ class MainWindow(QMainWindow):
         host.hide()
         host.setParent(self)
 
-    def set_restore_board_state_callback(self, callback: Optional[Callable[[], None]]):
+    def set_restore_board_state_callback(self, callback: Callable[[], None] | None):
         """Store the callback used to restore the board state."""
         self.restore_board_state_callback = callback
 
@@ -265,11 +265,11 @@ class MainWindow(QMainWindow):
         self.debug_fast_animation_requested = False
         return requested
 
-    def set_pending_action_status_message(self, message: Optional[str]) -> None:
+    def set_pending_action_status_message(self, message: str | None) -> None:
         """Store a one-shot action status message for the next main turn redraw."""
         self.pending_action_status_message = message
 
-    def consume_pending_action_status_message(self) -> Optional[str]:
+    def consume_pending_action_status_message(self) -> str | None:
         """Consume and clear any pending one-shot action status message."""
         message = self.pending_action_status_message
         self.pending_action_status_message = None
@@ -289,7 +289,7 @@ class MainWindow(QMainWindow):
         self.settings_window.raise_()
         self.settings_window.activateWindow()
 
-    def set_window_title_suffix(self, suffix: Optional[str]) -> None:
+    def set_window_title_suffix(self, suffix: str | None) -> None:
         """Set an optional suffix for the OS window title."""
         self.window_title_suffix = suffix
         title = APP_WINDOW_TITLE if not suffix else f"{APP_WINDOW_TITLE} - {suffix}"
@@ -474,9 +474,9 @@ class MainWindow(QMainWindow):
             if widget:
                 widget.setEnabled(enabled)
 
-    def _capture_main_action_btn_enabled_states(self) -> List[bool]:
+    def _capture_main_action_btn_enabled_states(self) -> list[bool]:
         """Capture the enabled state of the main action buttons."""
-        states: List[bool] = []
+        states: list[bool] = []
         for i in range(self.main_menu.action_btn_layout.count()):
             widget: QWidget = self.main_menu.action_btn_layout.itemAt(i).widget()
             if widget:
@@ -500,11 +500,11 @@ class MainWindow(QMainWindow):
         self.debug_tutor_shortcut_handler = None
         self.debug_tutor_shortcut_finalizer = None
 
-    def set_debug_tutor_shortcut_handler(self, handler: Optional[Callable[[], object]]):
+    def set_debug_tutor_shortcut_handler(self, handler: Callable[[], object] | None):
         """Store the debug tutor shortcut handler."""
         self.debug_tutor_shortcut_handler = handler
 
-    def set_debug_tutor_shortcut_finalizer(self, finalizer: Optional[Callable[[], None]]):
+    def set_debug_tutor_shortcut_finalizer(self, finalizer: Callable[[], None] | None):
         """Store the debug tutor shortcut finalizer."""
         self.debug_tutor_shortcut_finalizer = finalizer
 
@@ -514,7 +514,7 @@ class MainWindow(QMainWindow):
             self.tutor_panel.dismiss_tutor_hint_callback()
         self.trade_panel.clear_trade_preview()
 
-    def _try_apply_tutor_shortcut(self, handler: Optional[Callable[[], object]]) -> bool:
+    def _try_apply_tutor_shortcut(self, handler: Callable[[], object] | None) -> bool:
         """Try to run the active tutor shortcut handler."""
         if handler is None:
             return False
@@ -616,7 +616,7 @@ class MainWindow(QMainWindow):
             self.live_board_source = controller
 
         # Fill in bank labels
-        bank_labels: Dict[Resource, QLabel] = {
+        bank_labels: dict[Resource, QLabel] = {
             res: getattr(self.main_menu, f"bank_{res.name.lower()}_label")
             for res in Resource
         }
@@ -635,13 +635,13 @@ class MainWindow(QMainWindow):
             "army_size": "army_",
             "longest_road": "road_"
         }
-        opponent_prefixes: Dict[PlayerNumber, str] = {
+        opponent_prefixes: dict[PlayerNumber, str] = {
             PlayerNumber.P2: "p2",
             PlayerNumber.P3: "p3",
             PlayerNumber.P4: "p4"
         }
 
-        opponent_labels: Dict[PlayerNumber, Dict[str, QLabel]] = {
+        opponent_labels: dict[PlayerNumber, dict[str, QLabel]] = {
             pn: {
                 stat: getattr(self.main_menu, f"{opponent_prefixes[pn]}_{suffix}label")
                 for stat, suffix in stat_suffixes.items()
@@ -649,7 +649,7 @@ class MainWindow(QMainWindow):
             for pn in opponent_prefixes
         }
 
-        player_labels: Dict[Resource, QLabel] = {
+        player_labels: dict[Resource, QLabel] = {
             res: getattr(self.main_menu, f"{res.name.lower()}_label")
             for res in Resource
         }
@@ -700,7 +700,7 @@ class MainWindow(QMainWindow):
         self.main_menu.action_label.setText("" if player.is_human else f"{player} is thinking")
         self.toggle_main_action_btns(False)
 
-    def display_round_info(self, controller: GameController, player: Player, dice_info: Tuple[int, int, int],
+    def display_round_info(self, controller: GameController, player: Player, dice_info: tuple[int, int, int],
                            played_dev_card: bool = False):
         """Display the main round UI for a player turn."""
         self.hide_demo_next_state_action()
@@ -777,7 +777,7 @@ class MainWindow(QMainWindow):
         self.hide_demo_next_state_action()
         self.tutor_panel.display_tutor_init(player, stage, explanation)
 
-    def display_explanation(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
+    def display_explanation(self, player: Player, dice_info: tuple[int, int, int] | None,
                             explanation: ActionExplanation):
         """Display the tutor explanation for the current move."""
         self.tutor_panel.display_explanation(player, dice_info, explanation)
@@ -793,11 +793,11 @@ class MainWindow(QMainWindow):
         self.trade_panel.display_trade_menu(controller, player, back_action)
 
     def select_player_to_trade(self, controller: GameController, player: Player, selling: ResourceCount,
-                               buying: ResourceCount, willing_players: List[Tuple[Player, ResourceCount | None]]):
+                               buying: ResourceCount, willing_players: list[tuple[Player, ResourceCount | None]]):
         """Display the player-trade selection workflow."""
         self.trade_panel.select_player_to_trade(controller, player, selling, buying, willing_players)
 
-    def display_round_info_ai_start(self, player: Player, dice_info: Optional[Tuple[int, int, int]], msg: str):
+    def display_round_info_ai_start(self, player: Player, dice_info: tuple[int, int, int] | None, msg: str):
         """Display the waiting state while an AI turn begins."""
         self.hide_demo_next_state_action()
         self._clear_debug_tutor_shortcut_context()

@@ -1,5 +1,5 @@
 import math
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING
 
 from ai.actions import Action, ActionType
 from ai.simulation.SimGame import SimGame
@@ -31,12 +31,12 @@ def _generate_candidate_offers(
     R_need: Resource,
     surplus: ResourceCount,
     max_ratio: int = StrategyWeights.MAX_PLAYER_TRADE_GIVE_RATIO,
-) -> List[Action]:
+) -> list[Action]:
     """Generate candidate trade offers to evaluate."""
 
     # Generate simple "fair" exchange ratios (e.g. 1:1, 2:1, ..., up to a cap).
-    fair_ratios: List[Tuple[int, int]] = [(k, 1) for k in range(1, max_ratio + 1)]
-    offers: List[Action] = []
+    fair_ratios: list[tuple[int, int]] = [(k, 1) for k in range(1, max_ratio + 1)]
+    offers: list[Action] = []
 
     # Only consider resources we actually have in surplus and that are not the target resource.
     sellables = [(r, q) for r, q in surplus.items() if q > 0 and r != R_need]
@@ -190,11 +190,11 @@ def propose_trade(
     sim_game: SimGame,
     R_need: Resource,
     surplus: ResourceCount,
-    opponents: List[SimPlayerState],
+    opponents: list[SimPlayerState],
     etw_estimator: "EtwEstimator",
     lambda_leader: float = StrategyWeights.LAMBDA_RISK_LEADER,
     lambda_base: float = StrategyWeights.LAMBDA_RISK_BASE,
-) -> Optional[Action]:
+) -> Action | None:
     """Propose the best trade for the current simulated state."""
     best_offer = None
     best_score = float("inf")
@@ -220,7 +220,7 @@ def propose_trade(
     if not candidates:
         return None
 
-    cheap_pool: List[Tuple[float, SimPlayerState, Action, float]] = []
+    cheap_pool: list[tuple[float, SimPlayerState, Action, float]] = []
 
     for opponent in opponents:
         # Opponent-facing acceptance proxy: what they give vs receive in "roll cost" terms.
@@ -326,7 +326,7 @@ def _opponent_delta_etw_if_accepts(
     return max(0.0, etw_before - etw_after)
 
 
-def _is_close_or_leading(opponent: SimPlayerState, us: SimPlayerState, all_players: List[SimPlayerState],
+def _is_close_or_leading(opponent: SimPlayerState, us: SimPlayerState, all_players: list[SimPlayerState],
                          sim_game: SimGame, etw_estimator) -> bool:
     """Check whether an opponent is close to or ahead of us."""
 
@@ -345,12 +345,12 @@ def _is_close_or_leading(opponent: SimPlayerState, us: SimPlayerState, all_playe
 
 
 def _generate_counter_payments_keep_offer_fixed(
-    rolls_per_unit: Dict[Resource, float],
+    rolls_per_unit: dict[Resource, float],
     selling_to_us: ResourceCount,
     buying_from_us: ResourceCount,
-) -> List[ResourceCount]:
+) -> list[ResourceCount]:
     """Generate counter payments while keeping the requested resources fixed."""
-    counters: List[ResourceCount] = []
+    counters: list[ResourceCount] = []
 
     # Nothing to counter if we were offering nothing.
     if sum(buying_from_us.values()) == 0:
@@ -392,7 +392,7 @@ def _generate_counter_payments_keep_offer_fixed(
                 counters.append(c)
 
     # Deduplicate counters (same multiset of resources).
-    uniq: Dict[Tuple[Tuple[int, int], ...], ResourceCount] = {}
+    uniq: dict[tuple[tuple[int, int], ...], ResourceCount] = {}
     for c in counters:
         key = tuple(sorted((rr.value, qq) for rr, qq in c.items()))
         uniq[key] = c
@@ -402,15 +402,15 @@ def _generate_counter_payments_keep_offer_fixed(
 
 def respond_to_trade_batna(
     player_sim: SimPlayerState,
-    opponent_sim: Optional[SimPlayerState],
+    opponent_sim: SimPlayerState | None,
     sim_game: SimGame,
     etw_estimator,
     selling_to_us: ResourceCount,
     buying_from_us: ResourceCount,
-    opponents: List[SimPlayerState],
+    opponents: list[SimPlayerState],
     lambda_leader: float = StrategyWeights.LAMBDA_RISK_LEADER,
     lambda_base: float = StrategyWeights.LAMBDA_RISK_BASE,
-) -> Tuple[bool, Optional[ResourceCount]]:
+) -> tuple[bool, ResourceCount | None]:
     """Choose the best trade response under the BATNA heuristic."""
 
     # Reject immediately if we can't actually pay our side.
@@ -529,11 +529,11 @@ def select_best_trade_partner(
     etw_estimator,
     selling_orig: ResourceCount,
     buying: ResourceCount,
-    available_players: List[Tuple[SimPlayerState, Optional[ResourceCount]]],
+    available_players: list[tuple[SimPlayerState, ResourceCount | None]],
     lambda_leader: float = StrategyWeights.LAMBDA_RISK_LEADER,
     lambda_base: float = StrategyWeights.LAMBDA_RISK_BASE,
     leader_penalty: float = StrategyWeights.TRADE_LEADER_PENALTY,
-) -> Optional[Tuple[SimPlayerState, Optional[ResourceCount]]]:
+) -> tuple[SimPlayerState, ResourceCount | None] | None:
     """Choose the best trade partner for the proposed deal."""
     if not available_players:
         return None
@@ -554,7 +554,7 @@ def select_best_trade_partner(
         include_player_trades=False,
     )
 
-    best: Optional[Tuple[SimPlayerState, Optional[ResourceCount]]] = None
+    best: tuple[SimPlayerState, ResourceCount | None] | None = None
     best_score = float("inf")
 
     for opp_sim, counter in available_players:

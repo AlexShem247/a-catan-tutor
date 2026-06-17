@@ -1,5 +1,5 @@
 import re
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any
 
 from PyQt6.QtWidgets import QWidget
 
@@ -15,7 +15,7 @@ class SettingsPanel:
     def __init__(self, window: "MainWindow"):
         self.window = window
 
-    def current_settings_from_ui(self) -> Dict[str, Any]:
+    def current_settings_from_ui(self) -> dict[str, Any]:
         """Read the currently selected settings from the UI."""
         difficulty = "medium"
         if self.window.settings_window.easy_difficulty_radio.isChecked():

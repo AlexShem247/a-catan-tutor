@@ -1,5 +1,4 @@
 from enum import Enum, auto
-from typing import Dict
 
 
 class TutorStage(Enum):
@@ -23,7 +22,7 @@ class TutorStage(Enum):
     ROAD_BUILDING = auto()
 
 
-TUTOR_STAGE_CONTENT: Dict[TutorStage, Dict] = {
+TUTOR_STAGE_CONTENT: dict[TutorStage, dict] = {
     TutorStage.INITIAL_SETTLEMENT: {
         "title": "Opening placement",
         "focus": [

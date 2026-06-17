@@ -1,5 +1,5 @@
 import math
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, cast
 
 from ai.actions import Action, ActionType
 from ai.simulation.SimGame import SimGame
@@ -24,7 +24,7 @@ def sim_game_with_replaced_player(sim_game: SimGame, sim_player: SimPlayerState)
 
 class EtwEvaluation:
 
-    def __init__(self, timing, candidates, eval_stats: Dict[str, int]):
+    def __init__(self, timing, candidates, eval_stats: dict[str, int]):
         self.timing = timing
         self.candidates = candidates
         self._eval_stats = eval_stats
@@ -44,7 +44,7 @@ class EtwEvaluation:
         sim_game: SimGame,
         dev_played: bool,
         include_player_trades: bool = True,
-        max_depth_override: Optional[int] = None,
+        max_depth_override: int | None = None,
         allow_development_cards: bool = True,
         use_planning: bool = True,
     ) -> float:
@@ -118,7 +118,7 @@ class EtwEvaluation:
         sim_game: SimGame,
         dev_played: bool,
         include_player_trades: bool = True,
-        max_depth_override: Optional[int] = None,
+        max_depth_override: int | None = None,
         allow_development_cards: bool = True,
         use_planning: bool = True,
     ) -> float:
@@ -143,7 +143,7 @@ class EtwEvaluation:
             use_planning=use_planning,
         )
 
-    def _simulate_plan_until_win(self, sim_game: SimGame, player: SimPlayerState, actions: List[Action]) -> None:
+    def _simulate_plan_until_win(self, sim_game: SimGame, player: SimPlayerState, actions: list[Action]) -> None:
         """Simulate the plan until win."""
         for step in actions:
             self._simulate_step(sim_game, player, step)
@@ -155,7 +155,7 @@ class EtwEvaluation:
         self._simulate_step(sim_game, player, step)
 
     @staticmethod
-    def _plan_resource_cost(actions: List[Action]) -> ResourceCount:
+    def _plan_resource_cost(actions: list[Action]) -> ResourceCount:
         """Handle plan resource cost."""
         total_resources: ResourceCount = {resource: 0 for resource in Resource}
         for action in actions:
@@ -164,25 +164,25 @@ class EtwEvaluation:
                 total_resources[resource] = total_resources.get(resource, 0) + cost
         return total_resources
 
-    def _plan_waiting_resources(self, player: SimPlayerState, actions: List[Action]) -> ResourceCount:
+    def _plan_waiting_resources(self, player: SimPlayerState, actions: list[Action]) -> ResourceCount:
         """Handle plan waiting resources."""
         total_resources = self._plan_resource_cost(actions)
         deficits, _ = self.timing.calculate_deficits_and_excesses(player.resources, total_resources)
         return {resource: amount for resource, amount in deficits.items() if amount > 0}
 
-    def _next_step_waiting_resources(self, player: SimPlayerState, actions: List[Action]) -> ResourceCount:
+    def _next_step_waiting_resources(self, player: SimPlayerState, actions: list[Action]) -> ResourceCount:
         """Handle next step waiting resources."""
         if not actions:
             return {}
         return self._plan_waiting_resources(player, [actions[0]])
 
-    def _future_plan_fields(self, player: SimPlayerState, actions: List[Action]) -> Tuple[List[Action], ResourceCount]:
+    def _future_plan_fields(self, player: SimPlayerState, actions: list[Action]) -> tuple[list[Action], ResourceCount]:
         """Handle future plan fields."""
         if not actions:
             return [], {}
         return list(actions), self._next_step_waiting_resources(player, actions)
 
-    def future_plan_fields(self, player: SimPlayerState, actions: List[Action]) -> Tuple[List[Action], ResourceCount]:
+    def future_plan_fields(self, player: SimPlayerState, actions: list[Action]) -> tuple[list[Action], ResourceCount]:
         """Handle future plan fields."""
         return self._future_plan_fields(player, actions)
 
@@ -191,7 +191,7 @@ class EtwEvaluation:
         player: SimPlayerState,
         sim_game: SimGame,
         etw_before: float,
-        deferred_candidate: Optional[CandidateExplanation] = None,
+        deferred_candidate: CandidateExplanation | None = None,
         include_player_trades: bool = True,
         allow_development_cards: bool = True,
         use_planning: bool = True,
@@ -199,7 +199,7 @@ class EtwEvaluation:
     ) -> CandidateExplanation:
         """Build the end turn candidate."""
         player_after_wait = player.copy()
-        expected_resources = cast(Dict[Resource, float], player_after_wait.resources)
+        expected_resources = cast(dict[Resource, float], player_after_wait.resources)
         for resource in Resource:
             expected_resources[resource] = expected_resources.get(resource, 0.0) + player.get_production_rate(resource)
 
@@ -221,16 +221,16 @@ class EtwEvaluation:
             use_time_discount,
         )
 
-        next_plan: List[Action] = []
+        next_plan: list[Action] = []
         waiting_resources: ResourceCount = {}
-        reasons_for: List[Reason] = [
+        reasons_for: list[Reason] = [
             Reason(
                 type=ReasonType.HEURISTIC_CHOICE,
                 label=ReasonLabel.NO_IMMEDIATE_ACTION,
                 value=max(0.0, utility_self),
             )
         ]
-        reasons_against: List[Reason] = []
+        reasons_against: list[Reason] = []
         if deferred_candidate is not None:
             next_plan = list(deferred_candidate.next_plan or deferred_candidate.full_plan)
             waiting_resources = dict(deferred_candidate.waiting_resources
@@ -266,7 +266,7 @@ class EtwEvaluation:
         player: SimPlayerState,
         sim_game: SimGame,
         etw_before: float,
-        deferred_candidate: Optional[CandidateExplanation] = None,
+        deferred_candidate: CandidateExplanation | None = None,
         include_player_trades: bool = True,
         allow_development_cards: bool = True,
         use_planning: bool = True,
@@ -285,7 +285,7 @@ class EtwEvaluation:
         )
 
     @staticmethod
-    def _quick_reason_label(next_step: Action, final_step: Action) -> Tuple[ReasonLabel, Dict[str, Any]]:
+    def _quick_reason_label(next_step: Action, final_step: Action) -> tuple[ReasonLabel, dict[str, Any]]:
         """Handle quick reason label."""
         if next_step.type in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER) and final_step != next_step:
             if final_step.type == ActionType.BUILD:
@@ -312,7 +312,7 @@ class EtwEvaluation:
         return ReasonLabel.QUICK_GENERIC, {}
 
     @staticmethod
-    def _leading_opponent_etw(opponents_etw_before: Dict[PlayerNumber, float]) -> Optional[Tuple[PlayerNumber, float]]:
+    def _leading_opponent_etw(opponents_etw_before: dict[PlayerNumber, float]) -> tuple[PlayerNumber, float] | None:
         """Handle leading opponent etw."""
         if not opponents_etw_before:
             return None
@@ -324,16 +324,16 @@ class EtwEvaluation:
         player: SimPlayerState,
         sim_game: SimGame,
         dev_played: bool,
-        actions: List[Action],
+        actions: list[Action],
         etb: float,
         vp_inc: float,
         etw_before: float,
-        opponents_etw_before: Dict[PlayerNumber, float],
+        opponents_etw_before: dict[PlayerNumber, float],
         include_player_trades: bool = True,
         allow_development_cards: bool = True,
         use_planning: bool = True,
         use_time_discount: bool = True,
-    ) -> Optional[CandidateExplanation]:
+    ) -> CandidateExplanation | None:
         """Evaluate the action plan."""
         if etb > MAX_ETB_THRESHOLD or not actions:
             return None
@@ -415,10 +415,10 @@ class EtwEvaluation:
             use_time_discount,
         )
 
-        reasons_for: List[Reason] = []
-        reasons_against: List[Reason] = []
+        reasons_for: list[Reason] = []
+        reasons_against: list[Reason] = []
         final_step = actions[-1]
-        metadata: Dict[str, Any] = {
+        metadata: dict[str, Any] = {
             "blocks_opponent": blocks_opponent,
             "improves_longest_road": improves_longest_road,
             "improves_largest_army": improves_largest_army,
@@ -575,16 +575,16 @@ class EtwEvaluation:
         player: SimPlayerState,
         sim_game: SimGame,
         dev_played: bool,
-        actions: List[Action],
+        actions: list[Action],
         etb: float,
         vp_inc: float,
         etw_before: float,
-        opponents_etw_before: Dict[PlayerNumber, float],
+        opponents_etw_before: dict[PlayerNumber, float],
         include_player_trades: bool = True,
         allow_development_cards: bool = True,
         use_planning: bool = True,
         use_time_discount: bool = True,
-    ) -> Optional[CandidateExplanation]:
+    ) -> CandidateExplanation | None:
         """Evaluate the action plan."""
         return self._evaluate_action_plan(
             player,
@@ -606,17 +606,17 @@ class EtwEvaluation:
         player: SimPlayerState,
         sim_game: SimGame,
         dev_played: bool,
-        candidates: List[Tuple[List[Action], float, float]],
+        candidates: list[tuple[list[Action], float, float]],
         etw_before: float,
-        opponents_etw_before: Dict[PlayerNumber, float],
+        opponents_etw_before: dict[PlayerNumber, float],
         include_player_trades: bool = True,
         allow_development_cards: bool = True,
         use_planning: bool = True,
         use_time_discount: bool = True,
-    ) -> List[Tuple[Action, float]]:
+    ) -> list[tuple[Action, float]]:
         """Evaluate the utilities."""
         self._eval_stats["evaluations"] += 1
-        utilities: List[Tuple[Action, float]] = []
+        utilities: list[tuple[Action, float]] = []
         candidates.sort(key=lambda candidate_item: candidate_item[1])
         max_eval = min(MAX_EVALUATIONS, len(candidates))
         leader_etw = self._leading_opponent_etw(opponents_etw_before)
@@ -711,16 +711,16 @@ class EtwEvaluation:
         player: SimPlayerState,
         sim_game: SimGame,
         dev_played: bool,
-        candidates: List[Tuple[List[Action], float, float]],
+        candidates: list[tuple[list[Action], float, float]],
         etw_before: float,
-        opponents_etw_before: Dict[PlayerNumber, float],
+        opponents_etw_before: dict[PlayerNumber, float],
         include_player_trades: bool = True,
         allow_development_cards: bool = True,
         use_planning: bool = True,
         use_time_discount: bool = True,
-    ) -> List[CandidateExplanation]:
+    ) -> list[CandidateExplanation]:
         """Evaluate the candidates with explanations."""
-        explained: List[CandidateExplanation] = []
+        explained: list[CandidateExplanation] = []
         candidates.sort(key=lambda candidate_item: candidate_item[1])
         max_eval = min(MAX_EVALUATIONS, len(candidates))
         for action_plan, etb, vp_inc in candidates[:max_eval]:

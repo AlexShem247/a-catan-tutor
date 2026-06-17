@@ -1,5 +1,4 @@
 from random import Random
-from typing import Dict, List, Optional, Tuple
 
 from ai.actions import Action, ActionType
 from ai.RandomAI import RandomAI
@@ -29,21 +28,21 @@ class RobberPolicy:
         self._planner_kwargs = planner_kwargs
 
     def select_robber_target(self, player: Player, game: Game,
-                             valid_hexes: List[HexTile]) -> Tuple[HexTile, Optional[Player]]:
+                             valid_hexes: list[HexTile]) -> tuple[HexTile, Player | None]:
         """Select the robber target hex and victim."""
         tile, steal_from, _ = self.select_robber_target_with_explanation(player, game, valid_hexes)
         return tile, steal_from
 
     def select_robber_target_with_explanation(
             self, player: Player, game: Game,
-            valid_hexes: List[HexTile]) -> Tuple[HexTile, Optional[Player], Optional[ActionExplanation]]:
+            valid_hexes: list[HexTile]) -> tuple[HexTile, Player | None, ActionExplanation | None]:
         """Select the robber target with explanation."""
         if not self._use_strategic_move():
             tile, steal_from = self.random_ai.select_robber_target(player, game, valid_hexes)
             return tile, steal_from, self.explain_robber_choice(player, game, valid_hexes, tile, steal_from)
 
         best_score = float("-inf")
-        best_hex: Optional[HexTile] = None
+        best_hex: HexTile | None = None
         our_resource_tiles = {h for v in (player.settlements + player.cities) for h in v.hexes}
 
         if not self.decision_config.use_opponent_interference:
@@ -66,7 +65,7 @@ class RobberPolicy:
         best_opp_vp = max(opp_vps, default=0)
         diversion_boost = StrategyWeights.DIVERSION_BOOST if our_vp >= best_opp_vp else 1.0
 
-        opponent_importance: Dict[PlayerNumber, Dict[Resource, float]] = {}
+        opponent_importance: dict[PlayerNumber, dict[Resource, float]] = {}
         for opponent in game.players:
             if opponent == player:
                 continue
@@ -136,8 +135,8 @@ class RobberPolicy:
         )
         return best_hex, best_player, explanation
 
-    def explain_robber_choice(self, player: Player, game: Game, _valid_hexes: List[HexTile], chosen_hex: HexTile,
-                              chosen_player: Optional[Player]) -> ActionExplanation:
+    def explain_robber_choice(self, player: Player, game: Game, _valid_hexes: list[HexTile], chosen_hex: HexTile,
+                              chosen_player: Player | None) -> ActionExplanation:
         """Handle explain robber choice."""
         our_resource_tiles = {h for v in (player.settlements + player.cities) for h in v.hexes}
         if not self.decision_config.use_opponent_interference:
@@ -154,7 +153,7 @@ class RobberPolicy:
         best_opp_vp = max(opp_vps, default=0)
         diversion_boost = StrategyWeights.DIVERSION_BOOST if our_vp >= best_opp_vp else 1.0
 
-        opponent_importance: Dict[PlayerNumber, Dict[Resource, float]] = {}
+        opponent_importance: dict[PlayerNumber, dict[Resource, float]] = {}
         for opponent in game.players:
             if opponent == player:
                 continue
@@ -205,10 +204,10 @@ class RobberPolicy:
             leader_vp_ratio,
         )
 
-    def _build_robber_explanation(self, hex_tile: HexTile, target_player: Optional[Player], best_score: float,
+    def _build_robber_explanation(self, hex_tile: HexTile, target_player: Player | None, best_score: float,
                                   blocks_own_hex: bool, self_harm: float, leader_vp_ratio: float) -> ActionExplanation:
         """Build the robber explanation."""
-        reasons_for: List[Reason] = []
+        reasons_for: list[Reason] = []
         if best_score > float("-inf"):
             reasons_for.append(
                 Reason(

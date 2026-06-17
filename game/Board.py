@@ -1,6 +1,5 @@
 from collections import defaultdict
 from random import Random
-from typing import Dict, List, Optional, Set, Tuple
 
 from game.Edge import Edge, EdgeDirection
 from game.HexTile import HexTile, HexType
@@ -17,7 +16,7 @@ PORT_TYPES = [
 
 class Board:
     # Catan tile coordinates for 3-4-5-4-3 layout
-    HEX_COORDS: List[Tuple[int, int]] = [(0, 0), (1, 0), (2, 0), (-1, 1), (0, 1), (1, 1), (2, 1), (-2, 2), (-1, 2),
+    HEX_COORDS: list[tuple[int, int]] = [(0, 0), (1, 0), (2, 0), (-1, 1), (0, 1), (1, 1), (2, 1), (-2, 2), (-1, 2),
                                          (0, 2), (1, 2), (2, 2), (-2, 3), (-1, 3), (0, 3), (1, 3), (-2, 4), (-1, 4),
                                          (0, 4)]
     MIN_R: int = 0
@@ -25,14 +24,14 @@ class Board:
 
     def __init__(self, rng: Random):
         self.rng = rng
-        self.hexes: List[HexTile] = []
-        self.vertices: List[Vertex] = []
-        self.edges: List[Edge] = []
-        self.port_vertices: List[Tuple[Port, Vertex, Vertex]] = []
-        self.hex_map: Dict[Tuple[int, int], HexTile] = {}
-        self.production_to_hex: Dict[int, List[HexTile]] = defaultdict(list)
-        self.vertex_map: Dict[Tuple[int, int, VertexDirection], Vertex] = {}
-        self.edge_map: Dict[Tuple[int, int, EdgeDirection], Edge] = {}
+        self.hexes: list[HexTile] = []
+        self.vertices: list[Vertex] = []
+        self.edges: list[Edge] = []
+        self.port_vertices: list[tuple[Port, Vertex, Vertex]] = []
+        self.hex_map: dict[tuple[int, int], HexTile] = {}
+        self.production_to_hex: dict[int, list[HexTile]] = defaultdict(list)
+        self.vertex_map: dict[tuple[int, int, VertexDirection], Vertex] = {}
+        self.edge_map: dict[tuple[int, int, EdgeDirection], Edge] = {}
         self.robber_position: HexTile = HexTile(0, 0, HexType.DESERT)
 
         self.create_hexes()
@@ -42,7 +41,7 @@ class Board:
 
     def create_hexes(self) -> None:
         """Create and assign the board hex tiles."""
-        hex_types_sequence: List[HexType] = [
+        hex_types_sequence: list[HexType] = [
             HexType.FOREST, HexType.FOREST, HexType.FOREST, HexType.FOREST, HexType.HILLS, HexType.HILLS, HexType.HILLS,
             HexType.PASTURE, HexType.PASTURE, HexType.PASTURE, HexType.PASTURE, HexType.FIELDS, HexType.FIELDS,
             HexType.FIELDS, HexType.FIELDS, HexType.MOUNTAINS, HexType.MOUNTAINS, HexType.MOUNTAINS, HexType.DESERT
@@ -51,12 +50,12 @@ class Board:
         self.rng.shuffle(hex_types_sequence)
         numbers = PRODUCTION_NUMBERS.copy()
 
-        def get_adjacent_coords(q_val: int, r_val: int) -> List[Tuple[int, int]]:
+        def get_adjacent_coords(q_val: int, r_val: int) -> list[tuple[int, int]]:
             """Return axial coordinates of hexes adjacent to (q,r)."""
             directions = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]
             return [(q_val + dq, r_val + dr) for dq, dr in directions]
 
-        def assign_number(q_val: int, r_val: int, available: List[int]) -> Optional[int]:
+        def assign_number(q_val: int, r_val: int, available: list[int]) -> int | None:
             # Assign numbers with constraint that 6/8 are not adjacent
             self.rng.shuffle(available)
             for number in available:
@@ -74,7 +73,7 @@ class Board:
 
         for i, (q, r) in enumerate(self.HEX_COORDS):
             hex_type = hex_types_sequence[i]
-            production_number: Optional[int] = None
+            production_number: int | None = None
             if hex_type != HexType.DESERT:
                 num = assign_number(q, r, numbers)
                 if num is None:
@@ -97,10 +96,10 @@ class Board:
 
     def create_vertices(self) -> None:
         """Create the board vertices and attach them to hexes."""
-        vertex_map: Dict[Tuple[Tuple[int, int], ...], Vertex] = {}
+        vertex_map: dict[tuple[tuple[int, int], ...], Vertex] = {}
 
         # Axial offsets for corners of a pointy-top hex
-        corner_offsets: List[List[Tuple[int, int]]] = [
+        corner_offsets: list[list[tuple[int, int]]] = [
             [(0, 0), (1, -1), (0, -1)],  # top
             [(0, 0), (1, 0), (1, -1)],  # top-right
             [(0, 0), (0, 1), (1, 0)],  # bottom-right
@@ -111,7 +110,7 @@ class Board:
 
         for hex_tile in self.hexes:
             for idx, corner in enumerate(corner_offsets):
-                key: Tuple[Tuple[int, int],
+                key: tuple[tuple[int, int],
                            ...] = tuple(sorted([(hex_tile.q + dq, hex_tile.r + dr) for dq, dr in corner]))
                 if key not in vertex_map:
                     vertex = Vertex((hex_tile.q, hex_tile.r, VertexDirection(idx)))
@@ -128,7 +127,7 @@ class Board:
 
     def create_edges(self) -> None:
         """Create the board edges and connect them to vertices."""
-        edge_map: Dict[Tuple[int, int], Edge] = {}
+        edge_map: dict[tuple[int, int], Edge] = {}
 
         for hex_tile in self.hexes:
             verts = hex_tile.vertices
@@ -136,7 +135,7 @@ class Board:
             for i in range(n):
                 v1 = verts[i]
                 v2 = verts[(i + 1) % n]  # Next vertex clockwise
-                key: Tuple[int, int] = (min(id(v1), id(v2)), max(id(v1), id(v2)))
+                key: tuple[int, int] = (min(id(v1), id(v2)), max(id(v1), id(v2)))
 
                 if key not in edge_map:
                     edge = Edge(v1, v2, (hex_tile.q, hex_tile.r, EdgeDirection(i)))
@@ -190,7 +189,7 @@ class Board:
 
     def assign_neighbors(self) -> None:
         """Link neighboring vertices across the board."""
-        directions: List[Tuple[int, int]] = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]
+        directions: list[tuple[int, int]] = [(1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1)]
         for hex_tile in self.hexes:
             for dq, dr in directions:
                 neighbor = self.hex_map.get((hex_tile.q + dq, hex_tile.r + dr))
@@ -214,7 +213,7 @@ class Board:
         player.add_road(edge)
 
     @staticmethod
-    def calculate_longest_road_length(roads: List[Edge]) -> int:
+    def calculate_longest_road_length(roads: list[Edge]) -> int:
         """Calculate the longest connected road length."""
         if not roads:
             return 0
@@ -239,7 +238,7 @@ class Board:
         return max_length
 
     @staticmethod
-    def _dfs_longest_path(current_road: Edge, current_vertex: Vertex, road_graph: Dict, visited_roads: Set) -> int:
+    def _dfs_longest_path(current_road: Edge, current_vertex: Vertex, road_graph: dict, visited_roads: set) -> int:
         """Explore road paths to find the longest valid route."""
         visited_roads.add(current_road)
         max_length = 1  # Current road counts as 1
@@ -268,7 +267,7 @@ class Board:
         # If vertex has a building owned by another player, it blocks the path
         return vertex.owner is not None and vertex.owner != player
 
-    def _get_water_edges(self) -> List[Edge]:
+    def _get_water_edges(self) -> list[Edge]:
         """Return the water-facing edges on the board perimeter."""
         WIDTH = 6  # Edges in a hexagon
         directions = [
@@ -277,7 +276,7 @@ class Board:
         ]
 
         # Get all hexes grouped by row
-        rows: Dict[int, List[Tuple[int, int]]] = defaultdict(list)
+        rows: dict[int, list[tuple[int, int]]] = defaultdict(list)
         for x, y in self.hex_map.keys():
             rows[int(y)].append((int(x), int(y)))
         hexes = [sorted(rows[y], key=lambda t: t[0]) for y in sorted(rows)]

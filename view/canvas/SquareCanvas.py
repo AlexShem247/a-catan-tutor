@@ -1,5 +1,4 @@
 import math
-from typing import Dict, List, Tuple
 
 from PyQt6.QtCore import QPointF, QRect, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QCursor, QFontMetrics, QPainter, QPixmap
@@ -47,11 +46,11 @@ class SquareCanvas(QWidget):
 
         # List of shapes
         self.shapes = []
-        self.interactive_shapes: List[InteractiveShape] = []
-        self.planned_builds: List[Tuple] = []
-        self.planned_overlay_shapes: List[InteractiveShape] = []
-        self.feedback_builds: List[Tuple] = []
-        self.feedback_overlay_shapes: List = []
+        self.interactive_shapes: list[InteractiveShape] = []
+        self.planned_builds: list[tuple] = []
+        self.planned_overlay_shapes: list[InteractiveShape] = []
+        self.feedback_builds: list[tuple] = []
+        self.feedback_overlay_shapes: list = []
         self.hovered_shape: InteractiveShape | None = None
         self.disable_interactivity = True
 
@@ -61,7 +60,7 @@ class SquareCanvas(QWidget):
         self.anim_timer.start(CANVAS_ANIMATION_INTERVAL_MS)
 
         # Load icons
-        self.icons: Dict[str, QPixmap] = {}
+        self.icons: dict[str, QPixmap] = {}
         for hex_type in HexType:
             filepath = hex_to_filepath(hex_type)
             self.icons[filepath] = QPixmap(filepath)
@@ -349,7 +348,7 @@ class SquareCanvas(QWidget):
             self.interactive_shapes.append(shape)
             self.add_shape(shape)
 
-    def draw_selectable_edges(self, edges: List[Edge]):
+    def draw_selectable_edges(self, edges: list[Edge]):
         """Draw selectable edges on the board."""
         self.interactive_shapes.clear()
         cx, cy = self.get_world_centre()
@@ -369,7 +368,7 @@ class SquareCanvas(QWidget):
             self.interactive_shapes.append(shape)
             self.add_shape(shape)
 
-    def draw_selectable_tiles(self, tiles: List[HexTile]):
+    def draw_selectable_tiles(self, tiles: list[HexTile]):
         """Draw selectable tiles on the board."""
         cx, cy = self.get_world_centre()
 
@@ -381,7 +380,7 @@ class SquareCanvas(QWidget):
             self.interactive_shapes.append(shape)
             self.add_shape(shape)
 
-    def draw_buildables(self, buildables: Dict):
+    def draw_buildables(self, buildables: dict):
         """Draw the currently buildable board options."""
         # Clear interactive shapes
         self.shapes = [s for s in self.shapes if not isinstance(s, InteractiveShape)]
@@ -396,7 +395,7 @@ class SquareCanvas(QWidget):
         self.draw_selectable_vertices(buildable_vertices)
         self.interactive_shapes.extend(interactive_shapes)
 
-    def get_world_centre(self) -> Tuple[int, int]:
+    def get_world_centre(self) -> tuple[int, int]:
         """Return the board world centre point."""
         return int(self.world_size * 0.5), int(self.world_size * (21 / 40))
 
@@ -429,21 +428,21 @@ class SquareCanvas(QWidget):
             TextShape(w * 0.5, h * 0.55, "Your AI guide to smart moves and strategic insights in Catan.",
                       TITLE_COLOR.lighter(150), 20, bold=True))
 
-    def render_planned_builds(self, builds: List[Tuple]):
+    def render_planned_builds(self, builds: list[tuple]):
         """Render the planned build overlays."""
         self.planned_builds = builds.copy()
         self.shapes = [shape for shape in self.shapes if shape not in self.planned_overlay_shapes]
         self.planned_overlay_shapes = []
         self._draw_planned_builds(self.planned_builds)
 
-    def render_feedback_builds(self, builds: List[Tuple]):
+    def render_feedback_builds(self, builds: list[tuple]):
         """Render the feedback build overlays."""
         self.feedback_builds = builds.copy()
         self.shapes = [shape for shape in self.shapes if shape not in self.feedback_overlay_shapes]
         self.feedback_overlay_shapes = []
         self._draw_feedback_builds(self.feedback_builds)
 
-    def _draw_planned_builds(self, builds: List[Tuple]):
+    def _draw_planned_builds(self, builds: list[tuple]):
         """Draw the planned build overlay shapes."""
         cx, cy = self.get_world_centre()
 
@@ -496,7 +495,7 @@ class SquareCanvas(QWidget):
                 self.planned_overlay_shapes.append(robber_overlay)
                 self.add_shape(robber_overlay)
 
-    def _draw_feedback_builds(self, builds: List[Tuple]):
+    def _draw_feedback_builds(self, builds: list[tuple]):
         """Draw the feedback build overlay shapes."""
         cx, cy = self.get_world_centre()
 

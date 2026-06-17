@@ -1,5 +1,4 @@
 from abc import ABC
-from typing import Optional, Tuple
 
 from ai.actions import Action, ActionType, Phase
 from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
@@ -11,7 +10,7 @@ from view.canvas.display_utils import resource_dict_to_str
 
 class TurnController(ControllerSupport, ABC):
 
-    def _run_main_turn_loop(self, player: Player, dice_info: Tuple[int, int, int], played_dev_card: bool) -> None:
+    def _run_main_turn_loop(self, player: Player, dice_info: tuple[int, int, int], played_dev_card: bool) -> None:
         """Run the main-turn action loop after dice resolution."""
         d1, d2, total = dice_info
 
@@ -160,7 +159,7 @@ class TurnController(ControllerSupport, ABC):
         player: Player,
         phase: Phase,
         dev_played: bool,
-        dice_info: Optional[Tuple[int, int, int]] = None,
+        dice_info: tuple[int, int, int] | None = None,
     ) -> Action:
         """Get the next AI action for the current phase."""
         if self._is_guided_turn(player) and isinstance(player.policy, RuleBasedAI):
@@ -191,7 +190,7 @@ class TurnController(ControllerSupport, ABC):
 
             return GameControllerModule.MAX_AI_ACTION_REQUESTS_PER_TURN
 
-        def next_ai_action(phase: Phase, dev_played: bool, dice_info: Optional[Tuple[int, int, int]] = None) -> Action:
+        def next_ai_action(phase: Phase, dev_played: bool, dice_info: tuple[int, int, int] | None = None) -> Action:
             nonlocal ai_action_requests
             ai_action_requests += 1
             if ai_action_requests > ai_action_request_limit():

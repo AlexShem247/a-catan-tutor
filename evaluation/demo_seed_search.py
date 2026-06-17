@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import csv
 import json
@@ -6,7 +8,7 @@ import sys
 from copy import deepcopy
 from pathlib import Path
 from random import SystemRandom
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Sequence
 
 from ai.actions import Action, ActionType, Phase
 from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
@@ -33,12 +35,12 @@ RESOURCE_ORDER = [
 ]
 
 
-def resource_dict_to_plain_dict(resources: Optional[ResourceCount]) -> Dict[str, int]:
+def resource_dict_to_plain_dict(resources: ResourceCount | None) -> dict[str, int]:
     resources = resources or {}
     return {resource.name.lower(): int(resources.get(resource, 0)) for resource in RESOURCE_ORDER}
 
 
-def resource_dict_to_text(resources: Optional[ResourceCount]) -> str:
+def resource_dict_to_text(resources: ResourceCount | None) -> str:
     resources = resources or {}
     parts = []
     for resource in RESOURCE_ORDER:
@@ -48,21 +50,21 @@ def resource_dict_to_text(resources: Optional[ResourceCount]) -> str:
     return ", ".join(parts) if parts else "none"
 
 
-def vertex_to_id(vertex: Optional[Vertex]) -> Optional[str]:
+def vertex_to_id(vertex: Vertex | None) -> str | None:
     if vertex is None:
         return None
     q, r, direction = vertex.pos
     return f"vertex:q{q}:r{r}:{direction.name}"
 
 
-def edge_to_id(edge: Optional[Edge]) -> Optional[str]:
+def edge_to_id(edge: Edge | None) -> str | None:
     if edge is None:
         return None
     q, r, direction = edge.pos
     return f"edge:q{q}:r{r}:{direction.name}"
 
 
-def hex_to_id(hex_tile: Optional[HexTile]) -> Optional[str]:
+def hex_to_id(hex_tile: HexTile | None) -> str | None:
     if hex_tile is None:
         return None
     return (
@@ -102,7 +104,7 @@ def serialise_choice(choice: Any) -> Any:
     return choice
 
 
-def action_to_text(action: Action, explanation: Optional[ActionExplanation] = None) -> str:
+def action_to_text(action: Action, explanation: ActionExplanation | None = None) -> str:
     if explanation is not None:
         return strip_html(explanation.describe_action(action, short=False))
 
@@ -125,7 +127,7 @@ def action_to_text(action: Action, explanation: Optional[ActionExplanation] = No
     return action.type.name
 
 
-def explanation_text(explanation: Optional[ActionExplanation]) -> Tuple[str, bool]:
+def explanation_text(explanation: ActionExplanation | None) -> tuple[str, bool]:
     if explanation is None:
         return "", False
     concise, _ = explanation.generate_text_concise()
@@ -142,8 +144,8 @@ class DemoRecorder:
     def __init__(self, seed: int, output_dir: Path):
         self.seed = seed
         self.output_dir = output_dir
-        self.rows: List[Dict[str, Any]] = []
-        self.summary_lines: List[str] = []
+        self.rows: list[dict[str, Any]] = []
+        self.summary_lines: list[str] = []
         self._decision_index = 0
 
     def record_decision(
@@ -153,8 +155,8 @@ class DemoRecorder:
             game_phase: str,
             legal_actions: Any,
             recommended_action: Any,
-            explanation: Optional[ActionExplanation],
-            dice_roll: Optional[int] = None,
+            explanation: ActionExplanation | None,
+            dice_roll: int | None = None,
     ) -> None:
         self._decision_index += 1
         concise_text, has_detail = explanation_text(explanation)
@@ -186,9 +188,9 @@ class DemoRecorder:
             self,
             game_phase: str,
             recommended_action: Any,
-            explanation: Optional[ActionExplanation],
-    ) -> List[str]:
-        tags: List[str] = []
+            explanation: ActionExplanation | None,
+    ) -> list[str]:
+        tags: list[str] = []
         if game_phase in {"INITIAL_SETTLEMENT", "INITIAL_ROAD"}:
             tags.append("OPENING_PLACEMENT")
         if game_phase == "DISCARD":
@@ -213,7 +215,7 @@ class DemoRecorder:
             controller: "DemoSeedController",
             tag: str,
             recommended_action: Any,
-            explanation: Optional[ActionExplanation],
+            explanation: ActionExplanation | None,
     ) -> str:
         turn_number = controller.get_game_state().round_num
         if tag == "DISCARD":
@@ -260,11 +262,11 @@ class DemoRecorder:
 class AutoTutorDemoView(HeadlessView):
     def __init__(self, recorder: DemoRecorder):
         self.recorder = recorder
-        self.controller: Optional["DemoSeedController"] = None
-        self._debug_tutor_shortcut_handler: Optional[Callable[[], Any]] = None
-        self._latest_stage: Optional[TutorStage] = None
-        self._latest_explanation: Optional[ActionExplanation] = None
-        self._latest_player: Optional[Player] = None
+        self.controller: DemoSeedController | None = None
+        self._debug_tutor_shortcut_handler: Callable[[], Any] | None = None
+        self._latest_stage: TutorStage | None = None
+        self._latest_explanation: ActionExplanation | None = None
+        self._latest_player: Player | None = None
 
     def set_debug_tutor_shortcut_handler(self, handler):
         self._debug_tutor_shortcut_handler = handler
@@ -277,7 +279,7 @@ class AutoTutorDemoView(HeadlessView):
         self._latest_explanation = explanation
         self._latest_player = player
 
-    def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int],
+    def display_board_turn(self, player: Player, dice_info: tuple[int, int, int],
                            played_dev_card: bool = False) -> Action:
         assert self.controller is not None
         preview_action, explanation = self.controller.preview_tutor_action(player, Phase.MAIN, played_dev_card)
@@ -312,7 +314,7 @@ class AutoTutorDemoView(HeadlessView):
         self._clear_latest()
         return chosen
 
-    def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False) -> Vertex:
+    def draw_selectable_vertices(self, vertices: list[Vertex], disable_interactivity: bool = False) -> Vertex:
         assert self.controller is not None
         if disable_interactivity:
             return vertices[0]
@@ -330,7 +332,7 @@ class AutoTutorDemoView(HeadlessView):
         self._clear_latest()
         return choice
 
-    def draw_selectable_edges(self, edges: List[Edge], disable_interactivity: bool = False) -> Edge:
+    def draw_selectable_edges(self, edges: list[Edge], disable_interactivity: bool = False) -> Edge:
         assert self.controller is not None
         if disable_interactivity:
             return edges[0]
@@ -353,7 +355,7 @@ class AutoTutorDemoView(HeadlessView):
         self._clear_latest()
         return choice
 
-    def draw_selectable_tiles(self, tiles: List[HexTile]) -> HexTile:
+    def draw_selectable_tiles(self, tiles: list[HexTile]) -> HexTile:
         assert self.controller is not None
         choice = self._call_debug_handler(tiles[0])
         self.recorder.record_decision(
@@ -369,7 +371,7 @@ class AutoTutorDemoView(HeadlessView):
         return choice
 
     def show_resource_chooser(self, player: Player, num_resources: int, title: str,
-                              resource_caps: Optional[ResourceCount] = None) -> ResourceCount:
+                              resource_caps: ResourceCount | None = None) -> ResourceCount:
         assert self.controller is not None
         choice = self._call_debug_handler({})
         stage_name = self._stage_name_for_resource_choice()
@@ -418,8 +420,8 @@ class AutoTutorDemoView(HeadlessView):
             player: Player,
             selling: ResourceCount,
             buying: ResourceCount,
-            willing_players: List[Tuple[Player, Optional[ResourceCount]]],
-    ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+            willing_players: list[tuple[Player, ResourceCount | None]],
+    ) -> tuple[Player, ResourceCount | None] | None:
         assert self.controller is not None
         default = willing_players[0] if willing_players else None
         choice = self._call_debug_handler(default)
@@ -473,15 +475,15 @@ class AutoTutorDemoView(HeadlessView):
 class DemoSeedController(GameController):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.current_human_player: Optional[Player] = None
-        self.current_dice_info: Optional[Tuple[int, int, int]] = None
+        self.current_human_player: Player | None = None
+        self.current_dice_info: tuple[int, int, int] | None = None
 
     def preview_tutor_action(
             self,
             player: Player,
             phase: Phase,
             dev_played: bool,
-    ) -> Tuple[Action, ActionExplanation]:
+    ) -> tuple[Action, ActionExplanation]:
         return self._run_tutor_preview(lambda: self.tutor_ai.next_action_with_explanation(
             player,
             self._game,
@@ -492,11 +494,11 @@ class DemoSeedController(GameController):
     def describe_main_turn_legal_actions(
             self,
             player: Player,
-            explanation: Optional[ActionExplanation],
-    ) -> List[str]:
+            explanation: ActionExplanation | None,
+    ) -> list[str]:
         if explanation is not None:
             candidates = [explanation.chosen_action] + [candidate.action for candidate in explanation.alternatives]
-            deduped: List[str] = []
+            deduped: list[str] = []
             seen = set()
             for action in candidates:
                 label = action_to_text(action, explanation)
@@ -521,7 +523,7 @@ class DemoSeedController(GameController):
         legal_actions.append("Trade options available via tutor candidate set")
         return legal_actions
 
-    def current_dice_total_for_logging(self, game_phase: str) -> Optional[int]:
+    def current_dice_total_for_logging(self, game_phase: str) -> int | None:
         if game_phase in {"INITIAL_SETTLEMENT", "INITIAL_ROAD", "PRE_ROLL"}:
             return None
         if game_phase in {"DISCARD", "ROBBER_PLACEMENT", "ROBBER_STEAL_TARGET"}:
@@ -538,7 +540,7 @@ class DemoSeedController(GameController):
             self.current_human_player = None
             self.current_dice_info = None
 
-    def roll_dice(self, player: Player) -> Tuple[int, int, int, Optional[str]]:
+    def roll_dice(self, player: Player) -> tuple[int, int, int, str | None]:
         self.view.display_board()
         d1, d2, total = self._game.roll_dice()
         self.current_dice_info = (d1, d2, total)

@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Callable, Optional
+from typing import Callable
 
 from ai.actions import ActionType
 from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
@@ -35,7 +35,7 @@ class InitialPlacementController(ControllerSupport, ABC):
                     self.view.display_tutor_init(player, TutorStage.INITIAL_SETTLEMENT, explanation)
                 self.view.display_board(player, "Select a position to build your settlement")
 
-                def select_tutor_initial_settlement() -> Optional[Vertex]:
+                def select_tutor_initial_settlement() -> Vertex | None:
                     return self._run_tutor_decision(
                         lambda: self.tutor_ai.select_initial_settlement_location(player, self._game, vertices))
 
@@ -114,8 +114,8 @@ class InitialPlacementController(ControllerSupport, ABC):
     def get_road_choice(
         self,
         player: Player,
-        settlement: Optional[Vertex] = None,
-        selector: Optional[Callable[[list[Edge]], Optional[Edge]]] = None,
+        settlement: Vertex | None = None,
+        selector: Callable[[list[Edge]], Edge | None] | None = None,
     ) -> Edge:
         """Return the selected road choice for the current flow."""
         edges = self._game.get_available_edges(player)
@@ -127,7 +127,7 @@ class InitialPlacementController(ControllerSupport, ABC):
             selector = lambda candidate_edges: self.tutor_ai.select_initial_road_location(
                 player, self._game, candidate_edges)
 
-        def select_tutor_initial_road() -> Optional[Edge]:
+        def select_tutor_initial_road() -> Edge | None:
             return self._run_tutor_decision(lambda: selector(edges))
 
         self._set_tutor_shortcut_handlers(select_tutor_initial_road)
@@ -138,7 +138,7 @@ class InitialPlacementController(ControllerSupport, ABC):
         self._raise_if_return_home(edge)
         return edge
 
-    def get_road_choice_ai(self, player: Player, settlement: Optional[Vertex] = None) -> Optional[Edge]:
+    def get_road_choice_ai(self, player: Player, settlement: Vertex | None = None) -> Edge | None:
         """Return the AI-selected road choice."""
         if settlement is None:
             available_edges = self._game.get_available_edges(player)

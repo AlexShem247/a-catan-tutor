@@ -1,5 +1,5 @@
 import math
-from typing import TYPE_CHECKING, Callable, Optional, Tuple
+from typing import TYPE_CHECKING, Callable
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QAbstractScrollArea, QHBoxLayout, QPushButton, QWidget
@@ -57,8 +57,8 @@ class TutorPanel:
         self.history_enabled_on_turn = False
         self.history_available_in_mode = False
         self.history_mode_active = False
-        self.restore_tutor_menu_callback: Optional[Callable[[], None]] = None
-        self.dismiss_tutor_hint_callback: Optional[Callable[[], None]] = None
+        self.restore_tutor_menu_callback: Callable[[], None] | None = None
+        self.dismiss_tutor_hint_callback: Callable[[], None] | None = None
 
         self.window.safe_connect(self.widget.previous_feedback_btn, self.show_previous_feedback_history)
 
@@ -90,12 +90,12 @@ class TutorPanel:
         self.history_enabled_on_turn = enabled
         self.update_previous_feedback_button()
 
-    def set_restore_tutor_menu_callback(self, callback: Optional[Callable[[], None]], allow_history: bool) -> None:
+    def set_restore_tutor_menu_callback(self, callback: Callable[[], None] | None, allow_history: bool) -> None:
         """Store the callback used to restore the tutor menu."""
         self.restore_tutor_menu_callback = callback
         self.set_history_enabled(allow_history)
 
-    def set_dismiss_tutor_hint_callback(self, callback: Optional[Callable[[], None]]) -> None:
+    def set_dismiss_tutor_hint_callback(self, callback: Callable[[], None] | None) -> None:
         """Store the callback used to dismiss the active tutor hint."""
         self.dismiss_tutor_hint_callback = callback
 
@@ -267,7 +267,7 @@ class TutorPanel:
         return TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS + (
             (TUTOR_FEEDBACK_MAX_DISPLAY_SECONDS - TUTOR_FEEDBACK_MIN_DISPLAY_SECONDS) * gap)
 
-    def concise_explanation_html(self, explanation: ActionExplanation) -> Tuple[str, str]:
+    def concise_explanation_html(self, explanation: ActionExplanation) -> tuple[str, str]:
         """Build the concise tutor explanation HTML."""
         concise_title, concise_explanation = explanation.generate_text_concise()
         quality_label = explanation.tutor_move_quality_label

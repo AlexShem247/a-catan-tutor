@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import List, Tuple
 
 from game.Board import Board
 from game.Edge import Edge, EdgeDirection
@@ -221,7 +220,7 @@ class DiagonalEdges(Renderable):
 
 
 def display_board(game: Game) -> None:
-    display_array: List[List[Renderable]] = [[Empty() for _ in range(11)] for _ in range(17)]
+    display_array: list[list[Renderable]] = [[Empty() for _ in range(11)] for _ in range(17)]
 
     def init_diagonal(row_i: int, col_i: int, side: str, flipped: bool, owner: Player | None):
         cell = display_array[row_i][col_i]
@@ -240,7 +239,7 @@ def display_board(game: Game) -> None:
             display_array[row][col + 1] = DisplayEdge(game.get_edge(h.q, h.r, EdgeDirection.EAST))
 
             # Places for vertices in display array (dR, dC)
-            vertex_pos: List[Tuple[int, int]] = [(-2, 0), (-1, 1), (1, 1), (2, 0), (1, -1), (-1, -1)]
+            vertex_pos: list[tuple[int, int]] = [(-2, 0), (-1, 1), (1, 1), (2, 0), (1, -1), (-1, -1)]
             for vDir, (dR, dC) in enumerate(vertex_pos):
                 r_idx = row + dR
                 c_idx = col + dC
@@ -325,7 +324,7 @@ def display_resources(resources: ResourceCount, player_resources: ResourceCount 
         first = resources_list[i]
         second = resources_list[i + 1] if i + 1 < len(resources_list) else None
 
-        def format_res(res_tuple: Tuple[Resource, int]):
+        def format_res(res_tuple: tuple[Resource, int]):
             res, amt = res_tuple
             if player_resources:
                 amt = f"{amt}/{player_resources.get(res, 0)}"

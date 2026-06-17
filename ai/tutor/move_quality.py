@@ -1,5 +1,5 @@
 import math
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping
 
 from config.move_quality_constants import (FORCED_CHOICE_BENEFICIAL_QUALITY, FORCED_CHOICE_DEFAULT_QUALITY,
                                            INITIAL_ROAD_FLEXIBLE_QUALITY, LOGISTIC_CLAMP_MAX, LOGISTIC_CLAMP_MIN,
@@ -14,7 +14,7 @@ def _stable_logistic(score: float) -> float:
     return 1.0 / (1.0 + math.exp(-clamped_score))
 
 
-def clamp_move_quality(move_quality: Optional[float]) -> float:
+def clamp_move_quality(move_quality: float | None) -> float:
     """Clamp a move-quality score into the supported range."""
     if move_quality is None:
         return 0.0
@@ -46,8 +46,8 @@ def move_quality_from_ratio(chosen_value: float, max_value: float) -> float:
     return clamp_move_quality(chosen_value / max_value)
 
 
-def move_quality_from_margin(best_value: float, second_value: Optional[float],
-                             worst_value: Optional[float] = None) -> float:
+def move_quality_from_margin(best_value: float, second_value: float | None,
+                             worst_value: float | None = None) -> float:
     """Convert a margin between options into a move-quality value."""
     if second_value is None:
         return 0.0
@@ -107,7 +107,7 @@ def robber_move_quality(opponent_production_blocked: float, steal_value: float, 
 
 
 def discard_move_quality(discard: Mapping[Any, int], current_resources: Mapping[Any, float],
-                         plan_relevance: Optional[Mapping[Any, float]] = None) -> float:
+                         plan_relevance: Mapping[Any, float] | None = None) -> float:
     """Calculate move quality for a discard choice."""
     penalty = 0.0
     total_value = 0.0
@@ -145,8 +145,8 @@ def trade_partner_move_quality(self_gain: float, opponent_gain: float, partner_i
     return clamp_move_quality(q**1.2)
 
 
-def strategic_turn_move_quality(candidate: Any, second_utility: Optional[float] = None,
-                                worst_utility: Optional[float] = None) -> float:
+def strategic_turn_move_quality(candidate: Any, second_utility: float | None = None,
+                                worst_utility: float | None = None) -> float:
     """Calculate move quality for a strategic turn choice."""
     etw_before = max(0.0, float(getattr(candidate, "etw_before", 0.0) or 0.0))
     etw_after = float(getattr(candidate, "etw_after", etw_before) or etw_before)

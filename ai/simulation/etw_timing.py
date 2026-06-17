@@ -1,5 +1,4 @@
 import math
-from typing import Dict, List, Tuple
 
 from ai.actions import Action
 from ai.simulation.board_sim_utils import get_opponents
@@ -61,15 +60,15 @@ class EtwTiming:
     def _calculate_trade_adjusted_rolls(
         self,
         player: SimPlayerState,
-        opponents: List[SimPlayerState],
-        deficits: Dict[Resource, int],
-        excesses: Dict[Resource, int],
-        rolls_per_unit: Dict[Resource, float],
+        opponents: list[SimPlayerState],
+        deficits: dict[Resource, int],
+        excesses: dict[Resource, int],
+        rolls_per_unit: dict[Resource, float],
         bank_trade_ratio_func,
         include_player_trades: bool,
-    ) -> Dict[Resource, float]:
+    ) -> dict[Resource, float]:
         """Handle calculate trade adjusted rolls."""
-        trade_adjusted: Dict[Resource, float] = {}
+        trade_adjusted: dict[Resource, float] = {}
 
         for resource_i in Resource:
             if deficits[resource_i] <= 0:
@@ -109,10 +108,10 @@ class EtwTiming:
         self,
         resource_i: Resource,
         player: SimPlayerState,
-        opponents: List[SimPlayerState],
-        deficits: Dict[Resource, int],
-        excesses: Dict[Resource, int],
-        rolls_per_unit: Dict[Resource, float],
+        opponents: list[SimPlayerState],
+        deficits: dict[Resource, int],
+        excesses: dict[Resource, int],
+        rolls_per_unit: dict[Resource, float],
         bank_trade_ratio_func,
         include_player_trades: bool,
     ) -> float:
@@ -150,8 +149,8 @@ class EtwTiming:
         resource_give: Resource,
         resource_need: Resource,
         player: SimPlayerState,
-        opponents: List[SimPlayerState],
-        rolls_per_unit: Dict[Resource, float],
+        opponents: list[SimPlayerState],
+        rolls_per_unit: dict[Resource, float],
     ) -> int:
         """Handle player trade ratio."""
         give_rolls = rolls_per_unit.get(resource_give, float("inf"))
@@ -175,10 +174,10 @@ class EtwTiming:
     def _calculate_deficits_and_excesses(
         current: ResourceCount,
         target: ResourceCount,
-    ) -> Tuple[Dict[Resource, int], Dict[Resource, int]]:
+    ) -> tuple[dict[Resource, int], dict[Resource, int]]:
         """Handle calculate deficits and excesses."""
-        deficits: Dict[Resource, int] = {}
-        excesses: Dict[Resource, int] = {}
+        deficits: dict[Resource, int] = {}
+        excesses: dict[Resource, int] = {}
         for resource in Resource:
             needed = target.get(resource, 0)
             have = current.get(resource, 0)
@@ -194,11 +193,11 @@ class EtwTiming:
         self,
         current: ResourceCount,
         target: ResourceCount,
-    ) -> Tuple[Dict[Resource, int], Dict[Resource, int]]:
+    ) -> tuple[dict[Resource, int], dict[Resource, int]]:
         """Handle calculate deficits and excesses."""
         return self._calculate_deficits_and_excesses(current, target)
 
-    def calc_etb_actions(self, player: SimPlayerState, sim_game: SimGame, total_actions: List[Action]) -> float:
+    def calc_etb_actions(self, player: SimPlayerState, sim_game: SimGame, total_actions: list[Action]) -> float:
         """Handle calc etb actions."""
         total_resources: ResourceCount = {resource: 0 for resource in Resource}
         for action in total_actions:

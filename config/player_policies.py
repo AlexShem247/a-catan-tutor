@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from ai.BasicAI import BasicAI
 from ai.RandomAI import RandomAI
@@ -12,7 +12,7 @@ from game.Player import PlayerNumber
 @dataclass(frozen=True)
 class PolicyFactory:
     ai_cls: type
-    name: Optional[str] = None
+    name: str | None = None
     kwargs: dict[str, Any] = field(default_factory=dict)
 
     def __call__(self, rng):
@@ -23,7 +23,7 @@ class PolicyFactory:
 
 
 def make_rule_based_policy(name: str, weights: StrategyWeights,
-                           decision_config: Optional[RuleBasedAIDecisionConfig] = None,
+                           decision_config: RuleBasedAIDecisionConfig | None = None,
                            use_difficulty_randomness: bool = False) -> PolicyFactory:
     return PolicyFactory(
         ai_cls=RuleBasedAI,

@@ -1,4 +1,3 @@
-from typing import List, Tuple
 
 from ai.actions import Action, ActionType
 from ai.simulation.SimGame import SimGame
@@ -72,7 +71,7 @@ class EtwCandidateGenerator:
         include_player_trades: bool = True,
         allow_development_cards: bool = True,
         use_planning: bool = True,
-    ) -> List[Tuple[List[Action], float, float]]:
+    ) -> list[tuple[list[Action], float, float]]:
         """Return the candidate actions."""
         cache_key = (
             player.player_number,
@@ -88,7 +87,7 @@ class EtwCandidateGenerator:
         if cache_key in player.candidate_cache:
             return player.candidate_cache[cache_key][:ETW_SIMULATION_MAX_CANDIDATES]
 
-        candidate_actions: List[Tuple[List[Action], float, float]] = []
+        candidate_actions: list[tuple[list[Action], float, float]] = []
 
         if len(player.cities) < Buildable.CITY.max_on_board and player.settlements:
             city_etb = self.timing.estimated_time_to_build(
@@ -136,7 +135,7 @@ class EtwCandidateGenerator:
                         break
 
         if not use_planning:
-            collapsed_candidates: List[Tuple[List[Action], float, float]] = []
+            collapsed_candidates: list[tuple[list[Action], float, float]] = []
             seen_actions: set[str] = set()
             for action_plan, _, _ in candidate_actions:
                 if not action_plan:

@@ -1,4 +1,3 @@
-from typing import List
 
 from ai.actions import Action, ActionType
 from ai.simulation.SimPlayerState import SimPlayerState
@@ -33,7 +32,7 @@ def calc_step_resources(step: Action) -> ResourceCount:
     return total_resources
 
 
-def get_bank_trade_ratio(buildings: List[Vertex], resource: Resource) -> int:
+def get_bank_trade_ratio(buildings: list[Vertex], resource: Resource) -> int:
     """Return the bank trade ratio for a resource."""
 
     # Get all ports the player controls

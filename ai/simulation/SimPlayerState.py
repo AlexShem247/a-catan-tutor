@@ -1,6 +1,6 @@
 from collections import Counter
 from functools import lru_cache
-from typing import TYPE_CHECKING, Dict, List, Tuple
+from typing import TYPE_CHECKING
 
 from game.Board import Board
 from game.Edge import Edge
@@ -46,9 +46,9 @@ class SimPlayerState:
         self.resources: ResourceCount = dict(player.resources)
 
         # Board assets (copy lists, not objects)
-        self.settlements: List[Vertex] = list(player.settlements)
-        self.cities: List[Vertex] = list(player.cities)
-        self.roads: List[Edge] = list(player.roads)
+        self.settlements: list[Vertex] = list(player.settlements)
+        self.cities: list[Vertex] = list(player.cities)
+        self.roads: list[Edge] = list(player.roads)
 
         # Development cards
         if opponent:
@@ -66,10 +66,10 @@ class SimPlayerState:
         self.vp_ev_bonus: float = 0.0
 
         # Caches for performance optimization
-        self.etw_cache: Dict[Tuple, float] = {}
-        self.etb_cache: Dict[Tuple, float] = {}
-        self.candidate_cache: Dict[Tuple, List] = {}
-        self._production_cache: Dict[Resource, float] = {}
+        self.etw_cache: dict[tuple, float] = {}
+        self.etb_cache: dict[tuple, float] = {}
+        self.candidate_cache: dict[tuple, list] = {}
+        self._production_cache: dict[Resource, float] = {}
 
     def copy(self) -> "SimPlayerState":
         """Return a copy of this simulation state."""
@@ -151,7 +151,7 @@ class SimPlayerState:
         # Clear production cache as cities affect production
         self._production_cache.clear()
 
-    def build_road(self, edge: Edge, opponent_road_length: List[int]) -> None:
+    def build_road(self, edge: Edge, opponent_road_length: list[int]) -> None:
         """Build the road."""
         self.roads.append(edge)
         self.longest_road_length = Board.calculate_longest_road_length(self.roads)
@@ -160,7 +160,7 @@ class SimPlayerState:
         if self.longest_road_length >= 5 and self.longest_road_length > opp_best:
             self.has_longest_road = True
 
-    def add_knight(self, opponent_army_size: List[int]) -> None:
+    def add_knight(self, opponent_army_size: list[int]) -> None:
         """Handle add knight."""
         self.army_size += 1
         opp_best = max(opponent_army_size, default=0)

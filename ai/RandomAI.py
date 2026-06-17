@@ -1,5 +1,4 @@
 from random import Random
-from typing import List, Optional, Tuple
 
 from ai.actions import Action, ActionType, Phase
 from ai.AI import AI
@@ -44,8 +43,8 @@ class RandomAI(AI):
         game: "Game",
         selling: ResourceCount,
         buying: ResourceCount,
-        available_players: List[Tuple[Player, Optional[ResourceCount]]],
-    ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+        available_players: list[tuple[Player, ResourceCount | None]],
+    ) -> tuple[Player, ResourceCount | None] | None:
         """Choose the trade partner and offer to pursue."""
         if not available_players:
             return None
@@ -53,12 +52,12 @@ class RandomAI(AI):
         # Pick randomly among valid options
         return self.rng.choice(available_players)
 
-    def select_initial_settlement_location(self, player: Player, game: Game, available_vertices: List[Vertex]) \
-            -> Optional[Vertex]:
+    def select_initial_settlement_location(self, player: Player, game: Game, available_vertices: list[Vertex]) \
+            -> Vertex | None:
         """Select the opening settlement location."""
         return self.rng.choice(available_vertices) if available_vertices else None
 
-    def select_initial_road_location(self, player: Player, game: Game, available_edges: List[Edge]) -> Optional[Edge]:
+    def select_initial_road_location(self, player: Player, game: Game, available_edges: list[Edge]) -> Edge | None:
         """Select the opening road location."""
         return self.rng.choice(available_edges) if available_edges else None
 
@@ -66,8 +65,8 @@ class RandomAI(AI):
         self,
         player: Player,
         game: Game,
-        valid_hexes: List[HexTile],
-    ) -> Tuple[HexTile, Optional[Player]]:
+        valid_hexes: list[HexTile],
+    ) -> tuple[HexTile, Player | None]:
         """Select the robber placement and steal target."""
         hex_tile = self.rng.choice(valid_hexes)
 
@@ -89,7 +88,7 @@ class RandomAI(AI):
         return self.rng.choice(list(Resource))
 
     def respond_to_trade(self, player: Player, game: "Game", opponent: Player, selling: ResourceCount,
-                         buying: ResourceCount) -> Tuple[bool, Optional[ResourceCount]]:
+                         buying: ResourceCount) -> tuple[bool, ResourceCount | None]:
         """Decide how to respond to a trade offer."""
         return self.rng.choice([True, False]), None
 
@@ -131,7 +130,7 @@ class RandomAI(AI):
         # 5. End turn if nothing else is chosen
         return Action(ActionType.END_TURN)
 
-    def random_trade_action(self, player: Player, game: Game) -> Optional[Action]:
+    def random_trade_action(self, player: Player, game: Game) -> Action | None:
         """Choose a random legal trade action."""
         # Flatten available resources
         tradable_resources = [r for r, count in player.resources.items() if count > 0]

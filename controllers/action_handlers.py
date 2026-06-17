@@ -1,5 +1,4 @@
 from abc import ABC
-from typing import List, Optional, Tuple
 
 from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.tutor.tutor import TutorStage
@@ -14,7 +13,7 @@ from game.Vertex import Vertex
 
 class ActionHandlers(ControllerSupport, ABC):
 
-    def trade_with_players(self, selling_player, selling, buying) -> List[Tuple[Player, Optional[ResourceCount]]]:
+    def trade_with_players(self, selling_player, selling, buying) -> list[tuple[Player, ResourceCount | None]]:
         """Run the player-to-player trade flow."""
         results = []
         for player in self._game.players:
@@ -32,7 +31,7 @@ class ActionHandlers(ControllerSupport, ABC):
                                 ))
                             self._show_tutor_init(player, TutorStage.TRADE_RESPONSE, explanation)
 
-                        def respond_to_trade_for_player() -> Tuple[bool, Optional[ResourceCount]]:
+                        def respond_to_trade_for_player() -> tuple[bool, ResourceCount | None]:
                             return self._run_tutor_decision(lambda: self.tutor_ai.respond_to_trade(
                                 player,
                                 self._game,
@@ -87,7 +86,7 @@ class ActionHandlers(ControllerSupport, ABC):
 
         return results
 
-    def roll_dice(self, player: Player) -> Tuple[int, int, int, Optional[str]]:
+    def roll_dice(self, player: Player) -> tuple[int, int, int, str | None]:
         """Roll the dice and handle any resulting events."""
         self.view.display_board()
         d1, d2, total = self._game.roll_dice()
@@ -150,7 +149,7 @@ class ActionHandlers(ControllerSupport, ABC):
                 msg = f"Stole 1 {stolen_resource.name.replace('_', ' ').title()} from {stolen_player.name}."
         return d1, d2, total, msg
 
-    def handle_robber_action(self, player) -> Optional[Tuple[Player, Resource]]:
+    def handle_robber_action(self, player) -> tuple[Player, Resource] | None:
         """Handle the robber placement and theft flow."""
         self._pending_tutor_robber_choice = None
         if player.is_human:
@@ -187,7 +186,7 @@ class ActionHandlers(ControllerSupport, ABC):
             else:
                 robber_placement_feedback = None
 
-            adjacent_player_buildings: List[Vertex] = [
+            adjacent_player_buildings: list[Vertex] = [
                 vertex for vertex in selected_hex.vertices
                 if vertex.owner is not None and vertex.owner != player and any(vertex.owner.resources.values())
             ]

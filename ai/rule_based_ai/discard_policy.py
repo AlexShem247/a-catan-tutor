@@ -1,4 +1,3 @@
-from typing import Dict, List, Optional, Tuple
 
 from ai.actions import Action, ActionType
 from ai.RandomAI import RandomAI
@@ -27,15 +26,15 @@ class DiscardPolicy:
         return discard
 
     def select_discard_resources_with_explanation(
-            self, player: Player, game: Game, num_resources: int) -> Tuple[ResourceCount, Optional[ActionExplanation]]:
+            self, player: Player, game: Game, num_resources: int) -> tuple[ResourceCount, ActionExplanation | None]:
         """Select the discard resources with explanation."""
         if not self._use_strategic_move():
             discard = self.random_ai.select_discard_resources(player, game, num_resources)
             return discard, self.explain_discard_choice(player, game, discard)
 
         current_resources, needed, best_plan_explanation = self._discard_context(player, game)
-        best_discard: Optional[ResourceCount] = None
-        best_explanation: Optional[ActionExplanation] = None
+        best_discard: ResourceCount | None = None
+        best_explanation: ActionExplanation | None = None
         best_quality = float("-inf")
 
         for discard in self._legal_discard_candidates(current_resources, num_resources):
@@ -57,7 +56,7 @@ class DiscardPolicy:
         normalized_discard = {resource: int(discard.get(resource, 0)) for resource in Resource}
         return self._evaluate_discard_choice(normalized_discard, current_resources, needed, best_plan_explanation)
 
-    def _discard_context(self, player: Player, game: Game) -> Tuple[ResourceCount, ResourceCount, ActionExplanation]:
+    def _discard_context(self, player: Player, game: Game) -> tuple[ResourceCount, ResourceCount, ActionExplanation]:
         """Handle discard context."""
         current_resources = {resource: int(player.resources.get(resource, 0)) for resource in Resource}
         sim_game = make_sim_game_for_player(game, player)
@@ -79,10 +78,10 @@ class DiscardPolicy:
         return self._build_discard_explanation(discard, current_resources, needed, best_plan_explanation)
 
     @staticmethod
-    def _legal_discard_candidates(current_resources: ResourceCount, num_resources: int) -> List[ResourceCount]:
+    def _legal_discard_candidates(current_resources: ResourceCount, num_resources: int) -> list[ResourceCount]:
         """Handle legal discard candidates."""
         resources = list(Resource)
-        candidates: List[ResourceCount] = []
+        candidates: list[ResourceCount] = []
 
         def build_candidate(index: int, remaining: int, partial: ResourceCount) -> None:
             if index == len(resources):
@@ -166,11 +165,11 @@ class DiscardPolicy:
         )
 
     @staticmethod
-    def _discard_plan_metadata(explanation: ActionExplanation) -> Dict[str, object]:
+    def _discard_plan_metadata(explanation: ActionExplanation) -> dict[str, object]:
         """Handle discard plan metadata."""
         action = explanation.chosen_action
         protected_action = DiscardPolicy._protected_follow_up_action_from_explanation(explanation)
-        metadata: Dict[str, object] = {"protected_action": protected_action}
+        metadata: dict[str, object] = {"protected_action": protected_action}
 
         trade_action = None
         if action.type in (ActionType.TRADE_WITH_BANK, ActionType.TRADE_WITH_PLAYER):
@@ -206,7 +205,7 @@ class DiscardPolicy:
         return action
 
     @staticmethod
-    def _trade_follow_up_action_for_resources(resources: List[Resource]) -> Optional[Action]:
+    def _trade_follow_up_action_for_resources(resources: list[Resource]) -> Action | None:
         """Handle trade follow up action for resources."""
         resource_set = set(resources)
         if Resource.ORE in resource_set and Resource.WHEAT in resource_set:

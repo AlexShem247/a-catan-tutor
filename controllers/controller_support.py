@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from random import Random
-from typing import Any, Callable, Dict, List, Optional, Tuple, TypeVar
+from typing import Any, Callable, TypeVar
 
 from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.tutor.evaluator import TutorEvaluator
@@ -58,17 +58,17 @@ class ControllerSupport(ABC):
     GameMode: type[GameMode]
     game_players: PlayerConfig
     simulation_players: PlayerConfig
-    game_seed: Optional[int]
+    game_seed: int | None
     game_rng: Random
     tutor_ai: RuleBasedAI
     tutor_evaluator: TutorEvaluator
-    tutor_feedback_history: List[TutorFeedbackExplanation]
+    tutor_feedback_history: list[TutorFeedbackExplanation]
     _tutor_dev_played: bool
     _pending_tutor_robber_choice: Any
     SHOW_AI_BUILT_LOCATIONS: bool
 
     @abstractmethod
-    def _preview_tutor_explanation(self, callback: Callable[[], tuple[Any, ...]]) -> Optional[ActionExplanation]:
+    def _preview_tutor_explanation(self, callback: Callable[[], tuple[Any, ...]]) -> ActionExplanation | None:
         """Preview the tutor explanation for a pending decision."""
         ...
 
@@ -77,7 +77,7 @@ class ControllerSupport(ABC):
         self,
         player: Player,
         stage: TutorStage,
-        explanation: Optional[ActionExplanation],
+        explanation: ActionExplanation | None,
     ) -> None:
         """Show the tutor introduction for the current decision stage."""
         ...
@@ -93,7 +93,7 @@ class ControllerSupport(ABC):
         ...
 
     @abstractmethod
-    def _set_tutor_shortcut_handlers(self, recommended_handler: Optional[Callable[[], Any]]) -> None:
+    def _set_tutor_shortcut_handlers(self, recommended_handler: Callable[[], Any] | None) -> None:
         """Set the tutor shortcut handlers for the current decision."""
         ...
 
@@ -118,7 +118,7 @@ class ControllerSupport(ABC):
         ...
 
     @abstractmethod
-    def _show_tutor_action_feedback(self, player: Player, feedback: Optional[TutorFeedbackExplanation]) -> None:
+    def _show_tutor_action_feedback(self, player: Player, feedback: TutorFeedbackExplanation | None) -> None:
         """Show tutor feedback for the completed player action."""
         ...
 
@@ -145,14 +145,14 @@ class ControllerSupport(ABC):
     def get_road_choice(
         self,
         player: Player,
-        settlement: Optional[Vertex] = None,
-        selector: Optional[Callable[[list[Edge]], Optional[Edge]]] = None,
+        settlement: Vertex | None = None,
+        selector: Callable[[list[Edge]], Edge | None] | None = None,
     ) -> Edge:
         """Return the selected road choice for the current flow."""
         ...
 
     @abstractmethod
-    def get_road_choice_ai(self, player: Player, settlement: Optional[Vertex] = None) -> Optional[Edge]:
+    def get_road_choice_ai(self, player: Player, settlement: Vertex | None = None) -> Edge | None:
         """Return the AI-selected road choice."""
         ...
 
@@ -177,7 +177,7 @@ class ControllerSupport(ABC):
         ...
 
     @abstractmethod
-    def handle_robber_action(self, player) -> Optional[Tuple[Player, Any]]:
+    def handle_robber_action(self, player) -> tuple[Player, Any] | None:
         """Run the robber placement and theft flow."""
         ...
 

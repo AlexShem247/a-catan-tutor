@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable
 
 from PyQt6.QtCore import QEventLoop, QTimer, pyqtBoundSignal
 from PyQt6.QtWidgets import QApplication
@@ -30,7 +30,7 @@ class QtView(View):
         self.window.setGeometry(WINDOW_DEFAULT_X, WINDOW_DEFAULT_Y, WINDOW_WIDTH, WINDOW_HEIGHT)
         self.window.show()
 
-    def set_debug_tutor_shortcut_handler(self, handler: Optional[Callable[[], Any]]) -> None:
+    def set_debug_tutor_shortcut_handler(self, handler: Callable[[], Any] | None) -> None:
         """Store the debug tutor shortcut handler."""
         self.window.set_debug_tutor_shortcut_handler(handler)
 
@@ -44,7 +44,7 @@ class QtView(View):
         """Consume and clear any pending return-home request."""
         return self.window.consume_return_home_request()
 
-    def display_board(self, player: Optional[Player] = None, msg: Optional[str] = None):
+    def display_board(self, player: Player | None = None, msg: str | None = None):
         """Render the current board state on the canvas."""
         self.canvas.display_board(self.controller)
         self.window.display_resources(self.controller)
@@ -57,13 +57,13 @@ class QtView(View):
         self.window.display_generic_info(player, msg)
         ai_time_delay(self._consume_animation_delay(self.ai_decision_animation_delay))
 
-    def display_board_turn(self, player: Player, dice_info: Tuple[int, int, int], played_dev_card: bool = False) \
+    def display_board_turn(self, player: Player, dice_info: tuple[int, int, int], played_dev_card: bool = False) \
             -> Action:
         """Display the board and wait for the player turn action."""
         return select_blocking(self, self.window.turnMade, self.window.display_round_info, self.controller, player,
                                dice_info, played_dev_card)
 
-    def display_board_turn_ai(self, player: Player, dice_info: Tuple[int, int, int], msg: str, increase_delay=False):
+    def display_board_turn_ai(self, player: Player, dice_info: tuple[int, int, int], msg: str, increase_delay=False):
         """Display the board during an AI turn."""
         self.canvas.display_board(self.controller)
         self.window.display_resources(self.controller)
@@ -72,7 +72,7 @@ class QtView(View):
         delay *= 3 if "\n" in msg else 1
         ai_time_delay(self._consume_animation_delay(delay))
 
-    def draw_selectable_vertices(self, vertices: List[Vertex], disable_interactivity: bool = False) -> Optional[Vertex]:
+    def draw_selectable_vertices(self, vertices: list[Vertex], disable_interactivity: bool = False) -> Vertex | None:
         """Draw selectable vertices on the board."""
         self.canvas.disable_interactivity = disable_interactivity
         self.canvas.draw_selectable_vertices(vertices)
@@ -82,7 +82,7 @@ class QtView(View):
             self.window.set_restore_board_state_callback(None)
             return selected
 
-    def draw_selectable_edges(self, edges: List[Edge], disable_interactivity: bool = False) -> Optional[Edge]:
+    def draw_selectable_edges(self, edges: list[Edge], disable_interactivity: bool = False) -> Edge | None:
         """Draw selectable edges on the board."""
         self.canvas.disable_interactivity = disable_interactivity
         self.canvas.draw_selectable_edges(edges)
@@ -92,7 +92,7 @@ class QtView(View):
             self.window.set_restore_board_state_callback(None)
             return selected
 
-    def draw_selectable_tiles(self, tiles: List[HexTile]) -> HexTile:
+    def draw_selectable_tiles(self, tiles: list[HexTile]) -> HexTile:
         """Draw selectable tiles on the board."""
         self.canvas.disable_interactivity = False
         self.window.set_restore_board_state_callback(lambda: self._restore_selectable_tiles(tiles))
@@ -100,7 +100,7 @@ class QtView(View):
         self.window.set_restore_board_state_callback(None)
         return selected
 
-    def draw_buildables(self, buildables: Dict):
+    def draw_buildables(self, buildables: dict):
         """Draw the currently buildable board options."""
         self.canvas.draw_buildables(buildables)
 
@@ -111,7 +111,7 @@ class QtView(View):
                                num_resources, title, resource_caps)
 
     def display_trade_manager(self, player: Player, selling: ResourceCount, buying: ResourceCount,
-                              selling_player: Player) -> Tuple[bool, Optional[ResourceCount]]:
+                              selling_player: Player) -> tuple[bool, ResourceCount | None]:
         """Display the trade manager widget."""
         return select_blocking(self, self.window.tradeDecisionMade, self.window.display_trade_manager, player, selling,
                                buying, selling_player)
@@ -121,8 +121,8 @@ class QtView(View):
         player: Player,
         selling: ResourceCount,
         buying: ResourceCount,
-        willing_players: List[Tuple[Player, Optional[ResourceCount]]],
-    ) -> Optional[Tuple[Player, Optional[ResourceCount]]]:
+        willing_players: list[tuple[Player, ResourceCount | None]],
+    ) -> tuple[Player, ResourceCount | None] | None:
         """Handle select player trade offer."""
         return select_blocking(
             self,
@@ -156,7 +156,7 @@ class QtView(View):
         """Render the start screen artwork on the canvas."""
         return select_blocking(self, self.window.startGame, self.window.display_start_screen)
 
-    def display_board_turn_explanations(self, player: Player, dice_info: Optional[Tuple[int, int, int]],
+    def display_board_turn_explanations(self, player: Player, dice_info: tuple[int, int, int] | None,
                                         explanation: ActionExplanation):
         """Display the board with tutor move explanations."""
         self.canvas.display_board(self.controller)
@@ -193,25 +193,25 @@ class QtView(View):
         """Wait for the next-demo-state request."""
         return select_blocking(self, self.window.turnMade, lambda: None)
 
-    def set_window_title_suffix(self, suffix: Optional[str]) -> None:
+    def set_window_title_suffix(self, suffix: str | None) -> None:
         """Set an optional suffix for the OS window title."""
         self.window.set_window_title_suffix(suffix)
 
-    def _restore_selectable_vertices(self, vertices: List[Vertex]):
+    def _restore_selectable_vertices(self, vertices: list[Vertex]):
         """Restore the selectable vertex overlay."""
         self.canvas.display_board(self.controller)
         self.window.display_resources(self.controller)
         self.canvas.disable_interactivity = False
         self.canvas.draw_selectable_vertices(vertices)
 
-    def _restore_selectable_edges(self, edges: List[Edge]):
+    def _restore_selectable_edges(self, edges: list[Edge]):
         """Restore the selectable edge overlay."""
         self.canvas.display_board(self.controller)
         self.window.display_resources(self.controller)
         self.canvas.disable_interactivity = False
         self.canvas.draw_selectable_edges(edges)
 
-    def _restore_selectable_tiles(self, tiles: List[HexTile]):
+    def _restore_selectable_tiles(self, tiles: list[HexTile]):
         """Restore the selectable tile overlay."""
         self.canvas.display_board(self.controller)
         self.window.display_resources(self.controller)

@@ -4,7 +4,6 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass
 from random import Random
-from typing import Dict, List
 
 from tqdm import tqdm
 
@@ -100,7 +99,7 @@ def run_single_game(job_args):
     final_vp = {player.player_number: player.calc_victory_points()[1] for player in game.players}
     sorted_vps = sorted(final_vp.values(), reverse=True)
 
-    player_results: List[PlayerResult] = []
+    player_results: list[PlayerResult] = []
     for player in game.players:
         player_vp = final_vp[player.player_number]
         best_other_vp = max(vp for other_number, vp in final_vp.items() if other_number != player.player_number)
@@ -121,7 +120,7 @@ def run_single_game(job_args):
     }
 
 
-def _format_results_table(summary: Dict[str, Dict[str, float]]) -> str:
+def _format_results_table(summary: dict[str, dict[str, float]]) -> str:
     headers = ["Agent", "Win Rate (%)", "Avg VP", "VP Gap to 2nd (Wins)", "Avg Turns (Wins)"]
     rows = [[
         agent_name,
@@ -142,7 +141,7 @@ def _format_results_table(summary: Dict[str, Dict[str, float]]) -> str:
     return "\n".join([fmt(headers), separator, *(fmt(row) for row in rows)])
 
 
-def _format_position_win_rate_table(position_summary: Dict[str, Dict[str, float]]) -> str:
+def _format_position_win_rate_table(position_summary: dict[str, dict[str, float]]) -> str:
     headers = ["Agent", "P1 Win (%)", "P2 Win (%)", "P3 Win (%)", "P4 Win (%)"]
     rows = [[
         EVOLVED_POSITION_AGENT_NAME,

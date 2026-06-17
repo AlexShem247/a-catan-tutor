@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Callable, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Callable
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QLabel, QListWidgetItem, QToolButton, QWidget
@@ -236,10 +236,10 @@ class TradePanel:
     def create_quantity_handlers(
         self,
         current_counts: ResourceCount,
-        quantity_btns: Dict[Resource, Tuple[QLabel, QToolButton, QToolButton]],
+        quantity_btns: dict[Resource, tuple[QLabel, QToolButton, QToolButton]],
         caps: ResourceCount | None = None,
         on_update: Callable[[], None] | None = None,
-        zero_other: Tuple[ResourceCount, Dict[Resource, Tuple[QLabel, QToolButton, QToolButton]]] | None = None,
+        zero_other: tuple[ResourceCount, dict[Resource, tuple[QLabel, QToolButton, QToolButton]]] | None = None,
     ) -> None:
         """Handle create quantity handlers."""
         if caps is None:
