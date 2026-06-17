@@ -18,6 +18,9 @@ class TutorController(ControllerSupport, ABC):
 
     def _new_tutor_rng(self) -> Random:
         """Create a new tutor RNG instance."""
+        seed_getter = getattr(self, "_get_active_game_seed", None)
+        if callable(seed_getter):
+            return Random(seed_getter())
         return Random(self.game_seed)
 
     def _new_tutor_ai(self) -> RuleBasedAI:

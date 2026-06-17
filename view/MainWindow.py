@@ -841,8 +841,8 @@ class MainWindow(QMainWindow):
 
         def update_lab_mode(is_enabled: bool):
             self.start_menu.standard_mode_btn.setText("Quick Simulation" if is_enabled else "Start Game")
-            self.start_menu.tutor_mode_btn.setText("Guided Simulation" if is_enabled else "Tutor Mode")
-            self.start_menu.lab_mode_btn.setText("Back" if is_enabled else "Lab Mode")
+            self.start_menu.tutor_mode_btn.setText("Demo Mode" if is_enabled else "Tutor Mode")
+            self.start_menu.lab_mode_btn.setText("Back" if is_enabled else "More Options")
 
         self.start_menu.lab_mode_btn.setCheckable(True)
         try:

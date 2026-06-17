@@ -2,12 +2,7 @@
 __pycache__/
 .idea/
 .pytest_cache/
-Coordinates.png
-Screenshot.png
 config/applied_settings.json
-venv-build/
-build/
-dist/
 *.zip
 *.txt
 *.csv

@@ -10,10 +10,7 @@ from view.QtView import QtView
 
 
 def main():
-    controller = GameController(
-        STANDARD_SINGLEPLAYER,
-        EVO_VS_RULE_BASED,
-    )
+    controller = GameController(STANDARD_SINGLEPLAYER, EVO_VS_RULE_BASED)
 
     app = QApplication(sys.argv)
     app.setFont(QFont("Arial"))

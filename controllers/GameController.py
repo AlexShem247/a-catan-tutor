@@ -4,7 +4,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 from ai.tutor.evaluator import TutorEvaluator
 from ai.tutor.feedback import TutorFeedbackExplanation
 from config.view_constants import (AI_DECISION_ANIMATION_DELAY, AI_DECISION_ANIMATION_DELAY_SIMULATION_MODE,
-                                   SHOW_AI_BUILT_LOCATIONS)
+                                   DEMO_MODE_SEED, SHOW_AI_BUILT_LOCATIONS)
 from controllers.action_handlers import ActionHandlers
 from controllers.controller_support import (MAX_AI_ACTION_REQUESTS_PER_TURN, START_LAST, AITurnActionLimitExceeded,
                                             PlayerScoreSnapshot, ReturnToStart)
@@ -39,7 +39,7 @@ class GameController(
         self.game_players = game_players
         self.simulation_players = simulation_players
         self.game_seed = game_seed
-        self.game_rng = Random(game_seed)
+        self.game_rng = Random(self._get_active_game_seed())
         self.victory_point_history: List[Tuple[int, Dict[PlayerNumber, int]]] = []
         self.endgame_review_history: List[Tuple[int, Dict[PlayerNumber, PlayerScoreSnapshot]]] = []
         self.tutor_feedback_history: List[TutorFeedbackExplanation] = []
@@ -73,6 +73,12 @@ class GameController(
             return self.simulation_players
         return self.game_players
 
+    def _get_active_game_seed(self) -> Optional[int]:
+        """Return the seed that should be used for the current game mode."""
+        if self.game_mode == GameMode.GUIDED:
+            return DEMO_MODE_SEED
+        return self.game_seed
+
     def _raise_if_view_requested_home(self) -> None:
         """Raise when the view has requested a return home."""
         if self.view is None:
@@ -92,7 +98,7 @@ class GameController(
         uses_interactive_delay = self.game_mode in {GameMode.PLAY, GameMode.TUTOR}
         is_tutor_mode = self.game_mode in {GameMode.GUIDED, GameMode.TUTOR}
 
-        self.game_rng = Random(self.game_seed)
+        self.game_rng = Random(self._get_active_game_seed())
         self.victory_point_history = []
         self.endgame_review_history = []
         self.tutor_feedback_history = []
