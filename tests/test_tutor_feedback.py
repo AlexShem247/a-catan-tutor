@@ -9,6 +9,7 @@ from ai.tutor.explanations import ActionExplanation, CandidateExplanation, Reaso
 from ai.tutor.feedback import TutorAssessment, TutorDecisionType, TutorFeedbackExplanation
 from ai.tutor.move_quality import tutor_move_quality_label
 from game.PlayerAssets import Buildable
+from game.Resources import Resource
 
 
 class TestTutorFeedback(unittest.TestCase):
@@ -68,6 +69,38 @@ class TestTutorFeedback(unittest.TestCase):
         )
 
         assessment = self.evaluator._build_assessment(TutorDecisionType.MAIN_TURN, explanation, explanation)
+
+        self.assertIsNone(assessment.better_move)
+        self.assertFalse(assessment.top_weaknesses)
+        self.assertIn("matched the tutor's preferred move", assessment.judgment_sentence)
+
+    def test_matching_bank_trade_ignores_zero_count_resource_entries(self):
+        actual = self._build_explanation(
+            Action(
+                ActionType.TRADE_WITH_BANK,
+                (
+                    {Resource.BRICK: 4, Resource.ORE: 0},
+                    {Resource.ORE: 1, Resource.BRICK: 0},
+                ),
+            ),
+            [Reason(ReasonType.FASTEST_PROGRESS, ReasonLabel.QUICK_GENERIC, 1.0)],
+            [],
+            move_quality=0.0,
+        )
+        best = self._build_explanation(
+            Action(
+                ActionType.TRADE_WITH_BANK,
+                (
+                    {Resource.BRICK: 4},
+                    {Resource.ORE: 1},
+                ),
+            ),
+            [Reason(ReasonType.FASTEST_PROGRESS, ReasonLabel.QUICK_GENERIC, 1.0)],
+            [],
+            move_quality=0.8,
+        )
+
+        assessment = self.evaluator._build_assessment(TutorDecisionType.MAIN_TURN, actual, best)
 
         self.assertIsNone(assessment.better_move)
         self.assertFalse(assessment.top_weaknesses)

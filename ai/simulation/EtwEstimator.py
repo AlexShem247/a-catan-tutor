@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from ai.actions import Action, ActionType
+from ai.actions import Action, ActionType, actions_equivalent
 from ai.simulation.board_sim_utils import get_opponents
 from ai.simulation.etw_candidates import EtwCandidateGenerator
 from ai.simulation.etw_evaluation import EtwEvaluation
@@ -300,7 +300,10 @@ class EtwEstimator:
             use_time_discount=use_time_discount,
         ) if candidates else []
 
-        chosen_candidate = next((candidate for candidate in explained_candidates if candidate.action == action), None)
+        chosen_candidate = next(
+            (candidate for candidate in explained_candidates if actions_equivalent(candidate.action, action)),
+            None,
+        )
         if chosen_candidate is None:
             chosen_candidate = self.evaluator.evaluate_action_plan(
                 sim_player,
@@ -333,8 +336,10 @@ class EtwEstimator:
                 reasons_for=[],
             )
 
-        alternatives = [candidate for candidate in explained_candidates
-                        if candidate.action != chosen_candidate.action][:3]
+        alternatives = [
+            candidate for candidate in explained_candidates
+            if not actions_equivalent(candidate.action, chosen_candidate.action)
+        ][:3]
         worst_utility = (explained_candidates[-1].utility_total
                          if explained_candidates else chosen_candidate.utility_total)
         return ActionExplanation(

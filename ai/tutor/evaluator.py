@@ -1,7 +1,7 @@
 import re
 from typing import Any, Callable, TypeVar
 
-from ai.actions import Action, ActionType, Phase
+from ai.actions import Action, ActionType, Phase, actions_equivalent
 from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.simulation.board_sim_utils import find_edge_toward_vertex, get_legal_settlement_vertices, moves_toward_vertex
 from ai.simulation.SimGame import make_sim_game_for_player
@@ -357,7 +357,7 @@ class TutorEvaluator:
             assessment=assessment,
             game_state=game,
         )
-        if actual_explanation.chosen_action != best_explanation.chosen_action:
+        if not actions_equivalent(actual_explanation.chosen_action, best_explanation.chosen_action):
             recommended_visual_plan = self._recommended_build_visual_plan(best_explanation)
             if recommended_visual_plan:
                 feedback.set_recommended_visual_plan(recommended_visual_plan)
@@ -370,7 +370,7 @@ class TutorEvaluator:
         best_explanation: ActionExplanation,
     ) -> TutorAssessment:
         """Build a tutor assessment from the compared explanations."""
-        same_choice = actual_explanation.chosen_action == best_explanation.chosen_action
+        same_choice = actions_equivalent(actual_explanation.chosen_action, best_explanation.chosen_action)
         display_score, display_best_score = self._display_scores_for_feedback(
             actual_explanation,
             best_explanation,
