@@ -22,12 +22,12 @@ python catan_tutor.py
 
 ## Game Modes
 
-The application supports four game modes:
+The application supports four user-facing modes:
 
 - `Play`: standard interactive play with the explainable tutor running in the background for feedback collection.
 - `Tutor`: interactive play with tutor guidance and feedback shown directly during decisions.
 - `Simulation`: automated AI-vs-AI play for observation and testing.
-- `Guided`: AI-driven play with move explanations shown, useful for inspecting the policy's reasoning.
+- `Demo`: a guided mode that steps through saved tutor scenarios with explanations.
 
 ## Running Tests
 
