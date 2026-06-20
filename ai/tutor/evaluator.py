@@ -5,7 +5,7 @@ from ai.actions import Action, ActionType, Phase, actions_equivalent
 from ai.rule_based_ai.RuleBasedAI import RuleBasedAI
 from ai.simulation.board_sim_utils import find_edge_toward_vertex, get_legal_settlement_vertices, moves_toward_vertex
 from ai.simulation.SimGame import make_sim_game_for_player
-from ai.tutor.explanations import ActionExplanation, ExplanationTemplate, ReasonType, RoadExplanationKind
+from ai.tutor.explanations import ActionExplanation, ExplanationTemplate, ReasonLabel, ReasonType, RoadExplanationKind
 from ai.tutor.feedback import TutorAssessment, TutorDecisionType, TutorFeedbackExplanation
 from ai.tutor.move_quality import (clamp_move_quality, initial_road_connection_move_quality,
                                    initial_road_expansion_move_quality, initial_road_flexible_move_quality,
@@ -24,6 +24,17 @@ T = TypeVar("T")
 
 
 class TutorEvaluator:
+    _DEV_CARD_STRATEGIC_LABELS = {
+        ReasonLabel.HIDDEN_DEV_VALUE,
+        ReasonLabel.DEV_KNIGHT_PRESSURE,
+        ReasonLabel.DEV_PROGRESS_FLEXIBILITY,
+    }
+    _GENERIC_QUICK_LABELS = {
+        ReasonLabel.QUICK_GENERIC,
+        ReasonLabel.QUICK_PLANNED_DEV_BUY,
+        ReasonLabel.QUICK_PLANNED_FOLLOW_UP,
+    }
+
     _TITLE_BY_DECISION = {
         TutorDecisionType.OPENING_SETTLEMENT: "Opening Settlement",
         TutorDecisionType.OPENING_ROAD: "Opening Road",
@@ -574,7 +585,7 @@ class TutorEvaluator:
         """Build the positive reason sentences for an explanation."""
         texts: list[str] = []
         seen = set()
-        for reason in reasons:
+        for reason in self._prioritised_reasons(explanation, reasons):
             text = self._sentence(explanation.describe_reason(reason, detail=True))
             if not text:
                 continue
@@ -600,7 +611,7 @@ class TutorEvaluator:
             limit=limit,
         )
         actual_labels = {reason.label for reason in actual_explanation.sorted_reasons_for()}
-        for reason in best_explanation.sorted_reasons_for():
+        for reason in self._prioritised_reasons(best_explanation, best_explanation.sorted_reasons_for()):
             if len(weaknesses) >= limit:
                 break
             if reason.label in actual_labels:
@@ -619,7 +630,7 @@ class TutorEvaluator:
         """Build the better-move reason sentences for an explanation."""
         actual_labels = {reason.label for reason in actual_explanation.sorted_reasons_for()}
         reasons = []
-        for reason in best_explanation.sorted_reasons_for():
+        for reason in self._prioritised_reasons(best_explanation, best_explanation.sorted_reasons_for()):
             if reason.label in actual_labels:
                 continue
             text = self._sentence(best_explanation.describe_reason(reason, detail=True))
@@ -630,6 +641,28 @@ class TutorEvaluator:
         if not reasons:
             reasons = self._reason_sentences(best_explanation, best_explanation.sorted_reasons_for(), limit=limit)
         return reasons[:limit]
+
+    def _prioritised_reasons(self, explanation: ActionExplanation, reasons) -> list:
+        """Prefer strategic development-card reasons over generic quickness in feedback."""
+        ordered = list(reasons)
+        if explanation.chosen_action.type != ActionType.BUY_DEV_CARD:
+            return ordered
+
+        has_dev_strategy = any(reason.label in self._DEV_CARD_STRATEGIC_LABELS for reason in ordered)
+        if not has_dev_strategy:
+            return ordered
+
+        ordered = [
+            reason for reason in ordered
+            if reason.label not in self._GENERIC_QUICK_LABELS and reason.type != ReasonType.QUICK_TO_EXECUTE
+        ]
+
+        def priority(reason) -> tuple[int, float]:
+            if reason.label in self._DEV_CARD_STRATEGIC_LABELS:
+                return 0, -float(getattr(reason, "value", 0.0) or 0.0)
+            return 1, -float(getattr(reason, "value", 0.0) or 0.0)
+
+        return sorted(ordered, key=priority)
 
     def _move_sentence(self, explanation: ActionExplanation) -> str:
         """Describe the move referenced by an explanation."""
@@ -734,7 +767,7 @@ class TutorEvaluator:
             return ""
         if text.lower().startswith("it "):
             return f"You miss out because {text.lower()}."
-        return f"You miss out on a line that {TutorEvaluator._lowercase_first(text)}."
+        return f"You miss out because {TutorEvaluator._lowercase_first(text)}."
 
     @classmethod
     def _contains_equivalent_reason(cls, existing_reasons: list[str], candidate: str) -> bool:

@@ -339,74 +339,18 @@ def monopoly_resource_detail(explanation: ActionExplanation) -> str:
 
 def buy_development_card_concise(explanation: ActionExplanation) -> tuple[str, str]:
     """Generate concise text for a development-card purchase explanation."""
-    candidate = explanation.chosen_candidate
-    vp_prob = float(candidate.metadata.get("dev_card_vp_probability", 0.0) or 0.0)
-    knight_prob = float(candidate.metadata.get("dev_card_knight_probability", 0.0) or 0.0)
-    progress_prob = float(candidate.metadata.get("dev_card_progress_probability", 0.0) or 0.0)
-
-    if vp_prob >= 0.12 and knight_prob >= 0.25 and progress_prob >= 0.15:
-        return (
-            "Buy A Development Card",
-            "It provides access to hidden victory points, Knight cards for Largest Army pressure, and progress cards, "
-            "creating multiple routes to future victory.",
-        )
-    if knight_prob >= 0.25:
-        return (
-            "Buy A Development Card",
-            "Knight cards contribute toward Largest Army while victory point cards can directly advance your score.",
-        )
     return (
         "Buy A Development Card",
-        "Rather than committing to a single board expansion plan, a development card keeps several strategic options "
-        "available.",
+        "Development cards can provide Knights, hidden Victory Points, and other useful effects.",
     )
 
 
 def buy_development_card_detail(explanation: ActionExplanation) -> str:
     """Generate detailed text for a development-card purchase explanation."""
-    candidate = explanation.chosen_candidate
-    vp_prob = float(candidate.metadata.get("dev_card_vp_probability", 0.0) or 0.0)
-    knight_prob = float(candidate.metadata.get("dev_card_knight_probability", 0.0) or 0.0)
-    progress_prob = float(candidate.metadata.get("dev_card_progress_probability", 0.0) or 0.0)
-    army_distance = int(candidate.metadata.get("dev_card_largest_army_distance", 99) or 99)
-    alternative = explanation.alternatives[0].action if explanation.alternatives else None
-
-    parts = ["Buy a development card."]
-    strategic_parts: list[str] = []
-    if vp_prob >= 0.12:
-        strategic_parts.append("it keeps hidden victory points live as a way to increase your score without revealing "
-                               "that plan on the board")
-    if knight_prob >= 0.25:
-        if army_distance <= 2:
-            strategic_parts.append("Knight cards matter because they create a live route toward Largest Army")
-        else:
-            strategic_parts.append("Knight cards still add robber control and a credible alternative victory route")
-    if progress_prob >= 0.15:
-        strategic_parts.append("progress cards add strategic flexibility by supporting several different follow-up "
-                               "plans")
-
-    if strategic_parts:
-        if len(strategic_parts) == 1:
-            joined = strategic_parts[0]
-        elif len(strategic_parts) == 2:
-            joined = f"{strategic_parts[0]}, and {strategic_parts[1]}"
-        else:
-            joined = ", ".join(strategic_parts[:-1]) + f", and {strategic_parts[-1]}"
-        parts.append(f"This is strong because {joined}.")
-    else:
-        parts.append("This is strong because it keeps several strategic options available instead of locking you into "
-                     "a single immediate board plan.")
-
-    if alternative is not None:
-        parts.append(
-            f"It is preferable to {action_to_text(alternative, short=False)} here because the card keeps alternative "
-            f"victory routes available instead of committing immediately to one visible expansion line."
-        )
-
-    timing = plan_timing_text(candidate)
-    if timing:
-        parts.append(timing)
-    return "<br><br>".join(part for part in parts if part)
+    return (
+        "Buy a development card.<br><br>"
+        "Development cards can provide Knights, hidden Victory Points, and other useful effects."
+    )
 
 
 def _discard_flexibility_reason(explanation: ActionExplanation) -> str:

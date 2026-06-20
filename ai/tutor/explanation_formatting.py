@@ -142,11 +142,11 @@ def reason_label_text(reason: Reason) -> str:
     if label == ReasonLabel.REQUIRES_TRADE:
         return "Uses a trade to make the preferred plan feasible"
     if label == ReasonLabel.HIDDEN_DEV_VALUE:
-        return "It keeps a meaningful hidden-victory-point draw in play"
+        return "Development cards can provide Knights, hidden Victory Points, and other useful effects"
     if label == ReasonLabel.DEV_KNIGHT_PRESSURE:
-        return "It gives you real Knight pressure toward Largest Army"
+        return "Development cards can provide Knights, hidden Victory Points, and other useful effects"
     if label == ReasonLabel.DEV_PROGRESS_FLEXIBILITY:
-        return "It also keeps strong progress-card outcomes available"
+        return "Development cards can provide Knights, hidden Victory Points, and other useful effects"
     if label == ReasonLabel.EARLY_ATTENTION_RISK:
         return "May expose an early lead and attract attention"
     if label == ReasonLabel.NO_IMMEDIATE_ACTION:
